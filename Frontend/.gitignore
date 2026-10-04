@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+*.local
+
+# Bi mat that su thi khong commit
+.env
+.env.local
+.env.*.local
+
+# .env.production KHONG bi ignore: chi chua VITE_API_BASE (khong phai secret)
+# va la thu can de tai lap ban build deploy.

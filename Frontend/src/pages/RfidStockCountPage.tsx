@@ -1,0 +1,120 @@
+import { useState } from "react";
+import { listStockScan, resetStockScan, type ScannedFilter, type StockScanRow } from "@/api/stockScan";
+import { SearchButton } from "@/lib/Buttons";
+import { useConfirm } from "@/lib/Confirm";
+import { useToast } from "@/lib/Toast";
+import { invalidate, qs, useFetch } from "@/lib/useFetch";
+import { useUrlString } from "@/lib/useUrlState";
+import { useT } from "@/i18n/LanguageContext";
+
+const SCANNED_VALUES: readonly ScannedFilter[] = ["all", "yes", "no"];
+
+const asScanned = (v: string): ScannedFilter =>
+  (SCANNED_VALUES as readonly string[]).includes(v) ? (v as ScannedFilter) : "all";
+
+function ResetIcon() {
+  return (
+    <svg className="ic" viewBox="0 0 24 24">
+      <path d="M17.65 6.35A8 8 0 1 0 19.4 15h-2.12A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+    </svg>
+  );
+}
+
+function Tile({ row }: { row: StockScanRow }) {
+  return (
+    <div className={"rsd-tile" + (row.isScanned ? " scanned" : "")}
+      title={row.workerName ? `${row.workerCode ?? ""} ${row.workerName}`.trim() : undefined}>
+      <div className="rsd-item">{row.itemName || row.itemCode || "—"}</div>
+      <div className="rsd-epc">{row.epc}</div>
+    </div>
+  );
+}
+
+export function RfidStockCountPage() {
+  const t = useT();
+  const toast = useToast();
+  const ask = useConfirm();
+
+  const [itemCode, setItemCode] = useUrlString("itemCode");
+  const [itemName, setItemName] = useUrlString("itemName");
+  const [scannedRaw, setScanned] = useUrlString("scanned", "all");
+  const scanned = asScanned(scannedRaw);
+
+  const [codeDraft, setCodeDraft] = useState(itemCode);
+  const [nameDraft, setNameDraft] = useState(itemName);
+  const [scannedDraft, setScannedDraft] = useState<ScannedFilter>(scanned);
+  const [busy, setBusy] = useState(false);
+
+  const { data, loading, error, reload, refresh } = useFetch(
+    qs("stockScan", { itemCode, itemName, scanned }),
+    () => listStockScan({ itemCode: itemCode || undefined, itemName: itemName || undefined, scanned }));
+
+  const rows = data?.rows ?? [];
+
+  const search = () => {
+    setItemCode(codeDraft.trim());
+    setItemName(nameDraft.trim());
+    setScanned(scannedDraft);
+    refresh();
+  };
+
+  const onEnter = (e: React.KeyboardEvent) => { if (e.key === "Enter") search(); };
+
+  const onReset = async () => {
+    const ok = await ask({
+      message: t("rsdResetConfirm", "Are you sure you want to reset? All scanned flags will be cleared."),
+      confirmLabel: t("modalOk", "OK"),
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await resetStockScan();
+      invalidate("stockScan");
+      await reload();
+    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="pg on" id="pg-st_rfid_demo">
+      <div className="search-box">
+        <div className="search-row">
+          <label>{t("thItemCode", "Item Code")}</label>
+          <input type="text" style={{ width: 140 }} value={codeDraft}
+            onChange={e => setCodeDraft(e.target.value)} onKeyDown={onEnter} />
+          <label style={{ marginLeft: 14 }}>{t("thItemName", "Item Name")}</label>
+          <input type="text" style={{ width: 160 }} value={nameDraft}
+            onChange={e => setNameDraft(e.target.value)} onKeyDown={onEnter} />
+          <label style={{ marginLeft: 14 }}>{t("rsdScannedFilter", "Scanned")}</label>
+          <select style={{ width: 110 }} value={scannedDraft}
+            onChange={e => setScannedDraft(asScanned(e.target.value))}>
+            <option value="all">{t("warehouseAll", "All")}</option>
+            <option value="yes">{t("rsdYes", "Yes")}</option>
+            <option value="no">{t("rsdNo", "No")}</option>
+          </select>
+        </div>
+
+        {error && <div className="search-row" style={{ color: "#DC3545", fontSize: 12 }}>{error}</div>}
+
+        <div className="search-btns">
+          <SearchButton onClick={search} />
+          <button className="btn btn-delete" onClick={onReset} disabled={busy || loading}>
+            <ResetIcon /> <span>{t("rsdReset", "Reset")}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end border-b border-slate-200 bg-white px-4 py-2.5">
+        <span className="rsd-count">{data ? `${data.scanned} / ${data.total}` : "0 / 0"}</span>
+      </div>
+
+      <div className="rsd-grid">
+        {loading && <div className="rsd-empty">…</div>}
+        {!loading && rows.length === 0 && (
+          <div className="rsd-empty">{t("noResults", "No matching records found.")}</div>
+        )}
+        {!loading && rows.map(r => <Tile key={r.epc} row={r} />)}
+      </div>
+    </div>
+  );
+}

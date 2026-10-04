@@ -1,0 +1,60 @@
+
+const ICON = (name: string) => `/Images/Icon/${name}_50_FFFFFF.png`;
+
+export const GROUP_ICON: Record<string, string> = {
+  menu:           ICON("dashboard"),
+  inventoryMgmt:  ICON("shelves"),
+  receivingMgmt:  ICON("forklift"),
+  shippingMgmt:   ICON("delivery_truck_speed"),
+  stocktakeMgmt:  ICON("Stocktakingbucket_check"),
+  alertCenter:    ICON("warning"),
+  masterMgmt:     ICON("database"),
+  printHistory:   ICON("print"),
+  rfidHistory:    ICON("sensors"),
+  otherMgmt:      ICON("folder"),
+};
+
+export const FUNCTION_ICON: Record<string, string> = {
+  dashboard:         ICON("dashboard"),
+  inv:               ICON("warehouse"),
+  inv_history:       ICON("history"),
+  inv_hold:          ICON("warning"),
+  alert_center:      ICON("warning"),
+  rcv_import:        ICON("upload"),
+  returns:           ICON("history"),
+  rcv_result:        ICON("content_paste_search"),
+  pick_import:       ICON("upload"),
+  pick_result:       ICON("content_paste_search"),
+  shp_import:        ICON("upload"),
+  shp_result:        ICON("content_paste_search"),
+  st_label:          ICON("Stocktakingbucket_check"),
+  st_ref:            ICON("folder"),
+  st_rfid_demo:      ICON("Stocktakingbucket_check"),
+  print_history:     ICON("print"),
+  rfid_gate_history: ICON("sensors"),
+  m_factory:         ICON("factory"),
+  m_zone:            ICON("location_on"),
+  m_location:        ICON("location_on"),
+  m_location_3d:        ICON("shelves"),
+  m_itemgroup:       ICON("box"),
+  m_item:            ICON("box"),
+  m_partner:         ICON("person"),
+  m_device:          ICON("sensors"),
+  m_user:            ICON("person"),
+  m_reason:          ICON("warning"),
+  m_permission:      ICON("person"),
+  settings:          ICON("admin_panel_settings"),
+  lang_data:         ICON("database"),
+  super_admin:       ICON("admin_panel_settings"),
+};
+
+export const BTN_ICON = {
+  search:  "/Images/Icon/search_50_FFFFFF.png",
+  edit:    "/Images/Icon/edit_50_000000.png",
+  copy:    "/Images/Icon/file_copy_50_000000.png",
+  upload:  "/Images/Icon/upload_50_000000.png",
+  print:   "/Images/Icon/print_50_000000.png",
+  warning: "/Images/Icon/warning_50_FFFFFF.png",
+  login:   "/Images/Icon/login_50_FFFFFF.png",
+  logout:  "/Images/Icon/logout_50_FFFFFF.png",
+};
