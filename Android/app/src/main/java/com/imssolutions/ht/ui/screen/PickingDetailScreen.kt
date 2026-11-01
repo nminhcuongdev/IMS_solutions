@@ -171,7 +171,7 @@ fun PickingDetailScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(clock = nowClock(), right = soNo)
+        HtBottomInset()
     }
 
     state.error?.let { (code, message) ->

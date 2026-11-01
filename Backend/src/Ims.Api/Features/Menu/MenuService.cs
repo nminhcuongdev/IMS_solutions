@@ -2,17 +2,19 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
 using Ims.Api.Features.Auth;
+using Ims.Api.Features.Permissions;
 using Ims.Infrastructure.Persistence;
 
 namespace Ims.Api.Features.Menu;
 
-internal sealed class MenuService(ImsDbContext db) : IMenuService
+internal sealed class MenuService(ImsDbContext db, PermissionEvaluator evaluator) : IMenuService
 {
     public async Task<ServiceResult> GetMenuAsync(HttpContext http, CancellationToken ct)
     {
-        var userCode = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+        var rights = await evaluator.ReadAsync(http.User, ct);
+        var userCode = rights.UserCode;
         var roleCode = http.User.FindFirst("role_code")?.Value ?? "";
-        var isSuperAdmin = http.User.FindFirst("is_super_admin")?.Value == "1";
+        var isSuperAdmin = rights.IsSuperAdmin;
 
         var hiddenGroups = await db.FunctionVisibilities.AsNoTracking()
             .Where(v => v.TargetType == "Group" && !v.IsVisible)
@@ -22,17 +24,7 @@ internal sealed class MenuService(ImsDbContext db) : IMenuService
             .Where(v => v.TargetType == "Function" && !v.IsVisible)
             .Select(v => v.TargetCode).ToListAsync(ct);
 
-        HashSet<string>? viewableFunctions = null;
-        if (!isSuperAdmin)
-        {
-            viewableFunctions = (await (
-                from rp in db.RolePermissions.AsNoTracking()
-                join p in db.Permissions.AsNoTracking()
-                    on rp.PermissionCode equals p.PermissionCode
-                where rp.RoleCode == roleCode && rp.IsAllowed && !p.IsDeleted
-                      && p.Action == "view"
-                select p.FunctionCode).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
-        }
+        var viewableFunctions = rights.Functions.Select(f => f.FunctionCode).ToHashSet(StringComparer.Ordinal);
 
         var funcs = await db.AppFunctions.AsNoTracking()
             .Where(f => !f.IsDeleted && f.IsActive
@@ -42,8 +34,12 @@ internal sealed class MenuService(ImsDbContext db) : IMenuService
             .OrderBy(f => f.DisplayOrder).ThenBy(f => f.FunctionCode)
             .ToListAsync(ct);
 
-        if (!isSuperAdmin && viewableFunctions is not null)
-            funcs = funcs.Where(f => viewableFunctions.Contains(f.FunctionCode)).ToList();
+        var pcFunctions = await db.FunctionVisibilities.AsNoTracking()
+            .Where(v => v.TargetType == "PC" && v.IsVisible)
+            .Select(v => v.TargetCode).ToListAsync(ct);
+        funcs = funcs.Where(f => pcFunctions.Contains(f.FunctionCode)).ToList();
+
+        funcs = funcs.Where(f => viewableFunctions.Contains(f.FunctionCode)).ToList();
 
         var groupCodesUsed = funcs.Select(f => f.LargeCode!).Distinct().ToList();
         var largeDict = await db.FunctionLarges.AsNoTracking()

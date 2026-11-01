@@ -89,17 +89,18 @@ fun StockListScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.visible.isEmpty() -> EmptyBox(
+                state.visible.isEmpty() && state.error == null -> EmptyBox(
                     if (state.query.isBlank()) t("htNoResults", "Không có mặt hàng nào khớp bộ lọc.")
                     else t("htNotFoundQuery", "Không tìm thấy \"{0}\".", state.query)
                 )
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
                     items(state.visible, key = { it.key }) { g ->
+                        val lots = t("htLotCount", "{0} lô", g.lotCount)
                         HtItemCard(
                             code = g.key,
                             subtitle = buildString {
                                 append(g.name ?: "—")
-                                if (g.lotCount > 1) append("  ·  ${g.lotCount} lots")
+                                if (g.lotCount > 1) append("  ·  ").append(lots)
                             },
                             accent = if (g.isAlert) BadgeNg else BadgeOk,
                             badge = { StockBadges(g) },
@@ -110,7 +111,7 @@ fun StockListScreen(
             }
         }
 
-        HtStatusBar(clock = nowClock(), right = t("htItemCount", "{0} mặt hàng", state.visible.size))
+        HtBottomInset()
     }
 }
 

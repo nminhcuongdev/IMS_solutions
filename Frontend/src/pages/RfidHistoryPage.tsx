@@ -14,6 +14,7 @@ import { useToast } from "@/lib/Toast";
 import { TableSkeleton } from "@/lib/TableSkeleton";
 import { qs, useFetch } from "@/lib/useFetch";
 import { useUrlBool, useUrlNumber, useUrlString, useUrlPatch } from "@/lib/useUrlState";
+import { errorText } from "@/lib/errorText";
 
 export function RfidHistoryPage() {
   const t = useT();
@@ -66,7 +67,7 @@ export function RfidHistoryPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) { setExportErr(e?.message ?? String(e)); toast.err(e?.message ?? String(e)); }
+    } catch (e: any) { setExportErr(errorText(t, e)); toast.err(errorText(t, e)); }
   };
 
   return (

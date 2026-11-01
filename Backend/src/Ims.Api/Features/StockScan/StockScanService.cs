@@ -15,10 +15,10 @@ internal sealed class StockScanService(ImsDbContext db) : IStockScanService
         IQueryable<Scan> q = db.StockScans.AsNoTracking();
 
         var code = NullIfBlank(itemCode);
-        if (code is not null) q = q.Where(x => x.ItemCode != null && EF.Functions.Like(x.ItemCode, $"%{code}%"));
+        if (code is not null) q = q.Where(x => x.ItemCode != null && EF.Functions.Like(x.ItemCode, LikeContains(code), LikeEscape));
 
         var name = NullIfBlank(itemName);
-        if (name is not null) q = q.Where(x => x.ItemName != null && EF.Functions.Like(x.ItemName, $"%{name}%"));
+        if (name is not null) q = q.Where(x => x.ItemName != null && EF.Functions.Like(x.ItemName, LikeContains(name), LikeEscape));
 
         switch (scanned?.Trim().ToLowerInvariant())
         {

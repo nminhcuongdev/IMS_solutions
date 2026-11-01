@@ -4,16 +4,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -27,6 +30,9 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onDownloadLabels: suspend () -> Int,
     onClearLabels: suspend () -> Unit,
+    installedVersion: String = "",
+    checking: Boolean = false,
+    onCheckUpdate: () -> Unit = {},
 ) {
     val vm: SettingsViewModel = viewModel()
     val state by vm.state.collectAsState()
@@ -53,7 +59,10 @@ fun SettingsScreen(
                     onValueChange = vm::setServerIp,
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp),
-                    placeholder = { Text("http://192.168.1.100:8091/", fontSize = 12.sp) },
+                    placeholder = { Text("192.168.1.100", fontSize = 12.sp) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = state.serverIp.isNotBlank() && state.serverUrl == null,
+                    supportingText = state.serverUrl?.let { u -> { Text(u, fontSize = 11.sp) } },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
@@ -127,6 +136,44 @@ fun SettingsScreen(
                 }
             }
 
+            Spacer(Modifier.height(10.dp))
+
+            TfSection {
+                Text(t("htUpdSection", "App Update"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AC9))
+                Spacer(Modifier.height(6.dp))
+                TfLabel(t("htDeviceCode", "Device Code"))
+                OutlinedTextField(
+                    value = state.deviceId,
+                    onValueChange = vm::setDeviceId,
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    placeholder = { Text("HT-001", fontSize = 12.sp) },
+                    supportingText = { Text(t("htDeviceCodeHint", "Mã thiết bị trong Device Master"), fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    t("htUpdCurrent", "Phiên bản hiện tại: {0}", installedVersion),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { vm.save(then = onCheckUpdate) },
+                    enabled = !checking,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5A6472)),
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                ) {
+                    if (checking) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                    } else {
+                        Icon(Icons.Default.SystemUpdate, null, tint = Color.White)
+                        Spacer(Modifier.width(6.dp))
+                        Text(t("htUpdCheck", "Check for updates"), color = Color.White, fontSize = 13.sp)
+                    }
+                }
+            }
+
             state.error?.let {
                 Spacer(Modifier.height(10.dp))
                 ErrorBar(it.first, it.second)
@@ -149,7 +196,7 @@ fun SettingsScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(clock = nowClock(), right = t("htSettings", "Settings"))
+        HtBottomInset()
     }
 
     if (confirmDownload) {

@@ -18,6 +18,7 @@ import { TableSkeleton, useRowFlash } from "@/lib/TableSkeleton";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav } from "@/lib/useShortcuts";
 import { useRowSelect } from "@/lib/rowSelect";
+import { errorText } from "@/lib/errorText";
 
 type ModalMode = "new" | "edit" | "copy" | null;
 
@@ -68,7 +69,7 @@ export function ZonePage() {
       for (const c of selected) await deleteZone(c);
       setSelected(new Set()); await load();
       toast.ok(`${t("toastDeleted", "Deleted")}: ${n}`);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
   const onExport = async () => {
     try {
@@ -76,7 +77,7 @@ export function ZonePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   return (
@@ -189,7 +190,7 @@ function ZoneModal({ mode, source, onClose, onSaved }: {
           if (isEdit) await updateZone(source!.zoneCode, form); else await createZone(form);
           onSaved(form.zoneCode);
         }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); } finally { setSaving(false); }
+        catch (ex: any) { setErr(errorText(t, ex)); } finally { setSaving(false); }
       }}>
       <Field label={t("thZoneCode", "Zone Code")}>
         <input type="text" maxLength={20} required value={form.zoneCode}

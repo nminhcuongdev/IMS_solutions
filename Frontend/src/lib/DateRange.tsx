@@ -52,7 +52,7 @@ export function defaultDateRange(): { from: string; to: string } {
   return { from: "", to: "" };
 }
 
-function iso(d: Date): string {
+export function localIsoDate(d: Date = new Date()): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
@@ -60,8 +60,8 @@ function iso(d: Date): string {
 export function currentMonthRange(): { from: string; to: string } {
   const now = new Date();
   return {
-    from: iso(new Date(now.getFullYear(), now.getMonth(), 1)),
-    to: iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+    from: localIsoDate(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: localIsoDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
   };
 }
 

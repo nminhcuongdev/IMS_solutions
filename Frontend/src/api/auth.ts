@@ -8,6 +8,7 @@ export interface LoginResponse {
   userName: string;
   roleCode: string;
   isSuperAdmin: boolean;
+  defaultLanguage?: string | null;
 }
 
 export const login = (userId: string, password: string) =>

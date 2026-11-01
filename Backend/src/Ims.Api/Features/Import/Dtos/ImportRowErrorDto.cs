@@ -4,4 +4,7 @@ public sealed record ImportRowErrorDto(
     int Row,
     string Code,
     string Message,
-    string? Detail = null);
+    string? Detail = null)
+{
+    public int RowNo => Row;
+}

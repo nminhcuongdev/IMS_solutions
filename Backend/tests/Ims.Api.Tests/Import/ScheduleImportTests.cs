@@ -292,4 +292,25 @@ public class ScheduleImportTests
     {
         Assert.Equal(PckHead, TemplateHeader(new ImportService(null!).PickingTemplateAsync()));
     }
+
+    [Fact]
+    public async Task Each_import_refuses_a_line_already_on_the_books_or_twice_in_the_file()
+    {
+        using var t = Warehouse();
+        Ok(await ImportShp(t, Xlsx(ShpHead, ShpRow())));
+        var again = Ok(await ImportShp(t, Xlsx(ShpHead, ShpRow(so: "SO-2"), ShpRow(so: " SO-1 "))));
+        Assert.Equal((0, "DUP-001"), (again.ImportedCount, Assert.Single(again.Errors).Code));
+        Assert.Equal(3, again.Errors[0].Row);
+
+        var twice = Ok(await ImportRtn(t, Xlsx(RtnHead, RtnRow(), RtnRow())));
+        Assert.Equal((3, "DUP-001"), (Assert.Single(twice.Errors).Row, twice.Errors[0].Code));
+
+        Ok(await ImportPck(t, Xlsx(PckHead, PckRow())));
+        var pck = Ok(await ImportPck(t, Xlsx(PckHead, PckRow())));
+        Assert.Equal("DUP-001", Assert.Single(pck.Errors).Code);
+
+        Assert.Equal(1, await t.Db.ShippingPlans.CountAsync());
+        Assert.Equal(0, await t.Db.ReturnPlans.CountAsync());
+        Assert.Equal(1, await t.Db.PickingPlans.CountAsync());
+    }
 }

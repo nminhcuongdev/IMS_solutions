@@ -118,7 +118,7 @@ fun ReceivingListScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.slips.isEmpty() -> EmptyBox(
+                state.slips.isEmpty() && state.error == null -> EmptyBox(
                     if (state.query.isBlank()) t("htNoResults", "Không có phiếu nào khớp bộ lọc.")
                     else t("htNotFoundQuery", "Không tìm thấy \"{0}\".", state.query)
                 )
@@ -136,7 +136,7 @@ fun ReceivingListScreen(
             }
         }
 
-        HtStatusBar(clock = nowClock(), right = t("htSlipCount", "{0} phiếu", state.slips.size))
+        HtBottomInset()
     }
 }
 

@@ -10,11 +10,11 @@ internal interface IReturnsService
         DateOnly? dateFrom = null, DateOnly? dateTo = null, string? itemCode = null, string? itemName = null,
         string? returnNo = null, string? status = null);
 
-    Task<ServiceResult> CreatePlanAsync(ReturnPlanWriteDto body, CancellationToken ct);
+    Task<ServiceResult> CreatePlanAsync(ReturnPlanWriteDto body, CancellationToken ct, ClaimsPrincipal? user = null);
 
     Task<ServiceResult> ChangeStatusAsync(ReturnStatusChangeDto body, CancellationToken ct);
 
-    Task<ServiceResult> RegisterShortageAsync(string returnNo, ReturnShortageDto body, CancellationToken ct);
+    Task<ServiceResult> RegisterShortageAsync(string returnNo, ReturnShortageDto body, CancellationToken ct, ClaimsPrincipal? user = null);
 
     Task<ServiceResult> ListResultsAsync(
         CancellationToken ct, int? page = null, int? pageSize = null, string? sort = null, DateOnly? dateFrom = null,

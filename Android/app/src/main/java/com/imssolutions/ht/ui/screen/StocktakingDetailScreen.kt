@@ -119,7 +119,7 @@ fun StocktakingDetailScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(clock = nowClock(), right = state.locationCode ?: "—")
+        HtBottomInset()
     }
 }
 

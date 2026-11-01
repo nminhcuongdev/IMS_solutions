@@ -1,7 +1,5 @@
 package com.imssolutions.ht.scan
 
-import java.net.URLDecoder
-
 data class QrPayload(
     val raw: String,
     val ais: Map<String, String>,
@@ -22,17 +20,21 @@ data class QrPayload(
     val printedAt: String? get() = ais["print_at"]
     val locationCode: String? get() = ais["lc_cd"]
     val locationName: String? get() = ais["lc_name"]
+    val processCode: String? get() = ais["pr_cd"]
+    val processName: String? get() = ais["pr_name"]
     val seqNoSys: String? get() = ais["seq_no_sys"]
     val userCode: String? get() = ais["user_cd"]
 
     val kind: QrLabelKind
         get() = when {
+            processCode != null && locationCode != null -> QrLabelKind.Unknown
             gtin != null && (itemsPerPack != null || ais.keys.any { it.length == 4 && it[0] == '3' }) ->
                 QrLabelKind.Shipping
             gtin != null -> QrLabelKind.Product
             lotNo != null || itemCode != null -> QrLabelKind.Product
             userCode != null && locationCode == null -> QrLabelKind.User
             locationCode != null -> QrLabelKind.Location
+            processCode != null -> QrLabelKind.Process
             else -> QrLabelKind.Unknown
         }
 
@@ -66,15 +68,6 @@ data class QrPayload(
             return QrScan.Ok(QrPayload(s, ais))
         }
 
-        private fun decode(v: String): String =
-            if ('%' !in v) v
-            else runCatching { URLDecoder.decode(v, "UTF-8") }.getOrDefault(v)
+        private fun decode(v: String): String = LabelQr.decode(v)
     }
-}
-
-enum class QrLabelKind { Product, Shipping, User, Location, Unknown }
-
-sealed interface QrScan {
-    data class Ok(val payload: QrPayload) : QrScan
-    data class Invalid(val error: ScanError, val raw: String) : QrScan
 }

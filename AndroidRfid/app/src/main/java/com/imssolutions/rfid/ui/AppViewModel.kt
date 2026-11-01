@@ -13,20 +13,25 @@ import kotlinx.coroutines.launch
 import com.imssolutions.rfid.data.ApiClient
 import com.imssolutions.rfid.data.ApiException
 import com.imssolutions.rfid.data.LoginRequest
+import com.imssolutions.rfid.data.ServerAddress
 import com.imssolutions.rfid.data.Prefs
 import com.imssolutions.rfid.data.StockScanReadRequest
 import com.imssolutions.rfid.logic.Board
 import com.imssolutions.rfid.logic.ManualSerial
 import com.imssolutions.rfid.logic.ScanTag
+import com.imssolutions.rfid.logic.SearchHit
+import com.imssolutions.rfid.logic.StockScan
 import com.imssolutions.rfid.logic.rssiToPercent
 import com.imssolutions.rfid.rfid.ReaderState
 import com.imssolutions.rfid.rfid.CipherLabReader
 import com.imssolutions.rfid.rfid.DensoSp1Reader
+import com.imssolutions.rfid.rfid.NewlandMt93Reader
+import com.imssolutions.rfid.rfid.ReadMode
 import com.imssolutions.rfid.rfid.ReaderKind
 import com.imssolutions.rfid.rfid.TagReader
 import com.imssolutions.rfid.rfid.TagRead
 
-enum class Screen { Login, Menu, StockCount, Search, SearchDetail }
+enum class Screen { Login, Menu, StockCount, Search, SearchDetail, Settings }
 
 data class HtDialog(
     val message: String,
@@ -51,23 +56,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var board by mutableStateOf<Board?>(null); private set
     var pending by mutableStateOf<Set<String>>(emptySet()); private set
     var searchItem by mutableStateOf<String?>(null); private set
-    var searchRead by mutableStateOf<Map<String, Int>>(emptyMap()); private set
+    var searchRead by mutableStateOf<Map<String, SearchHit>>(emptyMap()); private set
     var readerKind by mutableStateOf(reader.kind); private set
     var powerRange by mutableStateOf(reader.powerRange); private set
     var power by mutableStateOf(initialPower(reader.powerRange)); private set
-    var barcodeMode by mutableStateOf(false); private set
+    var mode by mutableStateOf(ReadMode.Rfid); private set
+    var caps by mutableStateOf(reader.caps); private set
+    var applying by mutableStateOf<String?>(null); private set
     var scanning by mutableStateOf(false); private set
     var readerState by mutableStateOf(ReaderState.Connecting); private set
     var dialog by mutableStateOf<HtDialog?>(null); private set
 
     private val t get() = strings
+    private val beeper = Beeper()
+
+    val barcodeMode: Boolean get() = mode != ReadMode.Rfid
+    val rfidActive: Boolean get() = mode != ReadMode.Barcode
+    val softTriggerAvailable: Boolean get() = rfidActive || caps.barcodeBySoftTrigger
+    val listensToKeyboard: Boolean
+        get() = caps.barcodeByKeyboard && barcodeMode && screen == Screen.StockCount && dialog == null && applying == null
 
     init {
+        if (prefs.rememberMe) {
+            prefs.savedSession?.let { (token, code, name) ->
+                api.token = token
+                userCode = code
+                userName = name.ifBlank { code }
+                screen = Screen.Menu
+            }
+        } else {
+            prefs.savedSession = null
+        }
         viewModelScope.launch { readerFlow.flatMapLatest { it.reads }.collect(::onTag) }
+        viewModelScope.launch { readerFlow.flatMapLatest { it.barcodes }.collect(::onBarcode) }
         viewModelScope.launch {
             readerFlow.flatMapLatest { it.state }.collect {
                 readerState = it
-                if (it == ReaderState.Ready) applyPower(power, quiet = true)
+                if (it == ReaderState.Ready && reader.kind == ReaderKind.CipherLab) restoreSettings()
             }
         }
     }
@@ -78,6 +103,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun createReader(kind: ReaderKind): TagReader = when (kind) {
         ReaderKind.CipherLab -> CipherLabReader(getApplication())
         ReaderKind.DensoSp1 -> DensoSp1Reader(initialPower(DensoSp1Reader.MIN_POWER..DensoSp1Reader.MAX_POWER))
+        ReaderKind.NewlandMt93 -> NewlandMt93Reader(initialPower(NewlandMt93Reader.MIN_POWER..NewlandMt93Reader.MAX_POWER))
     }
 
     fun onStart() {
@@ -104,6 +130,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reader = next
         readerKind = kind
         powerRange = next.powerRange
+        caps = next.caps
+        mode = ReadMode.Rfid
         power = power.coerceIn(next.powerRange)
         readerFlow.value = next
         if (started) next.start()
@@ -132,19 +160,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         dialog = null
     }
 
-    fun login(userId: String, password: String, server: String) {
+    private var settingsReturn = Screen.Login
+
+    fun openSettings() {
+        if (screen == Screen.Settings) return
+        stopTrigger()
+        settingsReturn = screen
+        screen = Screen.Settings
+    }
+
+    fun backFromSettings() {
+        screen = settingsReturn
+    }
+
+    private val deviceIp = ServerAddress.deviceIpv4()
+
+    fun resolveServer(raw: String): String? = ServerAddress.toBaseUrl(raw, deviceIp)
+
+    fun saveServer(raw: String): String? {
+        if (raw.isBlank()) {
+            alert(t.t("errServerRequired"))
+            return null
+        }
+        val server = resolveServer(raw)
+        if (server == null) {
+            alert(t.t("errServerInvalid"))
+            return null
+        }
+        prefs.serverUrl = server
+        alert(t.t("msgServerSaved"))
+        return ServerAddress.toDisplay(server)
+    }
+
+    fun login(userId: String, password: String, remember: Boolean) {
         if (userId.isBlank() || password.isEmpty()) {
             alert(t.t("errUserRequired"))
             return
         }
-        prefs.serverUrl = server
         launchBusy {
             val res = api.call { login(LoginRequest(userId.trim(), password)) }.data
                 ?: throw ApiException("HTTP-500", 500, "")
             api.token = res.token
-            prefs.lastUserId = userId.trim()
             userCode = res.userCode
             userName = res.userName.ifBlank { res.userCode }
+            prefs.rememberMe = remember
+            prefs.lastUserId = if (remember) userId.trim() else ""
+            prefs.savedSession = if (remember) Triple(res.token, userCode, userName) else null
             screen = Screen.Menu
         }
     }
@@ -155,6 +216,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (hadToken) runCatching { api.call { logout() } }
             api.token = null
         }
+        prefs.savedSession = null
         resetWork()
         screen = Screen.Login
     }
@@ -206,6 +268,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openSearch() {
+        if (mode != ReadMode.Rfid) changeMode(ReadMode.Rfid, quiet = true)
         screen = Screen.Search
         loadBoard()
     }
@@ -241,7 +304,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 true
             }
             is ManualSerial.Read -> {
-                searchRead = searchRead + (r.epc to 100)
+                searchRead = searchRead + (r.epc to SearchHit(100, System.currentTimeMillis(), manual = true))
                 true
             }
         }
@@ -263,25 +326,96 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.Search
     }
 
-    fun changePower(value: Int) = applyPower(value, quiet = false)
+    private fun restoreSettings() {
+        viewModelScope.launch {
+            reader.setPower(power)
+            if (mode != ReadMode.Rfid) reader.setMode(mode)
+        }
+    }
 
-    private fun applyPower(value: Int, quiet: Boolean) {
-        val err = reader.setPower(value)
-        if (err == null) {
-            power = value
-            prefs.txPower = value
-        } else if (!quiet) {
-            alert(t.t("rdError", err))
+    fun changePower(value: Int) {
+        if (applying != null || value == power && readerState == ReaderState.Ready) return
+        stopTrigger()
+        val previous = power
+        power = value
+        prefs.txPower = value
+        applying = t.t("htApplyingPower", value)
+        viewModelScope.launch {
+            val err = reader.setPower(value)
+            applying = null
+            when {
+                err == null -> beeper.ok()
+                readerState != ReaderState.Ready -> {
+                    beeper.fail()
+                    alert(t.t("msgSettingPending", readerKind.label))
+                }
+                else -> {
+                    power = previous
+                    prefs.txPower = previous
+                    beeper.fail()
+                    alert(t.t("rdError", err))
+                }
+            }
+        }
+    }
+
+    fun changeMode(next: ReadMode, quiet: Boolean = false) {
+        if (applying != null || next == mode || next !in caps.modes) return
+        stopTrigger()
+        val previous = mode
+        mode = next
+        applying = t.t("htSwitchingMode", modeLabel(next))
+        viewModelScope.launch {
+            val err = reader.setMode(next)
+            applying = null
+            when {
+                err == null -> if (!quiet) beeper.ok()
+                readerState != ReaderState.Ready -> {
+                    beeper.fail()
+                    alert(t.t("msgSettingPending", readerKind.label))
+                }
+                else -> {
+                    mode = previous
+                    beeper.fail()
+                    alert(t.t("rdError", err))
+                }
+            }
         }
     }
 
     fun toggleMode() {
-        stopTrigger()
-        barcodeMode = !barcodeMode
+        val modes = caps.modes
+        changeMode(modes[(modes.indexOf(mode) + 1) % modes.size])
+    }
+
+    fun modeLabel(m: ReadMode): String = when (m) {
+        ReadMode.Rfid -> "RFID"
+        ReadMode.Barcode -> t.t("htModeBarcode")
+        ReadMode.Both -> t.t("htModeBoth")
+    }
+
+    fun onBarcode(raw: String) {
+        if (screen != Screen.StockCount || !barcodeMode) return
+        val b = board ?: return
+        val code = raw.trim()
+        when (val r = b.stockScan(pending, code)) {
+            is StockScan.Counted -> {
+                pending = pending + r.epc
+                beeper.read()
+            }
+            StockScan.AlreadyCounted -> {
+                beeper.fail()
+                alert(t.t("errBarcodeCounted", code))
+            }
+            StockScan.Unknown -> {
+                beeper.fail()
+                alert(t.t("errBarcodeUnknown", code))
+            }
+        }
     }
 
     fun startTrigger() {
-        if (scanning) return
+        if (scanning || applying != null) return
         val err = reader.trigger(true)
         if (err != null) {
             alert(t.t("rdError", err))
@@ -299,12 +433,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun onTag(read: TagRead) {
         val b = board ?: return
         when (screen) {
-            Screen.StockCount -> if (!barcodeMode) {
-                b.acceptStockRead(pending, read.epc)?.let { pending = pending + it }
+            Screen.StockCount -> if (rfidActive) {
+                b.acceptStockRead(pending, read.epc)?.let {
+                    pending = pending + it
+                    if (caps.beepOnRead) beeper.read()
+                }
             }
             Screen.Search, Screen.SearchDetail ->
                 b.acceptSearchRead(searchItem, read.epc)?.let {
-                    searchRead = searchRead + (it to rssiToPercent(read.rssi))
+                    if (searchRead[it]?.manual != true) {
+                        searchRead = searchRead + (it to SearchHit(rssiToPercent(read.rssi), System.currentTimeMillis()))
+                        if (caps.beepOnRead) beeper.read()
+                    }
                 }
             else -> Unit
         }
@@ -345,6 +485,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             e.code == "NET-002" -> alert(t.t("errNetwork"))
             e.isUnauthorized && screen != Screen.Login -> {
                 api.token = null
+                prefs.savedSession = null
                 resetWork()
                 screen = Screen.Login
                 alert(t.t("errSession"))
@@ -354,6 +495,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        beeper.release()
         reader.release()
     }
 

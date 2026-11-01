@@ -135,4 +135,17 @@ class QrPayloadTest {
         assertEquals(QrLabelKind.Location, p.kind)
         assertEquals("Shelf2_middle_left", p.locationCode)
     }
+
+    @Test
+    fun `process label is recognised`() {
+        val p = ok("?pr_cd=INPUT_PAPER&pr_name=Paper%20input")
+        assertEquals(QrLabelKind.Process, p.kind)
+        assertEquals("INPUT_PAPER", p.processCode)
+        assertEquals("Paper input", p.processName)
+    }
+
+    @Test
+    fun `process and location in one label is invalid`() {
+        assertEquals(QrLabelKind.Unknown, ok("?pr_cd=INPUT_PAPER&lc_cd=L1").kind)
+    }
 }

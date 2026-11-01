@@ -12,7 +12,7 @@ public static class LanguageDataEndpoints
         g.MapPut("", SaveAsync);
         g.MapGet("/export.csv", ExportCsvAsync);
         g.MapGet("/labels", LabelsAsync).AllowAnonymous();
-        app.MapGet("/languages", SlotsAsync).WithTags("Language Data").AllowAnonymous();
+        app.MapGet("/languages", LanguagesAsync).WithTags("Language Data").AllowAnonymous();
         return app;
     }
 
@@ -31,8 +31,8 @@ public static class LanguageDataEndpoints
         [FromQuery] string deviceScope = "PC") =>
         (await service.LabelsAsync(ct: ct, lang: lang, deviceScope: deviceScope)).ToHttpResult();
 
-    private static async Task<IResult> SlotsAsync([FromServices] ILanguageDataService service, CancellationToken ct) =>
-        (await service.SlotsAsync(ct: ct)).ToHttpResult();
+    private static async Task<IResult> LanguagesAsync([FromServices] ILanguageDataService service, CancellationToken ct) =>
+        (await service.LanguagesAsync(ct: ct)).ToHttpResult();
 
     private static async Task<IResult> ExportCsvAsync(
         [FromServices] ILanguageDataService service, CancellationToken ct, [FromQuery] string? q = null,

@@ -9,6 +9,7 @@ public class InventoryHistory
     public string? FactoryCode { get; set; }
     public string? LocationCode { get; set; }
     public string? LotNo { get; set; }
+    public string? SerialNo { get; set; }
 
     public string ActionType { get; set; } = null!;
 

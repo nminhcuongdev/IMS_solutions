@@ -13,6 +13,7 @@ public class LanguageConfig : IEntityTypeConfiguration<Language>
         b.Property(x => x.LanguageCode).HasColumnName("language_code").Code(10);
         b.Property(x => x.LanguageName).HasColumnName("language_name").Text(50);
         b.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        b.Property(x => x.IconImage).HasColumnName("icon_image").HasColumnType("varchar(max)");
         b.MapAudit();
         b.MapSoftDelete();
     }

@@ -37,8 +37,8 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(u => EF.Functions.Like(u.UserCode, "%" + s + "%")
-                                  || EF.Functions.Like(u.UserName, "%" + s + "%"));
+            query = query.Where(u => EF.Functions.Like(u.UserCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(u.UserName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
@@ -84,7 +84,7 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         u.PasswordHash = hasher.HashPassword(u, body.Password);
         db.AppUsers.Add(u);
@@ -114,7 +114,7 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         u.IsActive = body.IsActive;
         u.Remark1 = body.Remark1; u.Remark2 = body.Remark2; u.Remark3 = body.Remark3;
         u.Remark4 = body.Remark4; u.Remark5 = body.Remark5;
-        u.UpdatedAt = DateTime.UtcNow;
+        u.UpdatedAt = DateTime.Now;
         if (!string.IsNullOrWhiteSpace(body.Password))
             u.PasswordHash = hasher.HashPassword(u, body.Password);
         await db.SaveChangesAsync(ct);
@@ -125,7 +125,7 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
     {
         var u = await db.AppUsers.FirstOrDefaultAsync(x => x.UserCode == code && !x.IsDeleted, ct);
         if (u is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("User")));
-        u.IsDeleted = true; u.UpdatedAt = DateTime.UtcNow;
+        u.IsDeleted = true; u.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

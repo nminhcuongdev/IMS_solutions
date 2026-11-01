@@ -48,14 +48,14 @@ internal sealed class SettingsService(ImsDbContext db) : ISettingsService
             db.GeneralSettings.Add(new GeneralSetting
             {
                 ConfigCode = code, ConfigValue = value, Category = Category,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         }
         else
         {
             row.ConfigValue = value;
             row.Category = Category;
-            row.UpdatedAt = DateTime.UtcNow;
+            row.UpdatedAt = DateTime.Now;
         }
     }
 }

@@ -9,6 +9,7 @@ import { TableSkeleton } from "@/lib/TableSkeleton";
 import { SortTh } from "@/lib/SortableTh";
 import { useLocalSort } from "@/lib/useLocalSort";
 import { FUNCTION_LABEL_KEY, groupLabelKey } from "@/i18n/labelKeys";
+import { errorText } from "@/lib/errorText";
 
 type RoleKey = "general" | "worker";
 
@@ -44,7 +45,7 @@ export function PermissionPage() {
       const data = await listPermissions();
       setRows(data);
       setDraft(Object.fromEntries(data.map(r => [r.permissionCode, { general: r.general, worker: r.worker }])));
-    } catch (e: any) { setErr(e?.message ?? String(e)); }
+    } catch (e: any) { setErr(errorText(t, e)); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -85,8 +86,8 @@ export function PermissionPage() {
       toast.ok(`${t("toastSaved", "Saved")}: ${n}`);
     } catch (e: any) {
       setDraft(Object.fromEntries(rows.map(r => [r.permissionCode, { general: r.general, worker: r.worker }])));
-      setErr(e?.message ?? String(e));
-      toast.err(`${t("permSaveFailed", "Could not save — changes were reverted.")} ${e?.message ?? String(e)}`);
+      setErr(errorText(t, e));
+      toast.err(`${t("permSaveFailed", "Could not save — changes were reverted.")} ${errorText(t, e)}`);
     }
     finally { setSaving(false); }
   };

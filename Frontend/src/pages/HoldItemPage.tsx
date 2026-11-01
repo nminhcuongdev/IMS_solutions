@@ -17,6 +17,7 @@ import { useToast } from "@/lib/Toast";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useUrlNumber, useUrlPatch, useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
+import { errorText } from "@/lib/errorText";
 
 
 const COLS = 10;
@@ -96,7 +97,7 @@ export function HoldItemPage() {
       setSelected(new Set());
       await load();
       report(res.updated, res.skipped);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
     finally { setBusy(false); }
   };
 
@@ -115,7 +116,7 @@ export function HoldItemPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   return (
@@ -235,7 +236,7 @@ export function HoldItemPage() {
               setModal(false); setSelected(new Set());
               await load();
               report(res.updated, res.skipped);
-            } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+            } catch (ex: any) { toast.err(errorText(t, ex)); }
             finally { setBusy(false); }
           }} />
       )}

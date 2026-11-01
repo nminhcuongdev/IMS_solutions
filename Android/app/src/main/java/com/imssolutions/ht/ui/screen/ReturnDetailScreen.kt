@@ -233,7 +233,7 @@ fun ReturnDetailScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(clock = nowClock(), right = returnNo)
+        HtBottomInset()
     }
 
     state.error?.let { (code, message) ->

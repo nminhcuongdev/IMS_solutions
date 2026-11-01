@@ -40,6 +40,9 @@ internal sealed class TestDb : IDisposable
 
     public static TestDb Empty() => new();
 
+    public ImsDbContext NewContext() =>
+        new TestDbContext(new DbContextOptionsBuilder<ImsDbContext>().UseSqlite(_conn).Options);
+
     public static TestDb Seeded()
     {
         var t = new TestDb();
@@ -82,6 +85,9 @@ internal sealed class TestDb : IDisposable
         });
 
         db.Roles.Add(new Role { RoleCode = "Admin", RoleName = "Admin", IsActive = true, CreatedAt = now });
+        foreach (var code in new[] { 0, 1, 2, 3 })
+            db.Statuses.Add(new StatusMaster { StatusCode = code, StatusNameLang1 = $"Status {code}",
+                StatusNameLang2 = $"Status {code}", StatusNameLang3 = $"Status {code}", CreatedAt = now });
         db.Languages.Add(new Language { LanguageCode = "vi", LanguageName = "Vietnamese", IsActive = true, CreatedAt = now });
 
         db.DefaultValues.Add(new DefaultValue

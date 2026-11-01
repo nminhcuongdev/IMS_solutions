@@ -7,6 +7,11 @@ public static class FieldHelpers
 {
     public static readonly char[] BadCodeChars = { '/', '?', '&', '=', '#', '%' };
 
+    public const string LikeEscape = "\\";
+
+    public static string LikeContains(string s) =>
+        "%" + s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[") + "%";
+
     public static string? NullIfBlank(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 

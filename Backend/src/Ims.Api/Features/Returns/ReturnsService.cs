@@ -53,15 +53,15 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
         if (dateFrom is { } from) query = query.Where(p => p.ScheduledDate >= from);
         if (dateTo is { } to) query = query.Where(p => p.ScheduledDate <= to);
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(p => EF.Functions.Like(p.ItemCode, "%" + ic + "%"));
+            query = query.Where(p => EF.Functions.Like(p.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(returnNo) is { } rn)
-            query = query.Where(p => EF.Functions.Like(p.ReturnNo, "%" + rn + "%"));
+            query = query.Where(p => EF.Functions.Like(p.ReturnNo, LikeContains(rn), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(p => db.Items.Any(i =>
-                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
         if (Trimmed(q) is { } free)
-            query = query.Where(p => EF.Functions.Like(p.ReturnNo, "%" + free + "%")
-                                  || EF.Functions.Like(p.ItemCode, "%" + free + "%"));
+            query = query.Where(p => EF.Functions.Like(p.ReturnNo, LikeContains(free), LikeEscape)
+                                  || EF.Functions.Like(p.ItemCode, LikeContains(free), LikeEscape));
         if (ReturnStatus.FromApiName(Trimmed(status)) is { } st)
             query = query.Where(p => p.Status == st);
 
@@ -74,7 +74,7 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
             rows.Select(MapPlan).ToList(), new PageMeta(total, pg, sz)));
     }
 
-    public async Task<ServiceResult> CreatePlanAsync(ReturnPlanWriteDto body, CancellationToken ct)
+    public async Task<ServiceResult> CreatePlanAsync(ReturnPlanWriteDto body, CancellationToken ct, ClaimsPrincipal? user = null)
     {
         if (ValidateCode(body.ReturnNo, MaxReturnLength) is { } e1) return e1;
         if (ValidateCode(body.ItemCode) is { } e2) return e2;
@@ -103,12 +103,15 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
             Qty = body.ExpectedQty,
             ActualQty = 0,
             FactoryCode = factoryCode,
-            ScheduledDate = body.ReturnDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            ScheduledDate = body.ReturnDate ?? DateOnly.FromDateTime(DateTime.Now),
             Status = ReturnStatus.Pending,
             InvoiceNo = NullIfBlank(body.InvoiceNo)?.Trim(),
             LotNo = NullIfBlank(body.LotNo)?.Trim(),
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
+            CreatedBy = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
         };
+        if (await db.ReturnPlans.AnyAsync(x => x.ReturnNo == plan.ReturnNo && x.ReturnBranchNo == plan.ReturnBranchNo, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
         db.ReturnPlans.Add(plan);
         await db.SaveChangesAsync(ct);
 
@@ -149,7 +152,7 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
 
         var skipped = new SortedSet<string>(StringComparer.Ordinal);
         var updated = 0;
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         foreach (var row in rows)
         {
             var allowed = target.Value switch
@@ -188,7 +191,7 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
     };
 
     public async Task<ServiceResult> RegisterShortageAsync(
-        string returnNo, ReturnShortageDto body, CancellationToken ct)
+        string returnNo, ReturnShortageDto body, CancellationToken ct, ClaimsPrincipal? user = null)
     {
         if (body.ShortageQty is not { } shortageQty || shortageQty < 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
@@ -212,12 +215,47 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
 
         var plan = open[0];
         if (shortageQty > plan.Qty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
+        var returned = plan.Qty - shortageQty;
+        if (returned < plan.ActualQty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
-        plan.ActualQty = plan.Qty - shortageQty;
+        var now = DateTime.Now;
+        var worker = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        if (returned > plan.ActualQty)
+        {
+            var preferred = await db.Items.Where(i => i.ItemCode == plan.ItemCode)
+                .Select(i => i.DefaultLocationCode).FirstOrDefaultAsync(ct);
+            var shelf = preferred is null
+                ? null
+                : await db.Locations.Where(l => l.LocationCode == preferred && !l.IsDeleted)
+                    .Select(l => l.LocationCode).FirstOrDefaultAsync(ct);
+            if (shelf is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
+
+            var row = new ReturnResult
+            {
+                ReturnNo = plan.ReturnNo,
+                ReturnBranchNo = plan.ReturnBranchNo,
+                PartnerCode = plan.PartnerCode,
+                ItemCode = plan.ItemCode,
+                Qty = returned,
+                LocationCode = shelf,
+                LotNo = plan.LotNo,
+                ReasonCode = reasonCode,
+                CreatedAt = now,
+                CreatedBy = worker,
+            };
+            db.ReturnResults.Add(row);
+            await db.SaveChangesAsync(ct);
+            await PutBackAsync(row, returned - plan.ActualQty, plan.FactoryCode, worker, now, ct);
+        }
+
+        plan.ActualQty = returned;
         plan.Status = ReturnStatus.Partial;
         plan.ReasonCode = reasonCode;
-        plan.UpdatedAt = DateTime.UtcNow;
+        plan.UpdatedAt = now;
+        if (worker is not null) plan.UpdatedBy = worker;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         var dto = await LoadPlanDtoAsync(db, plan.No, ct);
         return Outcome.Ok(new ApiSuccess<ReturnPlanDto>(dto!));
@@ -234,9 +272,9 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
         if (dateTo is { } to)
             query = query.Where(r => r.CreatedAt < to.AddDays(1).ToDateTime(TimeOnly.MinValue));
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(r => EF.Functions.Like(r.ItemCode, "%" + ic + "%"));
+            query = query.Where(r => EF.Functions.Like(r.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(returnNo) is { } rn)
-            query = query.Where(r => r.ReturnNo != null && EF.Functions.Like(r.ReturnNo, "%" + rn + "%"));
+            query = query.Where(r => r.ReturnNo != null && EF.Functions.Like(r.ReturnNo, LikeContains(rn), LikeEscape));
 
         query = ResultSort.Apply(query, sort);
 
@@ -280,6 +318,15 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
             if (serialNo is not null) candidates = candidates.Where(p => p.ReturnBranchNo == serialNo);
 
             var open = await candidates.ToListAsync(ct);
+            if (open.Count == 0)
+            {
+                var doneQty = await db.ReturnPlans
+                    .Where(p => p.ReturnNo == returnNo && p.ItemCode == itemCode && p.Status == ReturnStatus.Returned
+                                && (serialNo == null || p.ReturnBranchNo == serialNo))
+                    .Select(p => (decimal?)p.Qty).FirstOrDefaultAsync(ct);
+                if (doneQty is { } planned && qty > planned)
+                    return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
+            }
             if (open.Count != 1)
                 return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Return plan")));
 
@@ -287,8 +334,12 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
             if (qty > plan.Qty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
         }
 
-        var now = DateTime.UtcNow;
+        var added = qty - (plan?.ActualQty ?? 0m);
+        if (added < 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
+
+        var now = DateTime.Now;
         var worker = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         var row = new ReturnResult
         {
@@ -313,10 +364,54 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
         }
 
         await db.SaveChangesAsync(ct);
+        await PutBackAsync(row, added, plan?.FactoryCode, worker, now, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         var dto = await LoadResultDtoAsync(db, row.No, ct);
         return Outcome.Created($"/return-result?returnNo={row.ReturnNo}",
             new ApiSuccess<ReturnResultDto>(dto!));
+    }
+
+    private async Task PutBackAsync(
+        ReturnResult row, decimal qty, string? planFactory, string? worker, DateTime now, CancellationToken ct)
+    {
+        if (qty <= 0) return;
+
+        var factoryCode = planFactory
+            ?? await db.Locations
+                .Where(l => l.LocationCode == row.LocationCode && l.ZoneCode != null)
+                .Join(db.Zones, l => l.ZoneCode, z => z.ZoneCode, (l, z) => z.FactoryCode)
+                .FirstOrDefaultAsync(ct)
+            ?? await db.Factories.Where(f => !f.IsDeleted).OrderBy(f => f.FactoryCode)
+                .Select(f => f.FactoryCode).FirstAsync(ct);
+
+        var stock = new Domain.Inventory.Stock
+        {
+            ItemCode = row.ItemCode,
+            SerialNo = $"RTN-{row.No:D10}",
+            FactoryCode = factoryCode,
+            LocationCode = row.LocationCode,
+            LotNo = row.LotNo,
+            StockQty = qty,
+            UpdatedAt = now,
+            UpdatedBy = worker,
+        };
+        stock.Recalculate();
+        db.Stocks.Add(stock);
+        db.InventoryHistories.Add(new Domain.Inventory.InventoryHistory
+        {
+            CreatedAt = DateTime.Now,
+            ItemCode = row.ItemCode,
+            FactoryCode = factoryCode,
+            LocationCode = row.LocationCode,
+            LotNo = row.LotNo,
+            SerialNo = stock.SerialNo,
+            ActionType = Domain.Inventory.InventoryAction.Returns,
+            Qty = qty,
+            ReasonCode = row.ReasonCode,
+            CreatedBy = worker,
+        });
     }
 
     public async Task<ServiceResult> ExportPlansCsvAsync(CancellationToken ct)

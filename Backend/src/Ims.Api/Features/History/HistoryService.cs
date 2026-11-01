@@ -76,16 +76,16 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(x => EF.Functions.Like(x.DocNo!, "%" + s + "%")
-                                  || EF.Functions.Like(x.ItemCode!, "%" + s + "%")
-                                  || EF.Functions.Like(x.Spec!, "%" + s + "%")
-                                  || EF.Functions.Like(x.CreatedBy!, "%" + s + "%"));
+            query = query.Where(x => EF.Functions.Like(x.DocNo!, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(x.ItemCode!, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(x.Spec!, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(x.CreatedBy!, LikeContains(s), LikeEscape));
         }
         if (!string.IsNullOrWhiteSpace(item))
         {
-            var s = "%" + item.Trim() + "%";
-            query = query.Where(x => EF.Functions.Like(x.ItemCode!, s)
-                                  || db.Items.Any(i => i.ItemCode == x.ItemCode && EF.Functions.Like(i.ItemName, s)));
+            var s = LikeContains(item.Trim());
+            query = query.Where(x => EF.Functions.Like(x.ItemCode!, s, LikeEscape)
+                                  || db.Items.Any(i => i.ItemCode == x.ItemCode && EF.Functions.Like(i.ItemName, s, LikeEscape)));
         }
         return query;
     }
@@ -137,7 +137,7 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
         var row = new Domain.History.PrintHistory
         {
             Category = body.Reprint ? category + ReprintSuffix : category,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             DocNo = docNo,
             ScheduledDate = body.ScheduledDate,
             ItemCode = itemCode,
@@ -182,7 +182,7 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
         var row = new Domain.History.PrintHistory
         {
             Category = baseCategory + ReprintSuffix,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             DocNo = source.DocNo,
             ScheduledDate = source.ScheduledDate,
             ItemCode = source.ItemCode,
@@ -239,9 +239,9 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(x => EF.Functions.Like(x.ItemCode!, "%" + s + "%")
-                                  || EF.Functions.Like(x.SerialNo!, "%" + s + "%")
-                                  || EF.Functions.Like(x.GateCode, "%" + s + "%"));
+            query = query.Where(x => EF.Functions.Like(x.ItemCode!, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(x.SerialNo!, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(x.GateCode, LikeContains(s), LikeEscape));
         }
         return query;
     }

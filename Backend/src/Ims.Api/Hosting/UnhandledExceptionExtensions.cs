@@ -11,7 +11,8 @@ internal static class UnhandledExceptionExtensions
         {
             var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
             app.Logger.LogError(ex, "Unhandled exception on {Method} {Path}", ctx.Request.Method, ctx.Request.Path);
-            await ApiErrorWriter.WriteAsync(ctx.Response, 500, new ApiError(ErrorCatalog.Sys004()));
+            var (status, body) = ExceptionErrors.For(ex);
+            await ApiErrorWriter.WriteAsync(ctx.Response, status, new ApiError(body));
         }));
         return app;
     }

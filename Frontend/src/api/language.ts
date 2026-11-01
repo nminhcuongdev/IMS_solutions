@@ -1,13 +1,12 @@
 import { apiCall } from "./client";
 
-export interface LanguageSlot {
-  slot: number;
+export interface LanguageOption {
   languageCode: string;
   languageName: string;
-  flagIcon: string | null;
+  iconImage: string | null;
 }
 
-export const getLanguageSlots = () => apiCall<LanguageSlot[]>("/languages");
+export const getLanguages = () => apiCall<LanguageOption[]>("/languages");
 
 export const getLabels = (lang: string, deviceScope = "PC") =>
   apiCall<Record<string, string>>("/language-data/labels", {

@@ -11,6 +11,7 @@ import { useToast } from "@/lib/Toast";
 import { FUNCTION_LABEL_KEY, groupLabelKey } from "@/i18n/labelKeys";
 import { SortTh } from "@/lib/SortableTh";
 import { useLocalSort } from "@/lib/useLocalSort";
+import { errorText } from "@/lib/errorText";
 
 
 const HT_MODE_KEYS = [
@@ -24,6 +25,7 @@ const LABEL_FILE_KEYS = [
   { key: "layout_file_returns", labelKey: "saLabelReturns", en: "Returns Label" },
   { key: "layout_file_shp", labelKey: "saLabelShipping", en: "Shipping Label" },
   { key: "layout_file_m_location", labelKey: "mLocation", en: "Location Master" },
+  { key: "layout_file_m_process", labelKey: "mProcess", en: "Process Master" },
   { key: "layout_file_m_user", labelKey: "mUser", en: "User Master" },
   { key: "layout_file_m_partner", labelKey: "mPartner", en: "Business Partner Master" },
 ];
@@ -61,7 +63,7 @@ export function SuperAdminPage() {
       setDbInfo(db);
       setFactories(f.data);
       setDefMasters(Object.fromEntries(DEF_MASTERS.map((d, i) => [d.type, defs[i] as DefaultMasterRow[]])));
-    } catch (e: any) { setErr(e?.message ?? String(e)); }
+    } catch (e: any) { setErr(errorText(t, e)); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -103,7 +105,7 @@ export function SuperAdminPage() {
       setSaved(true);
       await load();
       toast.ok(t("toastSaved", "Saved"));
-    } catch (e: any) { setErr(e?.message ?? String(e)); toast.err(e?.message ?? String(e)); }
+    } catch (e: any) { setErr(errorText(t, e)); toast.err(errorText(t, e)); }
     finally { setSaving(false); }
   };
 

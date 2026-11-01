@@ -2,14 +2,14 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
   type ReactNode,
 } from "react";
-import { getLanguageSlots, getLabels, type LanguageSlot } from "@/api/language";
+import { getLanguages, getLabels, type LanguageOption } from "@/api/language";
 
 export type LangCode = string;
 
 interface LanguageCtx {
   lang: LangCode;
   setLang: (l: LangCode) => void;
-  slots: LanguageSlot[];
+  languages: LanguageOption[];
   t: (key: string, fallback?: string) => string;
   loading: boolean;
 }
@@ -21,14 +21,14 @@ const STORAGE_KEY = "ims_lang";
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<LangCode>(
     () => localStorage.getItem(STORAGE_KEY) || "en");
-  const [slots, setSlots] = useState<LanguageSlot[]>([]);
+  const [languages, setLanguages] = useState<LanguageOption[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   const [cache] = useState<Map<string, Record<string, string>>>(() => new Map());
 
   useEffect(() => {
-    getLanguageSlots().then(setSlots).catch(() => setSlots([]));
+    getLanguages().then(setLanguages).catch(() => setLanguages([]));
   }, []);
 
   useEffect(() => {
@@ -61,8 +61,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     [labels]);
 
   const value = useMemo<LanguageCtx>(
-    () => ({ lang, setLang, slots, t, loading }),
-    [lang, setLang, slots, t, loading]);
+    () => ({ lang, setLang, languages, t, loading }),
+    [lang, setLang, languages, t, loading]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

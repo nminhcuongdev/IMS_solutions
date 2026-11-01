@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
 using Ims.Domain.Inventory;
+using Ims.Domain.Masters;
 using Ims.Infrastructure.Persistence;
 using static Ims.Api.Contracts.FieldHelpers;
 
@@ -35,7 +36,7 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
         .Default("item_code")
         .ThenAlwaysBy(s => s.SerialNo);
 
-    private readonly SortMap<InventoryHistory> HistorySort = new SortMap<InventoryHistory>()
+    private readonly SortMap<HistorySourceRow> HistorySort = new SortMap<HistorySourceRow>()
         .Add("created_at", h => h.CreatedAt)
         .Add("item_code", h => h.ItemCode)
         .Add("action_type", h => h.ActionType)
@@ -80,17 +81,23 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
         if (Trimmed(warehouse) is { } wh)
             query = query.Where(s => db.Locations.Any(l => l.LocationCode == s.LocationCode && l.LargeCode == wh));
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(s => EF.Functions.Like(s.ItemCode, "%" + ic + "%"));
+            query = query.Where(s => EF.Functions.Like(s.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(lot) is { } lt)
-            query = query.Where(s => s.LotNo != null && EF.Functions.Like(s.LotNo, "%" + lt + "%"));
+            query = query.Where(s => s.LotNo != null && EF.Functions.Like(s.LotNo, LikeContains(lt), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(s => db.Items.Any(i =>
-                i.ItemCode == s.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == s.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
         if (Trimmed(category) is { } cat)
-            query = query.Where(s => db.Items.Any(i => i.ItemCode == s.ItemCode && i.ItemGroupCode == cat));
+        {
+            if (Enum.TryParse<ItemGroupCategory>(cat, true, out var kind) && Enum.IsDefined(kind))
+                query = query.Where(s => db.Items.Any(i => i.ItemCode == s.ItemCode
+                    && db.ItemGroups.Any(g => g.ItemGroupCode == i.ItemGroupCode && g.Category == kind)));
+            else
+                query = query.Where(s => db.Items.Any(i => i.ItemCode == s.ItemCode && i.ItemGroupCode == cat));
+        }
         if (Trimmed(q) is { } free)
-            query = query.Where(s => EF.Functions.Like(s.ItemCode, "%" + free + "%")
-                                  || (s.LotNo != null && EF.Functions.Like(s.LotNo, "%" + free + "%")));
+            query = query.Where(s => EF.Functions.Like(s.ItemCode, LikeContains(free), LikeEscape)
+                                  || (s.LotNo != null && EF.Functions.Like(s.LotNo, LikeContains(free), LikeEscape)));
 
         query = Trimmed(hold) switch
         {
@@ -132,7 +139,7 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             {
                 Key = g.Key,
                 StockQty = g.Sum(x => x.StockQty),
-                LotCount = g.Count(),
+                LotCount = g.Select(x => x.LotNo ?? "").Distinct().Count(),
                 AnyOnHold = g.Any(x => x.IsOnHold),
                 EarliestExpiry = g.Min(x => x.ExpiryDate),
             });
@@ -164,7 +171,7 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             {
                 Key = g.Key,
                 StockQty = g.Sum(x => x.StockQty),
-                LotCount = g.Count(),
+                LotCount = g.Select(x => x.LotNo ?? "").Distinct().Count(),
                 ItemCount = g.Select(x => x.ItemCode).Distinct().Count(),
             });
         var totalLoc = await byLoc.CountAsync(ct);
@@ -191,8 +198,11 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
 
         var row = await FindAsync(db, body.ItemCode, body.SerialNo, ct);
         if (row is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Stock")));
-        if (!await db.Reasons.AnyAsync(x => x.ReasonCode == reason && !x.IsDeleted, ct))
-            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Reason")));
+        var category = await db.Reasons.Where(x => x.ReasonCode == reason && !x.IsDeleted)
+            .Select(x => (ReasonCategory?)x.ReasonCategoryValue).FirstOrDefaultAsync(ct);
+        if (category is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Reason")));
+        if (category != ReasonCategory.Adjustment) return Outcome.BadRequest(new ApiError(ErrorCatalog.Rsn001()));
+        if (body.StockQty < row.ReservedQty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
         var delta = body.StockQty - row.StockQty;
         var who = user.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -274,6 +284,8 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
         var dest = await db.Locations
             .FirstOrDefaultAsync(l => l.LocationCode == to && !l.IsDeleted, ct);
         if (dest is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Location")));
+        if (await db.Locations.AnyAsync(l => l.ParentLocationCode == dest.LocationCode && !l.IsDeleted, ct))
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
 
         var destFactory = dest.ZoneCode is null
             ? null
@@ -290,7 +302,7 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
 
         db.LocationTransfers.Add(new LocationTransfer
         {
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             ItemCode = row.ItemCode,
             LotNo = row.LotNo,
             FromFactoryCode = row.FactoryCode,
@@ -325,27 +337,63 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             rows.Select(MapHistory).ToList(), new PageMeta(total, pg, sz)));
     }
 
-    private static IQueryable<InventoryHistory> HistoryFilter(
+    private static IQueryable<HistorySourceRow> HistoryFilter(
         ImsDbContext db, DateOnly? dateFrom, DateOnly? dateTo, string? itemCode, string? itemName, string? action,
         string? q)
     {
-        var query = db.InventoryHistories.AsNoTracking();
+        var stored = db.InventoryHistories.AsNoTracking().Select(h => new HistorySourceRow
+        {
+            No = h.No, CreatedAt = h.CreatedAt, ItemCode = h.ItemCode, LotNo = h.LotNo,
+            ActionType = h.ActionType, Qty = h.Qty, LocationCode = h.LocationCode,
+            ReasonCode = h.ReasonCode, CreatedBy = h.CreatedBy,
+        });
+        var picked = db.ProductionOrderLines.AsNoTracking().Where(l => l.PickedAt != null)
+            .Select(l => new HistorySourceRow
+            {
+                No = -1000000000000L - l.No, CreatedAt = l.PickedAt!.Value,
+                ItemCode = l.ItemCode, LotNo = null, ActionType = InventoryAction.ProdPick,
+                Qty = l.PlannedQty, LocationCode = null, ReasonCode = null, CreatedBy = l.PickedBy,
+            });
+        var received = from r in db.ProductionReceipts.AsNoTracking()
+                       join o in db.ProductionOrders.AsNoTracking() on r.ProductionOrderNo equals o.ProductionOrderNo
+                       select new HistorySourceRow
+                       {
+                           No = -2000000000000L - r.No, CreatedAt = r.CreatedAt,
+                           ItemCode = o.OutputItemCode, LotNo = null, ActionType = InventoryAction.ProdReceipt,
+                           Qty = null, LocationCode = null, ReasonCode = null, CreatedBy = r.CreatedBy,
+                       };
+        var labels = db.ProductionLabels.AsNoTracking().Select(l => new HistorySourceRow
+        {
+            No = -3000000000000L - l.No, CreatedAt = l.CreatedAt, ItemCode = l.ItemCode,
+            LotNo = l.LotNo, ActionType = InventoryAction.ProdLabel, Qty = l.LabelCount,
+            LocationCode = null, ReasonCode = null, CreatedBy = l.CreatedBy,
+        });
+        var selectedAction = Trimmed(action);
+        IQueryable<HistorySourceRow> query;
+        if (selectedAction is not null && InventoryAction.IsDefined(selectedAction))
+            query = selectedAction switch
+            {
+                InventoryAction.ProdPick => picked,
+                InventoryAction.ProdReceipt => received,
+                InventoryAction.ProdLabel => labels,
+                _ => stored.Where(h => h.ActionType == selectedAction),
+            };
+        else
+            query = stored.Concat(picked).Concat(received).Concat(labels);
 
         if (dateFrom is { } from)
             query = query.Where(h => h.CreatedAt >= from.ToDateTime(TimeOnly.MinValue));
         if (dateTo is { } to)
             query = query.Where(h => h.CreatedAt < to.AddDays(1).ToDateTime(TimeOnly.MinValue));
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(h => EF.Functions.Like(h.ItemCode, "%" + ic + "%"));
+            query = query.Where(h => EF.Functions.Like(h.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(h => db.Items.Any(i =>
-                i.ItemCode == h.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
-        if (Trimmed(action) is { } act && InventoryAction.IsDefined(act))
-            query = query.Where(h => h.ActionType == act);
+                i.ItemCode == h.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
         if (Trimmed(q) is { } free)
-            query = query.Where(h => EF.Functions.Like(h.ItemCode, "%" + free + "%")
-                                  || (h.LocationCode != null && EF.Functions.Like(h.LocationCode, "%" + free + "%"))
-                                  || (h.CreatedBy != null && EF.Functions.Like(h.CreatedBy, "%" + free + "%")));
+            query = query.Where(h => EF.Functions.Like(h.ItemCode, LikeContains(free), LikeEscape)
+                                  || (h.LocationCode != null && EF.Functions.Like(h.LocationCode, LikeContains(free), LikeEscape))
+                                  || (h.CreatedBy != null && EF.Functions.Like(h.CreatedBy, LikeContains(free), LikeEscape)));
         return query;
     }
 
@@ -369,13 +417,21 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             }
 
             var amount = -q;
-            var already = await db.InventoryHistories.AnyAsync(x =>
-                x.No > no && x.ActionType == InventoryAction.Adjust &&
-                x.ItemCode == h.ItemCode && x.LotNo == h.LotNo && x.Qty == amount, ct);
+            var already = h.SerialNo is null
+                ? await db.InventoryHistories.AnyAsync(x =>
+                    x.No > no && x.ActionType == InventoryAction.Adjust &&
+                    x.ItemCode == h.ItemCode && x.LotNo == h.LotNo && x.Qty == amount, ct)
+                : await db.InventoryHistories.AnyAsync(x =>
+                    x.No > no && x.ActionType == InventoryAction.Adjust &&
+                    x.ItemCode == h.ItemCode && x.SerialNo == h.SerialNo &&
+                    x.ReasonCode == h.ReasonCode && x.Qty == amount, ct);
             if (already) { skipped.Add(no.ToString()); continue; }
 
-            var stock = await db.Stocks.FirstOrDefaultAsync(s =>
-                s.ItemCode == h.ItemCode && s.LotNo == h.LotNo && s.LocationCode == h.LocationCode, ct);
+            var stock = h.SerialNo is null
+                ? await db.Stocks.FirstOrDefaultAsync(s =>
+                    s.ItemCode == h.ItemCode && s.LotNo == h.LotNo && s.LocationCode == h.LocationCode, ct)
+                : await db.Stocks.FirstOrDefaultAsync(s =>
+                    s.ItemCode == h.ItemCode && s.SerialNo == h.SerialNo, ct);
             if (stock is null) { skipped.Add(no.ToString()); continue; }
 
             stock.StockQty += amount;
@@ -522,7 +578,7 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             s.UpdatedAt,
             s.ExpiryDate));
 
-    private static IQueryable<HistoryRow> ProjectHistory(ImsDbContext db, IQueryable<InventoryHistory> q) =>
+    private static IQueryable<HistoryRow> ProjectHistory(ImsDbContext db, IQueryable<HistorySourceRow> q) =>
         q.Select(h => new HistoryRow(
             h.No,
             h.CreatedAt,
@@ -572,6 +628,7 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             FactoryCode = s.FactoryCode,
             LocationCode = s.LocationCode,
             LotNo = s.LotNo,
+            SerialNo = s.SerialNo,
             ActionType = action,
             Qty = qty,
             ReasonCode = reason,

@@ -422,10 +422,10 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
     {
         var q = db.StocktakingLabels.AsNoTracking().Where(x => x.StocktakingSessionNo == sessionNo);
         if (Trimmed(locationCode) is { } loc) q = q.Where(x => x.LocationCode == loc);
-        if (Trimmed(itemCode) is { } ic) q = q.Where(x => EF.Functions.Like(x.ItemCode, "%" + ic + "%"));
+        if (Trimmed(itemCode) is { } ic) q = q.Where(x => EF.Functions.Like(x.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             q = q.Where(x => db.Items.Any(i => i.ItemCode == x.ItemCode
-                && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
         return q;
     }
 
@@ -433,11 +433,11 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
     {
         var query = db.StocktakingHistories.AsNoTracking();
         if (Trimmed(q) is { } free)
-            query = query.Where(h => EF.Functions.Like(h.StocktakingName, "%" + free + "%")
-                                  || EF.Functions.Like(h.ItemCode, "%" + free + "%")
-                                  || EF.Functions.Like(h.LotNo, "%" + free + "%")
+            query = query.Where(h => EF.Functions.Like(h.StocktakingName, LikeContains(free), LikeEscape)
+                                  || EF.Functions.Like(h.ItemCode, LikeContains(free), LikeEscape)
+                                  || EF.Functions.Like(h.LotNo, LikeContains(free), LikeEscape)
                                   || db.Items.Any(i => i.ItemCode == h.ItemCode
-                                        && EF.Functions.Like(i.ItemName, "%" + free + "%")));
+                                        && EF.Functions.Like(i.ItemName, LikeContains(free), LikeEscape)));
         return query;
     }
 

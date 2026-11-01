@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
@@ -36,8 +36,8 @@ internal sealed class FactoryService(ImsDbContext db) : IFactoryService
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(f => EF.Functions.Like(f.FactoryCode, "%" + s + "%")
-                                  || EF.Functions.Like(f.FactoryName, "%" + s + "%"));
+            query = query.Where(f => EF.Functions.Like(f.FactoryCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(f.FactoryName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
@@ -79,7 +79,7 @@ internal sealed class FactoryService(ImsDbContext db) : IFactoryService
             IsActive = body.IsActive, IsDefault = body.IsDefault,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.Factories.Add(f);
         await db.SaveChangesAsync(ct);
@@ -102,7 +102,7 @@ internal sealed class FactoryService(ImsDbContext db) : IFactoryService
         f.IsActive = body.IsActive; f.IsDefault = body.IsDefault;
         f.Remark1 = body.Remark1; f.Remark2 = body.Remark2; f.Remark3 = body.Remark3;
         f.Remark4 = body.Remark4; f.Remark5 = body.Remark5;
-        f.UpdatedAt = DateTime.UtcNow;
+        f.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<FactoryDto>(Map(f)));
     }
@@ -112,10 +112,13 @@ internal sealed class FactoryService(ImsDbContext db) : IFactoryService
         var f = await db.Factories.FirstOrDefaultAsync(x => x.FactoryCode == code && !x.IsDeleted, ct);
         if (f is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Factory")));
         if (await db.Zones.AnyAsync(z => z.FactoryCode == code && !z.IsDeleted, ct))
-            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        if (await db.AppUsers.AnyAsync(u => u.FactoryCode == code && !u.IsDeleted, ct))
-            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        f.IsDeleted = true; f.UpdatedAt = DateTime.UtcNow;
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        if (await db.AppUsers.AnyAsync(u => u.FactoryCode == code && !u.IsDeleted, ct)
+            || await db.ProductionOrders.AnyAsync(x => x.FactoryCode == code, ct)
+            || await db.ProductionConsumptions.AnyAsync(x => x.FactoryCode == code, ct)
+            || await db.ProductionReturns.AnyAsync(x => x.FactoryCode == code, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        f.IsDeleted = true; f.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

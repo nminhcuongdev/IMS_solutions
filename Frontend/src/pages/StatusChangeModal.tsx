@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useT } from "@/i18n/LanguageContext";
 import { useConfirm } from "@/lib/Confirm";
 import { Field, ModalShell } from "@/lib/ModalShell";
+import { errorText } from "@/lib/errorText";
 
 export type StatusChangeAction = "done" | "notDone" | "cancelled";
 
@@ -54,7 +55,7 @@ export function StatusChangeModal({ count, done, notDone, onApply, onClose, onDo
         if (!ok) return;
         setSaving(true); setErr(null);
         try { onDone(await onApply(action)); }
-        catch (ex: any) { setErr(ex?.code ? t(ex.code, ex.message) : (ex?.message ?? String(ex))); }
+        catch (ex: any) { setErr(errorText(t, ex)); }
         finally { setSaving(false); }
       }}>
       <Field label={t("scmSelectedCount", "Selected Rows")}>

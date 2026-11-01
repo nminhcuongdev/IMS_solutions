@@ -372,4 +372,17 @@ public class ReceivingImportTests
         for (var c = 0; c < Head.Length; c++)
             Assert.Equal(Head[c], ws.Cell(1, c + 1).GetString());
     }
+
+    [Fact]
+    public async Task A_po_line_already_on_the_books_or_repeated_in_the_file_is_refused()
+    {
+        using var t = Warehouse();
+        Assert.Equal(1, (await Import(t, Xlsx(Head, Row(po: "PO-1")))).ImportedCount);
+
+        var r = await Import(t, Xlsx(Head, Row(po: "PO-1"), Row(po: "PO-2"), Row(po: "PO-2", branch: " 01 ")));
+
+        Assert.Equal(0, r.ImportedCount);
+        Assert.Equal([(2, "DUP-001"), (4, "DUP-001")], r.Errors.Select(e => (e.Row, e.Code)));
+        Assert.Equal(1, await t.Db.ReceivingPlans.CountAsync());
+    }
 }

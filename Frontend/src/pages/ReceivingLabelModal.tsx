@@ -116,7 +116,7 @@ export function ReceivingLabelModal({
               <Ro label={t("thItemName", "Item Name")} value={current.row.itemName ?? ""} />
               <Ro label={t("thPlanned", "Planned")}
                 value={`${current.row.plannedQty} ${current.row.unit ?? ""}`.trim()} />
-              <Ro label={t("thPackingQty", "Packing Qty")} value={String(current.labelCount)} />
+              <Ro label={t("thPackingQty", "Packing Qty")} value={String(current.row.packingQty ?? "")} />
               <Ro label={t("thExpectedQty", "Expected")}
                 value={`${current.expectedQty} ${current.row.unit ?? ""}`.trim()} />
               <Ro label={t("thLabelCount", "Label Print Count")} value={String(current.labelCount)} />
@@ -183,9 +183,9 @@ interface LabelPlan {
 }
 
 function planOf(row: ReceivingPlanRow, item?: Item): LabelPlan {
-  const pack = row.packingQty && row.packingQty > 0 ? Math.round(row.packingQty) : 0;
-  if (pack <= 0) return { row, item, expectedQty: row.plannedQty, labelCount: 1 };
-  return { row, item, expectedQty: row.plannedQty / pack, labelCount: pack };
+  const pack = row.packingQty ?? 0;
+  if (pack <= 1 || row.plannedQty <= pack) return { row, item, expectedQty: row.plannedQty, labelCount: 1 };
+  return { row, item, expectedQty: pack, labelCount: Math.ceil(row.plannedQty / pack) };
 }
 
 function Ro({ label, value }: { label: string; value: string }) {

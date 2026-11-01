@@ -16,6 +16,7 @@ import { TableSkeleton, useRowFlash } from "@/lib/TableSkeleton";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav } from "@/lib/useShortcuts";
 import { useRowSelect } from "@/lib/rowSelect";
+import { errorText } from "@/lib/errorText";
 
 type ModalMode = "new" | "edit" | "copy" | null;
 
@@ -78,12 +79,12 @@ export function ItemGroupPage() {
       for (const c of selected) await deleteItemGroup(c);
       setSelected(new Set()); await load();
       toast.ok(`${t("toastDeleted", "Deleted")}: ${n}`);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         onExport={async () => {
           try { const { blob, filename } = await exportItemGroupsCsv();
             const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; a.click(); URL.revokeObjectURL(u);
-          } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+          } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         disableEdit={!selectedRow} disableCopy={!selectedRow} disableDelete={selected.size === 0}
         extraKeys={rowNav} />
@@ -165,7 +166,7 @@ function ItemGroupModal({ mode, source, onClose, onSaved }: {
           if (isEdit) await updateItemGroup(source!.itemGroupCode, form); else await createItemGroup(form);
           onSaved(form.itemGroupCode);
         }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); } finally { setSaving(false); }
+        catch (ex: any) { setErr(errorText(t, ex)); } finally { setSaving(false); }
       }}>
       <Field label={t("thItemGroupCode", "Item Group Code")}>
         <input maxLength={20} required value={form.itemGroupCode} readOnly={isEdit}

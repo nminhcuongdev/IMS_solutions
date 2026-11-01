@@ -14,6 +14,7 @@ import { useToast } from "@/lib/Toast";
 import { qs, useFetch } from "@/lib/useFetch";
 import { useUrlBool, useUrlNumber, useUrlPatch, useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
+import { errorText } from "@/lib/errorText";
 
 const COLS = 12;
 
@@ -72,7 +73,7 @@ export function PickingResultPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   const search = () => {

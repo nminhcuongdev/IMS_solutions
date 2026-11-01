@@ -12,7 +12,7 @@ interface AuthCtx {
   user: StoredUser | null;
   loading: boolean;
   booting: boolean;
-  login: (userId: string, password: string) => Promise<void>;
+  login: (userId: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
 }
 
@@ -74,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       sessionStorage.setItem(USER_KEY, JSON.stringify(stored));
       setUser(stored);
+      return res.defaultLanguage?.trim() || null;
     } finally {
       setLoading(false);
     }

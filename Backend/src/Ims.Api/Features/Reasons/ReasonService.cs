@@ -1,3 +1,6 @@
+﻿using Ims.Domain.Returns;
+using Ims.Domain.Shipping;
+using Ims.Domain.Receiving;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
@@ -35,8 +38,8 @@ internal sealed class ReasonService(ImsDbContext db) : IReasonService
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(r => EF.Functions.Like(r.ReasonCode, "%" + s + "%")
-                                  || EF.Functions.Like(r.ReasonName, "%" + s + "%"));
+            query = query.Where(r => EF.Functions.Like(r.ReasonCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(r.ReasonName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
@@ -71,7 +74,7 @@ internal sealed class ReasonService(ImsDbContext db) : IReasonService
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.Reasons.Add(r);
         await db.SaveChangesAsync(ct);
@@ -91,7 +94,7 @@ internal sealed class ReasonService(ImsDbContext db) : IReasonService
         r.IsActive = body.IsActive;
         r.Remark1 = body.Remark1; r.Remark2 = body.Remark2; r.Remark3 = body.Remark3;
         r.Remark4 = body.Remark4; r.Remark5 = body.Remark5;
-        r.UpdatedAt = DateTime.UtcNow;
+        r.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<ReasonDto>(Map(r)));
     }
@@ -100,7 +103,16 @@ internal sealed class ReasonService(ImsDbContext db) : IReasonService
     {
         var r = await db.Reasons.FirstOrDefaultAsync(x => x.ReasonCode == code && !x.IsDeleted, ct);
         if (r is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Reason")));
-        r.IsDeleted = true; r.UpdatedAt = DateTime.UtcNow;
+        if (await db.Stocks.AnyAsync(x => x.ReasonCode == code && x.IsOnHold, ct)
+            || await db.ReceivingPlans.AnyAsync(x => x.ReasonCode == code && (x.Status == ReceivingStatus.NotArrived || x.Status == ReceivingStatus.Partial), ct)
+            || await db.ShippingPlans.AnyAsync(x => x.ReasonCode == code && (x.Status == ShippingStatus.Pending || x.Status == ShippingStatus.Partial), ct)
+            || await db.ReturnPlans.AnyAsync(x => x.ReasonCode == code && (x.Status == ReturnStatus.Pending || x.Status == ReturnStatus.Partial), ct)
+            || await db.ProductionOrders.AnyAsync(x => x.CancelReasonCode == code, ct)
+            || await db.ProductionConsumptions.AnyAsync(x => x.ReasonCode == code, ct)
+            || await db.ProductionOutputs.AnyAsync(x => x.ReasonCode == code, ct)
+            || await db.ProductionReturns.AnyAsync(x => x.ReasonCode == code, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        r.IsDeleted = true; r.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

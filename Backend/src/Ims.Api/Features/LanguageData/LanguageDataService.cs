@@ -8,21 +8,27 @@ namespace Ims.Api.Features.LanguageData;
 
 internal sealed class LanguageDataService(ImsDbContext db) : ILanguageDataService
 {
-    private static readonly string[] Langs = { "en", "ja", "vi" };
+    private IQueryable<Domain.System.Language> Offered() =>
+        db.Languages.AsNoTracking().Where(l => !l.IsDeleted && l.IsActive);
+
+    private async Task<HashSet<string>> OfferedCodesAsync(CancellationToken ct) =>
+        (await Offered().Select(l => l.LanguageCode).ToListAsync(ct))
+            .Select(c => c.ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
 
     private static IQueryable<Domain.System.LanguageData> Filtered(
         ImsDbContext db, string? q, string? labelKey, string? deviceScope)
     {
         var query = db.LanguageData.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(labelKey))
-            query = query.Where(d => EF.Functions.Like(d.LabelKey, "%" + labelKey.Trim() + "%"));
+            query = query.Where(d => EF.Functions.Like(d.LabelKey, LikeContains(labelKey.Trim()), LikeEscape));
         if (!string.IsNullOrWhiteSpace(deviceScope))
             query = query.Where(d => d.DeviceScope == deviceScope);
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(d => EF.Functions.Like(d.LabelKey, "%" + s + "%")
-                                  || EF.Functions.Like(d.LabelText, "%" + s + "%"));
+            query = query.Where(d => EF.Functions.Like(d.LabelKey, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(d.LabelText, LikeContains(s), LikeEscape));
         }
         return query;
     }
@@ -82,7 +88,8 @@ internal sealed class LanguageDataService(ImsDbContext db) : ILanguageDataServic
         if (items.Count == 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001()));
         if (items.Any(i => string.IsNullOrWhiteSpace(i.LabelKey)))
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Val002()));
-        if (items.Any(i => !Langs.Contains((i.LanguageCode ?? "").ToLowerInvariant())))
+        var offered = await OfferedCodesAsync(ct);
+        if (items.Any(i => !offered.Contains((i.LanguageCode ?? "").Trim().ToLowerInvariant())))
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Val005()));
 
         var keys = items.Select(i => i.LabelKey).Distinct().ToList();
@@ -90,7 +97,7 @@ internal sealed class LanguageDataService(ImsDbContext db) : ILanguageDataServic
 
         foreach (var i in items)
         {
-            var lang = i.LanguageCode.ToLowerInvariant();
+            var lang = i.LanguageCode.Trim().ToLowerInvariant();
             var row = existing.FirstOrDefault(d => d.LabelKey == i.LabelKey
                                                 && d.LanguageCode == lang
                                                 && d.DeviceScope == i.DeviceScope);
@@ -100,7 +107,7 @@ internal sealed class LanguageDataService(ImsDbContext db) : ILanguageDataServic
                 {
                     LabelKey = i.LabelKey.Trim(), LanguageCode = lang,
                     LabelText = i.LabelText ?? "", DeviceScope = i.DeviceScope,
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.Now,
                 };
                 db.LanguageData.Add(added);
                 existing.Add(added);
@@ -108,7 +115,7 @@ internal sealed class LanguageDataService(ImsDbContext db) : ILanguageDataServic
             else
             {
                 row.LabelText = i.LabelText ?? "";
-                row.UpdatedAt = DateTime.UtcNow;
+                row.UpdatedAt = DateTime.Now;
             }
         }
         await db.SaveChangesAsync(ct);
@@ -118,7 +125,8 @@ internal sealed class LanguageDataService(ImsDbContext db) : ILanguageDataServic
     public async Task<ServiceResult> LabelsAsync(CancellationToken ct, string? lang = null, string deviceScope = "PC")
     {
         var code = (lang ?? "en").Trim().ToLowerInvariant();
-        if (!Langs.Contains(code)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val005()));
+        if (!(await OfferedCodesAsync(ct)).Contains(code))
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Val005()));
 
         var rows = await db.LanguageData.AsNoTracking()
             .Where(d => d.LanguageCode == code
@@ -133,26 +141,13 @@ internal sealed class LanguageDataService(ImsDbContext db) : ILanguageDataServic
         return Outcome.Ok(new ApiSuccess<Dictionary<string, string>>(map));
     }
 
-    public async Task<ServiceResult> SlotsAsync(CancellationToken ct)
+    public async Task<ServiceResult> LanguagesAsync(CancellationToken ct)
     {
-        var cfg = await db.GeneralSettings.AsNoTracking()
-            .Where(g => g.Category == "Language")
-            .ToDictionaryAsync(g => g.ConfigCode, g => g.ConfigValue, ct);
-        var names = await db.Languages.AsNoTracking()
-            .Where(l => !l.IsDeleted && l.IsActive)
-            .ToDictionaryAsync(l => l.LanguageCode, l => l.LanguageName, ct);
-
-        var slots = new List<LanguageSlotDto>();
-        for (var i = 1; i <= 3; i++)
-        {
-            var code = cfg.GetValueOrDefault($"language_slot_{i}");
-            if (string.IsNullOrWhiteSpace(code)) continue;
-            slots.Add(new LanguageSlotDto(
-                i, code,
-                names.GetValueOrDefault(code) ?? code,
-                cfg.GetValueOrDefault($"language_slot_{i}_flag_icon")));
-        }
-        return Outcome.Ok(new ApiSuccess<IReadOnlyList<LanguageSlotDto>>(slots));
+        var list = await Offered()
+            .OrderBy(l => l.CreatedAt).ThenBy(l => l.LanguageCode)
+            .Select(l => new LanguageOptionDto(l.LanguageCode, l.LanguageName, l.IconImage))
+            .ToListAsync(ct);
+        return Outcome.Ok(new ApiSuccess<IReadOnlyList<LanguageOptionDto>>(list));
     }
 
     public async Task<ServiceResult> ExportCsvAsync(

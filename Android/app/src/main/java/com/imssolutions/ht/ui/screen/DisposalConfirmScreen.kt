@@ -113,7 +113,7 @@ fun DisposalConfirmScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(clock = nowClock(), right = t("htRowCount", "{0} dòng", state.lines.size))
+        HtBottomInset()
     }
 }
 

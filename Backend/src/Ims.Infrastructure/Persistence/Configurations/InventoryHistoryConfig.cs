@@ -17,6 +17,7 @@ public class InventoryHistoryConfig : IEntityTypeConfiguration<InventoryHistory>
         b.Property(x => x.FactoryCode).HasColumnName("factory_code").CodeN(20);
         b.Property(x => x.LocationCode).HasColumnName("location_code").CodeN(20);
         b.Property(x => x.LotNo).HasColumnName("lot_no").CodeN(20);
+        b.Property(x => x.SerialNo).HasColumnName("serial_no").CodeN(30);
         b.Property(x => x.ActionType).HasColumnName("action_type").Code(20);
         b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("decimal(18,4)");
         b.Property(x => x.ReasonCode).HasColumnName("reason_code").CodeN(20);
@@ -24,6 +25,7 @@ public class InventoryHistoryConfig : IEntityTypeConfiguration<InventoryHistory>
 
         b.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_inventory_history_created_at");
         b.HasIndex(x => x.ActionType).HasDatabaseName("IX_inventory_history_action_type");
+        b.HasIndex(x => new { x.ItemCode, x.LotNo });
 
         b.HasOne(x => x.Item).WithMany()
          .HasForeignKey(x => x.ItemCode).OnDelete(DeleteBehavior.Restrict);

@@ -4,6 +4,7 @@ import com.imssolutions.ht.ui.BusyOverlay
 import com.imssolutions.ht.ui.t
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,9 +35,8 @@ import com.imssolutions.ht.BuildConfig
 import com.imssolutions.ht.R
 import com.imssolutions.ht.ui.ErrorBar
 import com.imssolutions.ht.ui.HtLang
-import com.imssolutions.ht.ui.HtStatusBar
-import com.imssolutions.ht.ui.LangFlags
-import com.imssolutions.ht.ui.nowClock
+import com.imssolutions.ht.ui.HtBottomInset
+import com.imssolutions.ht.ui.LangPicker
 import com.imssolutions.ht.ui.theme.BrandBlue
 import com.imssolutions.ht.ui.vm.LoginViewModel
 
@@ -66,10 +66,10 @@ fun LoginScreen(
     LaunchedEffect(state.success) { if (state.success) onLoggedIn() }
 
     Column(Modifier.fillMaxSize().background(Color.White).statusBarsPadding()) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
         Column(
             Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -122,6 +122,18 @@ fun LoginScreen(
                     keyboardActions = KeyboardActions(onDone = { vm.submit() }),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            Row(
+                Modifier.fillMaxWidth().clickable { vm.setRememberMe(!state.rememberMe) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = state.rememberMe,
+                    onCheckedChange = vm::setRememberMe,
+                    colors = CheckboxDefaults.colors(checkedColor = BrandBlue),
+                )
+                Text(t("rememberMe", "Remember me"), fontSize = 13.sp)
             }
 
             state.error?.let {
@@ -179,10 +191,13 @@ fun LoginScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            LangFlags(selected = lang, onLang = onLang, size = 30)
-
-            Spacer(Modifier.height(10.dp))
             Text(baseUrl, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        LangPicker(
+            selected = lang,
+            onLang = onLang,
+            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+        )
         }
 
         Row(
@@ -198,7 +213,7 @@ fun LoginScreen(
             }
         }
 
-        HtStatusBar(clock = nowClock(), right = "v${BuildConfig.VERSION_NAME}")
+        HtBottomInset()
     }
 
 }

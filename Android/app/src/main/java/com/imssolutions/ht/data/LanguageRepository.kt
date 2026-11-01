@@ -1,10 +1,14 @@
 package com.imssolutions.ht.data
 
+import com.imssolutions.ht.ui.HtLang
+
 class LanguageRepository(private val store: LabelStore) {
 
     suspend fun downloadAll(): Int {
+        val offered = ApiClient.call { languages() }.data.orEmpty()
+        if (offered.isNotEmpty()) store.saveLanguages(offered)
         var total = 0
-        for (lang in LANGS) {
+        for (lang in languages().map { it.code }) {
             val map = ApiClient.call { languageLabels(lang = lang, deviceScope = "HT") }.data.orEmpty()
             if (map.isNotEmpty()) {
                 store.save(lang, map)
@@ -14,12 +18,17 @@ class LanguageRepository(private val store: LabelStore) {
         return total
     }
 
+    suspend fun languages(): List<HtLang> =
+        store.loadLanguages()
+            .map { HtLang(it.languageCode.trim().lowercase(), it.languageName, it.iconImage) }
+            .ifEmpty { HtLang.BUILT_IN }
+
     suspend fun labels(lang: String): Map<String, String> = store.load(lang)
 
-    suspend fun clear() = store.clear()
+    suspend fun clear() = store.clear(languages().map { it.code })
 
     companion object {
-        val LANGS = listOf("en", "ja", "vi")
+        val DEFAULT_CODES: Set<String> = HtLang.BUILT_IN.map { it.code }.toSet()
     }
 }
 
@@ -27,15 +36,16 @@ fun resolveLanguage(
     override: Pair<String, String>?,
     userCode: String,
     userDefault: String?,
+    known: Set<String> = LanguageRepository.DEFAULT_CODES,
 ): String {
-    val lang = override?.first
+    val lang = override?.first?.takeIf { it in known }
     val owner = override?.second.orEmpty()
     val ownedByCurrentUser = lang != null && (userCode.isEmpty() || owner == userCode)
     if (ownedByCurrentUser) return lang!!
 
-    val declared = userDefault?.trim()?.takeIf { it in LanguageRepository.LANGS }
+    val declared = userDefault?.trim()?.lowercase()?.takeIf { it in known }
     if (declared != null) return declared
 
     if (lang != null && owner.isEmpty()) return lang
-    return "vi"
+    return if (HtLang.VI.code in known) HtLang.VI.code else known.firstOrNull() ?: HtLang.VI.code
 }

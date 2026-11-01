@@ -64,14 +64,14 @@ internal sealed class PermissionService(ImsDbContext db) : IPermissionService
             if (index.TryGetValue(key, out var row))
             {
                 row.IsAllowed = i.IsAllowed;
-                row.UpdatedAt = DateTime.UtcNow;
+                row.UpdatedAt = DateTime.Now;
             }
             else
             {
                 db.RolePermissions.Add(new RolePermission
                 {
                     RoleCode = i.RoleCode, PermissionCode = i.PermissionCode,
-                    IsAllowed = i.IsAllowed, CreatedAt = DateTime.UtcNow,
+                    IsAllowed = i.IsAllowed, CreatedAt = DateTime.Now,
                 });
             }
         }

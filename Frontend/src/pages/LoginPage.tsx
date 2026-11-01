@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { BTN_ICON } from "@/layout/icons";
 import { useLang } from "@/i18n/LanguageContext";
+import { LanguageSelect } from "@/i18n/LanguageSelect";
+import { errorText } from "@/lib/errorText";
 import { BrandLogo } from "@/layout/BrandLogo";
 import { BRAND } from "@/brand";
 
@@ -10,6 +12,8 @@ const LABEL = "mb-1 block text-xs font-semibold text-slate-600";
 const INPUT = "h-10 w-full rounded-lg border border-slate-300 px-2.5 text-[13px] focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none";
 
 const REMEMBER_KEY = "ims_remember_userid";
+
+const FALLBACK_LANGS = ["en", "ja", "vi"];
 
 function rememberedUserId(): string {
   try {
@@ -29,7 +33,7 @@ function storeRememberedUserId(value: string | null) {
 }
 
 export function LoginPage() {
-  const { t, lang, setLang, slots } = useLang();
+  const { t, setLang, languages } = useLang();
   const { login, loading, user } = useAuth();
   const [initialUserId] = useState(rememberedUserId);
   const [userId, setUserId] = useState(initialUserId);
@@ -37,6 +41,8 @@ export function LoginPage() {
   const [remember, setRemember] = useState(initialUserId !== "");
   const [err, setErr] = useState<string | null>(null);
   const nav = useNavigate();
+  const knownLanguage = (code: string) =>
+    languages.length > 0 ? languages.some(l => l.languageCode === code) : FALLBACK_LANGS.includes(code);
   const from = (useLocation().state as { from?: string } | null)?.from;
 
   useEffect(() => {
@@ -47,18 +53,22 @@ export function LoginPage() {
     e.preventDefault();
     setErr(null);
     try {
-      await login(userId, password);
+      const accountLang = await login(userId, password);
+      if (accountLang && knownLanguage(accountLang)) setLang(accountLang);
       storeRememberedUserId(remember ? userId : null);
       nav(from ?? "/dashboard", { replace: true });
     } catch (ex: any) {
-      setErr(ex?.message ?? "Login failed");
+      setErr(errorText(t, ex));
     }
   }
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-brand-50 via-slate-100 to-white px-4">
       <div className="w-full max-w-[400px] overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-900/5">
-        <div className="flex flex-col items-center border-b border-slate-100 px-5 pt-8 pb-5 text-center">
+        <div className="relative flex flex-col items-center border-b border-slate-100 px-5 pt-8 pb-5 text-center">
+          <div className="absolute top-2 right-2 text-left">
+            <LanguageSelect />
+          </div>
           <BrandLogo size="lg" compact />
           <div className="mt-3 text-2xl font-extrabold tracking-[0.12em] text-slate-900">{BRAND.name}</div>
           <div className="mt-1 text-[13px] text-slate-500">{t("loginSubtitle", "Inventory Management System")}</div>
@@ -92,17 +102,6 @@ export function LoginPage() {
             <img className="icn-img" src={BTN_ICON.login} alt="" />
             <span>{loading ? t("signingIn", "Signing in…") : t("login", "LOGIN")}</span>
           </button>
-          <div className="flex items-center justify-center gap-1">
-            {slots.map(sl => (
-              <img
-                key={sl.languageCode}
-                className={"lang-flag" + (lang === sl.languageCode ? " active" : "")}
-                src={`/Images/NationalFlag/${sl.flagIcon ?? sl.languageCode + ".png"}`}
-                onClick={() => setLang(sl.languageCode)}
-                alt={sl.languageCode}
-                title={sl.languageName} />
-            ))}
-          </div>
         </form>
       </div>
     </div>

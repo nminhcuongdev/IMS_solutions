@@ -7,8 +7,10 @@ export const FUNCTION_LABEL_KEY: Record<string, string> = {
   m_location_3d: "mLocation3D",
   m_itemgroup: "mItemGroup",
   m_item: "mItem",
+  m_process: "mProcess",
   m_partner: "mPartner",
   m_device: "mDevice",
+  dist_status: "distTitle",
   m_user: "mUser",
   m_reason: "mShortageReason",
 
@@ -21,6 +23,8 @@ export const FUNCTION_LABEL_KEY: Record<string, string> = {
   pick_result: "pickResult",
   shp_import: "shpImport",
   shp_result: "shpResult",
+  prd_import: "prdOrderTitle",
+  prd_result: "prdResultTitle",
 
   st_rfid_demo: "stRfidDemo",
 

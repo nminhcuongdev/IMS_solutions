@@ -1,3 +1,4 @@
+import { localIsoDate } from "@/lib/DateRange";
 import { useNavigate } from "react-router-dom";
 import { listAlerts, type AlertBlock } from "@/api/alerts";
 import { useFetch } from "@/lib/useFetch";
@@ -5,7 +6,7 @@ import { useT } from "@/i18n/LanguageContext";
 
 
 function targetOf(code: string): string {
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const yesterday = localIsoDate(new Date(Date.now() - 86400000));
   switch (code) {
     case "ExpiryWarning": return "/inventory/stock?exp=expiringSoon";
     case "LowStock": return "/inventory/stock?lvl=low";

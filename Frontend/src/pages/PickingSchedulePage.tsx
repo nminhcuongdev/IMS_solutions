@@ -11,7 +11,7 @@ import { listLocations } from "@/api/locations";
 import { CsvButton, ImportButton, NewButton, SearchButton, StatusChangeButton } from "@/lib/Buttons";
 import { ScheduleImportModal } from "@/pages/ScheduleImportModal";
 import { StatusChangeModal } from "@/pages/StatusChangeModal";
-import { defaultDateRange, DateRange, useDateDraft } from "@/lib/DateRange";
+import { defaultDateRange, DateRange, useDateDraft, localIsoDate } from "@/lib/DateRange";
 import { Field, ModalShell } from "@/lib/ModalShell";
 import { PageFooter } from "@/lib/PageFooter";
 import { PAGE_SIZES } from "@/lib/Pager";
@@ -24,6 +24,7 @@ import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav, useShortcuts } from "@/lib/useShortcuts";
 import { useUrlBool, useUrlNumber, useUrlPatch, useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
+import { errorText } from "@/lib/errorText";
 
 
 const COLS = 15;
@@ -108,7 +109,7 @@ export function PickingSchedulePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   const search = () => {
@@ -264,7 +265,7 @@ function NewPickingModal({ onClose, onSaved }: {
   const t = useT();
   const [form, setForm] = useState<PickingPlanWrite>({
     soNo: "", serialNo: "01", itemCode: "", locationCode: "",
-    plannedQty: 1, scheduledDate: new Date().toISOString().slice(0, 10),
+    plannedQty: 1, scheduledDate: localIsoDate(),
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -282,7 +283,7 @@ function NewPickingModal({ onClose, onSaved }: {
       onSubmit={async e => {
         e.preventDefault(); setSaving(true); setErr(null);
         try { await createPickingPlan(form); onSaved(form.soNo.trim()); }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); }
+        catch (ex: any) { setErr(errorText(t, ex)); }
         finally { setSaving(false); }
       }}>
       <Field label={t("thSlipNo", "SO No")}>

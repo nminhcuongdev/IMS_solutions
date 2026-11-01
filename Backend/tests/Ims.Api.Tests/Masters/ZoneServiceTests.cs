@@ -234,7 +234,7 @@ public class ZoneServiceTests
 
         var res = await new ZoneService(t.Db).DeleteAsync("ZONE-A", default);
 
-        ResultAssert.Conflict(res);
+        ResultAssert.InUse(res);
     }
 
     [Fact]

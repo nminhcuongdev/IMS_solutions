@@ -1,3 +1,6 @@
+import { ApiCallError } from "@/api/types";
+import { errorText } from "@/lib/errorText";
+
 const PRINT_ERRORS: Record<string | number, [code: string, fallbackVi: string]> = {
   "-6": ["PRT-N6", "Không thể lưu file layout. Vui lòng kiểm tra quyền của thư mục lưu."],
   "-5": ["PRT-N5", "Tải file layout thất bại. Vui lòng kiểm tra URL và thiết lập chứng chỉ."],
@@ -102,5 +105,6 @@ export function printErrorOf(
 
 export function printErrorText(e: unknown, t: (k: string, fb: string) => string): string {
   if (e instanceof MlEngineError) return `${e.code} — ${t(e.code, e.fallback)}`;
+  if (e instanceof ApiCallError) return `${e.code} — ${errorText(t, e)}`;
   return `PRN-002 — ${t("PRN-002", "Không kết nối được Label Engine. Kiểm tra ứng dụng đã chạy trên máy này.")}`;
 }

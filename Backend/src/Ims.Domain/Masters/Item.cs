@@ -12,6 +12,7 @@ public class Item : SoftDeletableEntity
     public string? PackingTypeCode { get; set; }
     public decimal PackageQty { get; set; } = 1;
     public bool IsLotManaged { get; set; }
+    public bool HtScanRequired { get; set; } = true;
     public bool IsSerialManaged { get; set; }
     public string? Barcode { get; set; }
     public int? ExpirationPeriod { get; set; }

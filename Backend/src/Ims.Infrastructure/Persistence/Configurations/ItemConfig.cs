@@ -18,6 +18,7 @@ public class ItemConfig : IEntityTypeConfiguration<Item>
         b.Property(x => x.PackingTypeCode).HasColumnName("packing_type_code").CodeN(20);
         b.Property(x => x.PackageQty).HasColumnName("package_qty").HasColumnType("decimal(18,4)").HasDefaultValue(1m);
         b.Property(x => x.IsLotManaged).HasColumnName("is_lot_managed").HasDefaultValue(false);
+        b.Property(x => x.HtScanRequired).HasColumnName("ht_scan_required").HasDefaultValue(true);
         b.Property(x => x.IsSerialManaged).HasColumnName("is_serial_managed").HasDefaultValue(false);
         b.Property(x => x.Barcode).HasColumnName("barcode").CodeN(50);
         b.Property(x => x.ExpirationPeriod).HasColumnName("expiration_period");

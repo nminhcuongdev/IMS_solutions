@@ -351,11 +351,59 @@ public class AlertServiceTests
     public async Task The_count_is_the_real_total_even_when_the_list_is_trimmed()
     {
         using var t = Configured();
-        Item(t, "IT-LOW", reorder: 10m);
-        for (var i = 0; i < 60; i++) Stock(t, "IT-LOW", $"SN-{i:D3}", 1);
+        for (var i = 0; i < 60; i++)
+        {
+            Item(t, $"IT-LOW-{i:D3}", reorder: 10m);
+            Stock(t, $"IT-LOW-{i:D3}", $"SN-{i:D3}", 1);
+        }
 
         var b = await BlockAsync(t, AlertType.LowStock);
         Assert.Equal(60, b.Total);
         Assert.Equal(50, b.Rows.Count);
+    }
+
+    [Fact]
+    public async Task Low_stock_compares_the_total_of_every_lot_and_lists_the_item_once()
+    {
+        using var t = Configured();
+        Item(t, "IT-SPLIT", reorder: 10m);
+        Stock(t, "IT-SPLIT", "SN-1", 4);
+        Stock(t, "IT-SPLIT", "SN-2", 3);
+        Item(t, "IT-ENOUGH", reorder: 10m);
+        Stock(t, "IT-ENOUGH", "SN-3", 6);
+        Stock(t, "IT-ENOUGH", "SN-4", 6);
+
+        var b = await BlockAsync(t, AlertType.LowStock);
+
+        Assert.Equal(1, b.Total);
+        var r = Assert.Single(b.Rows);
+        Assert.Equal("IT-SPLIT", r.Code);
+        Assert.Equal("7 / 10", r.Extra);
+    }
+
+    [Fact]
+    public async Task An_item_with_a_reorder_point_and_no_stock_at_all_is_low()
+    {
+        using var t = Configured();
+        Item(t, "IT-EMPTY", reorder: 5m);
+        t.Db.SaveChanges();
+
+        var r = Assert.Single((await BlockAsync(t, AlertType.LowStock)).Rows);
+        Assert.Equal("IT-EMPTY", r.Code);
+        Assert.Equal("0 / 5", r.Extra);
+    }
+
+    [Fact]
+    public async Task Overflow_compares_the_total_of_every_lot_and_lists_the_item_once()
+    {
+        using var t = Configured();
+        Item(t, "IT-OVER", surplus: 100m);
+        Stock(t, "IT-OVER", "SN-1", 60);
+        Stock(t, "IT-OVER", "SN-2", 50);
+
+        var b = await BlockAsync(t, AlertType.StockOverflow);
+
+        Assert.Equal(1, b.Total);
+        Assert.Equal("110 / 100", Assert.Single(b.Rows).Extra);
     }
 }

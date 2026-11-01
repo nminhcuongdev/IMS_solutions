@@ -41,11 +41,44 @@ import com.imssolutions.ht.ui.screen.SettingsScreen
 import com.imssolutions.ht.ui.screen.ShippingDetailScreen
 import com.imssolutions.ht.ui.screen.ShippingItemsScreen
 import com.imssolutions.ht.ui.screen.ShippingListScreen
+import com.imssolutions.ht.ui.screen.PrdConsScreen
+import com.imssolutions.ht.ui.screen.PrdLabelScreen
+import com.imssolutions.ht.ui.screen.PrdLinesScreen
+import com.imssolutions.ht.ui.screen.PrdOrderListScreen
+import com.imssolutions.ht.ui.screen.PrdOutputScreen
+import com.imssolutions.ht.ui.screen.PrdReceiptScreen
+import com.imssolutions.ht.ui.screen.PrdReturnScreen
+import com.imssolutions.ht.ui.screen.PrdScanMaterialScreen
+import com.imssolutions.ht.ui.screen.PrdScanProcessScreen
+import com.imssolutions.ht.ui.vm.PrdMaterial
+import com.imssolutions.ht.ui.vm.UpdateViewModel
+import com.imssolutions.ht.ui.screen.UpdateHost
 
 object Routes {
     const val LOGIN = "login"
     const val SETTINGS = "settings"
     const val MENU = "menu"
+    const val PRD_LIST = "prd_list/{kind}"
+    const val PRD_RCV = "prd_rcv/{no}"
+    const val PRD_LINES = "prd_lines/{no}"
+    const val PRD_SCAN_PROC = "prd_scan_proc/{no}"
+    const val PRD_SCAN_MAT = "prd_scan_mat/{no}/{proc}"
+    const val PRD_CONS = "prd_cons/{no}/{proc}/{item}?lot={lot}"
+    const val PRD_RET = "prd_ret/{no}"
+    const val PRD_OUT = "prd_out/{no}"
+    const val PRD_LABEL = "prd_label/{no}/{req}"
+    fun prdList(kind: String) = "prd_list/$kind"
+    fun prdOpen(kind: String, no: String) = when (kind) {
+        "receipt" -> "prd_rcv/${Uri.encode(no)}"
+        "input" -> "prd_lines/${Uri.encode(no)}"
+        "return" -> "prd_ret/${Uri.encode(no)}"
+        else -> "prd_out/${Uri.encode(no)}"
+    }
+    fun prdScanProc(no: String) = "prd_scan_proc/${Uri.encode(no)}"
+    fun prdScanMat(no: String, proc: String) = "prd_scan_mat/${Uri.encode(no)}/${Uri.encode(proc)}"
+    fun prdCons(no: String, proc: String, m: PrdMaterial) =
+        "prd_cons/${Uri.encode(no)}/${Uri.encode(proc)}/${Uri.encode(m.itemCode)}?lot=${Uri.encode(m.lotNo)}"
+    fun prdLabel(no: String, req: String) = "prd_label/${Uri.encode(no)}/${Uri.encode(req)}"
     const val RECEIVING = "rcv_list"
     const val ITEMS = "rcv_items/{poNo}"
     const val DETAIL = "rcv_detail/{poNo}/{serialNo}?qty={qty}&lot={lot}"
@@ -94,6 +127,9 @@ fun AppNav(loggedIn: Boolean) {
     val strings by langVm.state.collectAsState()
     val lang = strings.lang
     val onLang: (HtLang) -> Unit = langVm::pick
+    val updVm: UpdateViewModel = viewModel()
+    val updState by updVm.state.collectAsState()
+    val pendingUpdate = updState.offer?.entry?.versionName
 
     CompositionLocalProvider(LocalHtStrings provides strings) {
     NavHost(
@@ -117,6 +153,9 @@ fun AppNav(loggedIn: Boolean) {
                 lang = lang, onLang = onLang, onBack = { nav.popBackStack() },
                 onDownloadLabels = langVm::download,
                 onClearLabels = langVm::clear,
+                installedVersion = updVm.installedName,
+                checking = updState.checking,
+                onCheckUpdate = { updVm.check(manual = true) },
             )
         }
         composable(Routes.MENU) {
@@ -131,7 +170,86 @@ fun AppNav(loggedIn: Boolean) {
                 onDisposal = { nav.navigate(Routes.DISPOSAL) },
                 onTransfer = { nav.navigate(Routes.TRANSFER) },
                 onStocktaking = { nav.navigate(Routes.STOCKTAKING) },
+                onProduction = { kind -> nav.navigate(Routes.prdList(kind)) },
                 onLoggedOut = { nav.navigate(Routes.LOGIN) { popUpTo(0) } },
+                pendingUpdate = pendingUpdate,
+                onOpenUpdate = updVm::open,
+            )
+        }
+        composable(Routes.PRD_LIST) { e ->
+            val kind = e.arguments?.getString("kind").orEmpty()
+            PrdOrderListScreen(
+                kind = kind, lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+                onOpen = { no -> nav.navigate(Routes.prdOpen(kind, no)) },
+            )
+        }
+        composable(Routes.PRD_RCV) { e ->
+            PrdReceiptScreen(
+                orderNo = e.arguments?.getString("no").orEmpty(), lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable(Routes.PRD_LINES) { e ->
+            val no = e.arguments?.getString("no").orEmpty()
+            PrdLinesScreen(
+                orderNo = no, lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+                onScanProcess = { nav.navigate(Routes.prdScanProc(no)) },
+            )
+        }
+        composable(Routes.PRD_SCAN_PROC) { e ->
+            val no = e.arguments?.getString("no").orEmpty()
+            PrdScanProcessScreen(
+                orderNo = no, lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+                onAccepted = { proc ->
+                    nav.navigate(Routes.prdScanMat(no, proc)) { popUpTo(Routes.PRD_SCAN_PROC) { inclusive = true } }
+                },
+            )
+        }
+        composable(Routes.PRD_SCAN_MAT) { e ->
+            val no = e.arguments?.getString("no").orEmpty()
+            val proc = e.arguments?.getString("proc").orEmpty()
+            PrdScanMaterialScreen(
+                orderNo = no, processCode = proc, lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+                onBackToLines = { nav.popBackStack() },
+                onAccepted = { m -> nav.navigate(Routes.prdCons(no, proc, m)) },
+            )
+        }
+        composable(
+            Routes.PRD_CONS,
+            arguments = listOf(navArgument("lot") { type = NavType.StringType; defaultValue = "" }),
+        ) { e ->
+            PrdConsScreen(
+                orderNo = e.arguments?.getString("no").orEmpty(),
+                processCode = e.arguments?.getString("proc").orEmpty(),
+                material = PrdMaterial(e.arguments?.getString("item").orEmpty(), e.arguments?.getString("lot").orEmpty()),
+                lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable(Routes.PRD_RET) { e ->
+            PrdReturnScreen(
+                orderNo = e.arguments?.getString("no").orEmpty(), lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable(Routes.PRD_OUT) { e ->
+            val no = e.arguments?.getString("no").orEmpty()
+            PrdOutputScreen(
+                orderNo = no, lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
+                onDone = { req -> nav.navigate(Routes.prdLabel(no, req)) { popUpTo(Routes.PRD_OUT) { inclusive = true } } },
+            )
+        }
+        composable(Routes.PRD_LABEL) { e ->
+            PrdLabelScreen(
+                orderNo = e.arguments?.getString("no").orEmpty(),
+                requestId = e.arguments?.getString("req").orEmpty(),
+                lang = lang, onLang = onLang,
+                onBack = { nav.popBackStack() },
             )
         }
         composable(Routes.RECEIVING) {
@@ -350,5 +468,6 @@ fun AppNav(loggedIn: Boolean) {
             )
         }
     }
+    UpdateHost(updVm)
     }
 }

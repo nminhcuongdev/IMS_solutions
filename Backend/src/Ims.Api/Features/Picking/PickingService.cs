@@ -54,15 +54,15 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
         if (dateFrom is { } from) query = query.Where(p => p.ScheduledDate >= from);
         if (dateTo is { } to) query = query.Where(p => p.ScheduledDate <= to);
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(p => EF.Functions.Like(p.ItemCode, "%" + ic + "%"));
+            query = query.Where(p => EF.Functions.Like(p.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(soNo) is { } sn)
-            query = query.Where(p => EF.Functions.Like(p.SoNo, "%" + sn + "%"));
+            query = query.Where(p => EF.Functions.Like(p.SoNo, LikeContains(sn), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(p => db.Items.Any(i =>
-                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
         if (Trimmed(q) is { } free)
-            query = query.Where(p => EF.Functions.Like(p.SoNo, "%" + free + "%")
-                                  || EF.Functions.Like(p.ItemCode, "%" + free + "%"));
+            query = query.Where(p => EF.Functions.Like(p.SoNo, LikeContains(free), LikeEscape)
+                                  || EF.Functions.Like(p.ItemCode, LikeContains(free), LikeEscape));
         if (PickingStatus.FromApiName(Trimmed(status)) is { } st)
             query = query.Where(p => p.Status == st);
 
@@ -101,9 +101,11 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
             PickedQty = 0,
             ScheduledDate = body.ScheduledDate,
             Status = PickingStatus.NotPicked,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             CreatedBy = user.FindFirstValue(ClaimTypes.NameIdentifier),
         };
+        if (await db.PickingPlans.AnyAsync(x => x.SoNo == plan.SoNo && x.SoBranchNo == plan.SoBranchNo, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
         db.PickingPlans.Add(plan);
         await db.SaveChangesAsync(ct);
 
@@ -146,7 +148,7 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
             if (p.Status == PickingStatus.Picked || p.Status == PickingStatus.Cancelled) continue;
             if (p.Status == target) continue;
             p.Status = target.Value;
-            p.UpdatedAt = DateTime.UtcNow;
+            p.UpdatedAt = DateTime.Now;
             p.UpdatedBy = who;
             updated++;
             touched.Add(label(p));
@@ -169,12 +171,12 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
         if (dateTo is { } to)
             query = query.Where(r => r.CreatedAt < to.AddDays(1).ToDateTime(TimeOnly.MinValue));
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(r => EF.Functions.Like(r.ItemCode, "%" + ic + "%"));
+            query = query.Where(r => EF.Functions.Like(r.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(soNo) is { } sn)
-            query = query.Where(r => EF.Functions.Like(r.SoNo, "%" + sn + "%"));
+            query = query.Where(r => EF.Functions.Like(r.SoNo, LikeContains(sn), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(r => db.Items.Any(i =>
-                i.ItemCode == r.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == r.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
 
         query = ResultSort.Apply(query, sort);
 
@@ -226,8 +228,9 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
         var worker = user.FindFirstValue(ClaimTypes.NameIdentifier);
         var lotNo = NullIfBlank(body.LotNo)?.Trim();
         var taken = new List<Domain.Inventory.Stock>();
+        var allocations = new List<Inventory.StockAllocation>();
         if (await Inventory.StockMovement.TakeAsync(db, itemCode, lotNo, locationCode, delta,
-                Domain.Inventory.InventoryAction.Picking, null, worker, ErrorCatalog.Loc003(), ct, taken) is { } refused)
+                Domain.Inventory.InventoryAction.Picking, null, worker, ErrorCatalog.Loc003(), ct, taken, allocations) is { } refused)
             return refused;
 
         var lots = taken.Select(s => s.LotNo).ToList();
@@ -240,7 +243,7 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
 
         var row = new PickingResult
         {
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             SoNo = plan.SoNo,
             SoBranchNo = plan.SoBranchNo,
             ItemCode = itemCode,
@@ -250,10 +253,17 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
             CreatedBy = user.FindFirstValue(ClaimTypes.NameIdentifier),
         };
         db.PickingResults.Add(row);
+        foreach (var allocation in allocations)
+            db.PickingResultLots.Add(new Ims.Domain.Picking.PickingResultLot
+            {
+                PickingResult = row, CreatedAt = row.CreatedAt, ItemCode = itemCode,
+                LotNo = allocation.LotNo, SerialNo = allocation.SerialNo,
+                Qty = allocation.Qty, CreatedBy = worker ?? "system",
+            });
 
         plan.PickedQty = qty;
         plan.Status = qty >= plan.Qty ? PickingStatus.Picked : PickingStatus.NotPicked;
-        plan.UpdatedAt = DateTime.UtcNow;
+        plan.UpdatedAt = DateTime.Now;
         plan.UpdatedBy = row.CreatedBy;
 
         await db.SaveChangesAsync(ct);

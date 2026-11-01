@@ -31,8 +31,8 @@ public static class ReceivingEndpoints
         (await service.ListPlansAsync(ct: ct, page: page, pageSize: pageSize, sort: sort, q: q, dateFrom: dateFrom, dateTo: dateTo, itemCode: itemCode, itemName: itemName, poNo: poNo, status: status)).ToHttpResult();
 
     private static async Task<IResult> CreatePlanAsync(
-        [FromServices] IReceivingService service, [FromBody] ReceivingPlanWriteDto body, CancellationToken ct) =>
-        (await service.CreatePlanAsync(body: body, ct: ct)).ToHttpResult();
+        [FromServices] IReceivingService service, [FromBody] ReceivingPlanWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.CreatePlanAsync(body: body, ct: ct, user: user)).ToHttpResult();
 
     private static async Task<IResult> ChangeStatusAsync(
         [FromServices] IReceivingService service, [FromBody] ReceivingStatusChangeDto body, ClaimsPrincipal user,
@@ -41,8 +41,8 @@ public static class ReceivingEndpoints
 
     private static async Task<IResult> RegisterShortageAsync(
         [FromServices] IReceivingService service, string poNo, [FromBody] ReceivingShortageDto body,
-        CancellationToken ct) =>
-        (await service.RegisterShortageAsync(poNo: poNo, body: body, ct: ct)).ToHttpResult();
+        ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.RegisterShortageAsync(poNo: poNo, body: body, ct: ct, user: user)).ToHttpResult();
 
     private static async Task<IResult> ListResultsAsync(
         [FromServices] IReceivingService service, CancellationToken ct, [FromQuery] int? page = null,

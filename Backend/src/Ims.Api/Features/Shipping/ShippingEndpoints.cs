@@ -41,8 +41,8 @@ public static class ShippingEndpoints
 
     private static async Task<IResult> RegisterShortageAsync(
         [FromServices] IShippingService service, string soNo, [FromBody] ShippingShortageDto body,
-        CancellationToken ct) =>
-        (await service.RegisterShortageAsync(soNo: soNo, body: body, ct: ct)).ToHttpResult();
+        ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.RegisterShortageAsync(soNo: soNo, body: body, ct: ct, user: user)).ToHttpResult();
 
     private static async Task<IResult> ListResultsAsync(
         [FromServices] IShippingService service, CancellationToken ct, [FromQuery] int? page = null,

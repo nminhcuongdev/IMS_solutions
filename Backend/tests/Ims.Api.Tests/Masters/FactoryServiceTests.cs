@@ -469,7 +469,7 @@ public class FactoryServiceTests
 
         var res = await new FactoryService(t.Db).DeleteAsync("FAC-01", default);
 
-        ResultAssert.Conflict(res);
+        ResultAssert.InUse(res);
         Assert.False((await t.Db.Factories.FindAsync("FAC-01"))!.IsDeleted);
     }
 
@@ -488,7 +488,7 @@ public class FactoryServiceTests
 
         var res = await new FactoryService(t.Db).DeleteAsync("FAC-01", default);
 
-        ResultAssert.Conflict(res);
+        ResultAssert.InUse(res);
     }
 
     [Fact]

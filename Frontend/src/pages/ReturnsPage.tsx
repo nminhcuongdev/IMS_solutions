@@ -10,7 +10,7 @@ import { listItems } from "@/api/items";
 import { listPartners } from "@/api/partners";
 import { CsvButton, ImportButton, NewButton, PrintButton, SearchButton, ShortageButton, StatusChangeButton } from "@/lib/Buttons";
 import { ScheduleImportModal } from "@/pages/ScheduleImportModal";
-import { defaultDateRange, DateRange, useDateDraft } from "@/lib/DateRange";
+import { defaultDateRange, DateRange, useDateDraft, localIsoDate } from "@/lib/DateRange";
 import { Field, ModalShell } from "@/lib/ModalShell";
 import { PageFooter } from "@/lib/PageFooter";
 import { PAGE_SIZES } from "@/lib/Pager";
@@ -26,6 +26,7 @@ import { ReturnLabelModal } from "@/pages/ReturnLabelModal";
 import { useT } from "@/i18n/LanguageContext";
 import { ShortageModal, ShortageReasonCell, useShortageReasons } from "@/pages/ShortageModal";
 import { StatusChangeModal } from "@/pages/StatusChangeModal";
+import { errorText } from "@/lib/errorText";
 
 
 const COLS = 17;
@@ -122,7 +123,7 @@ export function ReturnsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   const search = () => {
@@ -316,7 +317,7 @@ function NewReturnModal({ onClose, onSaved }: {
   const t = useT();
   const [form, setForm] = useState<ReturnPlanWrite>({
     returnNo: "", serialNo: "01", returnedByCode: "", itemCode: "",
-    expectedQty: 1, returnDate: new Date().toISOString().slice(0, 10),
+    expectedQty: 1, returnDate: localIsoDate(),
     invoiceNo: "", lotNo: "",
   });
   const [saving, setSaving] = useState(false);
@@ -335,7 +336,7 @@ function NewReturnModal({ onClose, onSaved }: {
       onSubmit={async e => {
         e.preventDefault(); setSaving(true); setErr(null);
         try { await createReturnPlan(form); onSaved(form.returnNo.trim()); }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); }
+        catch (ex: any) { setErr(errorText(t, ex)); }
         finally { setSaving(false); }
       }}>
       <Field label={t("thReturnNo", "Return No")}>

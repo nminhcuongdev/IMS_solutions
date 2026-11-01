@@ -13,6 +13,8 @@ export interface Item {
   reorderLevel1: number | null;
   reorderLevel2: number | null;
   defaultLocationCode: string | null;
+  isLotManaged: boolean;
+  htScanRequired: boolean;
   isActive: boolean;
   remark1: string | null; remark2: string | null; remark3: string | null;
   remark4: string | null; remark5: string | null;
@@ -30,6 +32,8 @@ export interface ItemWrite {
   reorderLevel1?: number | null;
   reorderLevel2?: number | null;
   defaultLocationCode?: string | null;
+  isLotManaged?: boolean;
+  htScanRequired?: boolean;
   isActive?: boolean;
   remark1?: string | null; remark2?: string | null; remark3?: string | null;
   remark4?: string | null; remark5?: string | null;

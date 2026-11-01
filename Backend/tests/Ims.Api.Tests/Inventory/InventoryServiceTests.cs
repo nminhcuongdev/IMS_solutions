@@ -4,6 +4,7 @@ using Ims.Api.Contracts;
 using Ims.Api.Features.Inventory;
 using Ims.Api.Tests.Infrastructure;
 using Ims.Domain.Inventory;
+using Ims.Domain.Production;
 using Xunit;
 
 namespace Ims.Api.Tests.Inventory;
@@ -30,6 +31,56 @@ public class InventoryServiceTests
         bool hold = false, string? reason = null, DateOnly? expiry = null,
         decimal reserved = 0) =>
         InventoryTestData.Stock(item, serial, qty, location, lot, hold, reason, expiry, reserved);
+
+    [Fact]
+    public async Task Stock_category_accepts_item_group_classification()
+    {
+        using var t = await WithRowsAsync(Row(), Row(item: "IT-02", serial: "0000000002"));
+        t.Db.ItemGroups.Single(x => x.ItemGroupCode == "IG-01").Category = Ims.Domain.Masters.ItemGroupCategory.FinishedGoods;
+        await t.Db.SaveChangesAsync();
+        var rows = ResultAssert.Ok<ApiListSuccess<StockDto>>(
+            await new InventoryService(t.Db).ListStockAsync(default, category: "RawMaterials")).Data;
+        Assert.Equal(new[] { "IT-02" }, rows.Select(x => x.ItemCode));
+    }
+
+    [Fact]
+    public async Task Work_history_pages_and_filters_derived_production_work()
+    {
+        using var t = await WithRowsAsync(Row());
+        t.Db.ProductionOrders.Add(new ProductionOrder
+        {
+            ProductionOrderNo = "MO-H", FactoryCode = "FAC-01", OutputItemCode = "IT-01",
+            StorageLocationCode = "W1_ZA", UomCode = "pcs", CreatedBy = "admin"
+        });
+        t.Db.Processes.Add(new Ims.Domain.Masters.Process
+        {
+            ProcessCode = "P1", ProcessName = "Process", CreatedAt = Now
+        });
+        t.Db.ProductionOrderLines.Add(new ProductionOrderLine
+        {
+            ProductionOrderNo = "MO-H", LineNo = 1, ProcessCode = "P1", ItemCode = "IT-02",
+            UomCode = "rolls", PlannedQty = 7, PickedAt = Now, PickedBy = "admin", CreatedBy = "admin"
+        });
+        t.Db.ProductionReceipts.Add(new ProductionReceipt
+        {
+            ProductionOrderNo = "MO-H", RequestId = "R-H", CreatedAt = Now.AddMinutes(1), CreatedBy = "admin"
+        });
+        t.Db.ProductionLabels.Add(new ProductionLabel
+        {
+            ProductionOrderNo = "MO-H", RequestId = "L-H", OutputRequestId = "O-H",
+            ItemCode = "IT-01", LotNo = "FG-H", LabelCount = 2, CreatedAt = Now.AddMinutes(2), CreatedBy = "admin"
+        });
+        await t.Db.SaveChangesAsync();
+        var service = new InventoryService(t.Db);
+        var page = ResultAssert.Ok<ApiListSuccess<InventoryHistoryDto>>(
+            await service.ListHistoryAsync(default, page: 1, pageSize: 20, sort: "-created_at"));
+        Assert.Equal(3, page.Meta.Total);
+        Assert.Equal(InventoryAction.ProdLabel, page.Data.First().ActionType);
+        var picked = ResultAssert.Ok<ApiListSuccess<InventoryHistoryDto>>(
+            await service.ListHistoryAsync(default, action: InventoryAction.ProdPick));
+        Assert.True(InventoryAction.IsDefined(InventoryAction.ProdPick));
+        Assert.Equal(7, Assert.Single(picked.Data).Qty);
+    }
 
 
     [Fact]
@@ -613,5 +664,80 @@ public class InventoryServiceTests
 
         var r2 = await new InventoryService(t.Db).ListStockAsync(default, pageSize: 7);
         Assert.Equal(50, ResultAssert.Ok<ApiListSuccess<StockDto>>(r2).Meta.PageSize);
+    }
+
+    [Fact]
+    public async Task Adjust_below_the_reserved_quantity_is_refused()
+    {
+        using var t = await WithRowsAsync(Row(qty: 30, reserved: 10));
+
+        var r = await new InventoryService(t.Db).AdjustStockAsync(new StockAdjustDto("IT-01", "0000000001", 5, "RS-ADJ"), User(), default);
+
+        ResultAssert.BadRequest(r, "QTY-001");
+        Assert.Equal(30m, (await t.Db.Stocks.AsNoTracking().SingleAsync()).StockQty);
+    }
+
+    [Fact]
+    public async Task Adjust_with_a_reason_outside_the_Adjustment_category_is_refused()
+    {
+        using var t = await WithRowsAsync(Row(qty: 30));
+
+        var r = await new InventoryService(t.Db).AdjustStockAsync(new StockAdjustDto("IT-01", "0000000001", 12, "RS-QC"), User(), default);
+
+        ResultAssert.BadRequest(r, "RSN-001");
+        Assert.Empty(await t.Db.InventoryHistories.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Restore_puts_the_goods_back_on_the_serial_they_were_disposed_from()
+    {
+        using var t = await WithRowsAsync(
+            Row(serial: "0000000001", qty: 10),
+            Row(serial: "0000000002", qty: 10));
+        await new InventoryService(t.Db).DisposeStockAsync(new StockDisposalDto("IT-01", "0000000002", "RS-QC", 4), User(), default);
+        var no = await t.Db.InventoryHistories.Select(x => x.No).SingleAsync();
+        t.Db.ChangeTracker.Clear();
+
+        var r = await new InventoryService(t.Db).RestoreDisposalAsync(new RestoreDisposalDto([no]), User(), default);
+
+        Assert.Equal(1, ResultAssert.Ok<ApiSuccess<StockBulkResult>>(r).Data.Updated);
+        var rows = await t.Db.Stocks.AsNoTracking().OrderBy(s => s.SerialNo).ToListAsync();
+        Assert.Equal(10m, rows[0].StockQty);
+        Assert.Equal(10m, rows[1].StockQty);
+    }
+
+    [Fact]
+    public async Task An_unrelated_adjust_of_the_same_quantity_does_not_count_as_a_restore()
+    {
+        using var t = await WithRowsAsync(Row(serial: "0000000001", qty: 10));
+        await new InventoryService(t.Db).DisposeStockAsync(new StockDisposalDto("IT-01", "0000000001", "RS-QC", 4), User(), default);
+        var no = await t.Db.InventoryHistories.Select(x => x.No).SingleAsync();
+        t.Db.ChangeTracker.Clear();
+        await new InventoryService(t.Db).AdjustStockAsync(new StockAdjustDto("IT-01", "0000000001", 10, "RS-ADJ"), User(), default);
+        t.Db.ChangeTracker.Clear();
+
+        var r = await new InventoryService(t.Db).RestoreDisposalAsync(new RestoreDisposalDto([no]), User(), default);
+
+        Assert.Equal(1, ResultAssert.Ok<ApiSuccess<StockBulkResult>>(r).Data.Updated);
+        Assert.Equal(14m, (await t.Db.Stocks.AsNoTracking().SingleAsync()).StockQty);
+    }
+
+    [Fact]
+    public async Task The_lot_count_counts_distinct_lots_not_stock_rows()
+    {
+        using var t = await WithRowsAsync(
+            Row(serial: "0000000001", item: "IT-01", qty: 1, lot: "L-A"),
+            Row(serial: "0000000002", item: "IT-01", qty: 1, lot: "L-A"),
+            Row(serial: "0000000003", item: "IT-01", qty: 1, lot: "L-B"),
+            Row(serial: "0000000004", item: "IT-01", qty: 1, lot: null),
+            Row(serial: "0000000005", item: "IT-01", qty: 1, lot: null));
+
+        var byItem = ResultAssert.Ok<ApiListSuccess<StockGroupDto>>(
+            await new InventoryService(t.Db).ListStockAsync(default, groupBy: "item")).Data.Single();
+        var byLocation = ResultAssert.Ok<ApiListSuccess<StockGroupDto>>(
+            await new InventoryService(t.Db).ListStockAsync(default, groupBy: "location")).Data.Single();
+
+        Assert.Equal(3, byItem.LotCount);
+        Assert.Equal(3, byLocation.LotCount);
     }
 }

@@ -23,6 +23,7 @@ public class PickingResultConfig : IEntityTypeConfiguration<PickingResult>
 
         b.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_picking_result_created_at");
         b.HasIndex(x => x.SoNo).HasDatabaseName("IX_picking_result_so_no");
+        b.HasIndex(x => new { x.ItemCode, x.LotNo });
 
         b.HasOne<Ims.Domain.Masters.Item>().WithMany()
          .HasForeignKey(x => x.ItemCode).OnDelete(DeleteBehavior.Restrict);

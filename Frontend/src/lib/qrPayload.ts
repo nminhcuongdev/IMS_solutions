@@ -1,3 +1,5 @@
+import { ApiCallError } from "@/api/types";
+
 
 export const QR_MAX_LENGTH = 250;
 
@@ -35,12 +37,35 @@ export function buildLocationLabelQr(locationCode: string, locationName?: string
   return full.length <= QR_MAX_LENGTH ? full : `?lc_cd=${enc(locationCode)}`;
 }
 
-export function buildProductLabelQr(i: ProductLabelQrInput): string {
-  const path =
-    (i.gtin ? `/01/${enc(i.gtin)}` : "") +
-    (i.lotNo ? `/10/${enc(i.lotNo)}` : "");
+const DROP_ORDER = ["lc_name", "item_name", "user_cd", "print_at", "11", "13"];
 
-  const attrs: [string, string | number | null | undefined][] = [
+function composeQr(path: string, attrs: [string, string | number | null | undefined][]): string {
+  const present = attrs.filter(([, v]) => v !== null && v !== undefined && v !== "");
+  const build = (skip: Set<string>) =>
+    path + "?" + present
+      .filter(([k]) => !skip.has(k))
+      .map(([k, v]) => `${k}=${enc(v!)}`)
+      .join("&");
+
+  const skip = new Set<string>();
+  let out = build(skip);
+  for (const key of DROP_ORDER) {
+    if (out.length <= QR_MAX_LENGTH) return out;
+    skip.add(key);
+    out = build(skip);
+  }
+  if (out.length <= QR_MAX_LENGTH) return out;
+  throw new ApiCallError({
+    code: "VAL-005", httpStatus: 400, severity: "Error",
+    message: `QR ${out.length} > ${QR_MAX_LENGTH}`,
+  });
+}
+
+const keyPath = (gtin?: string | null, lotNo?: string | null) =>
+  (gtin ? `/01/${enc(gtin)}` : "") + (lotNo ? `/10/${enc(lotNo)}` : "");
+
+export function buildProductLabelQr(i: ProductLabelQrInput): string {
+  return composeQr(keyPath(i.gtin, i.lotNo), [
     ["11", i.productionDate],
     ["17", i.expiryDate],
     ["30", i.qty],
@@ -50,20 +75,25 @@ export function buildProductLabelQr(i: ProductLabelQrInput): string {
     ["lc_cd", i.locationCode],
     ["lc_name", i.locationName],
     ["user_cd", i.userCode],
-  ];
+  ]);
+}
 
-  const build = (skip: Set<string>) =>
-    path + "?" + attrs
-      .filter(([k, v]) => !skip.has(k) && v !== null && v !== undefined && v !== "")
-      .map(([k, v]) => `${k}=${enc(v!)}`)
-      .join("&");
+export interface ShippingLabelQrInput {
+  gtin?: string | null;
+  lotNo?: string | null;
+  qty: number;
+  itemCode: string;
+  itemName?: string | null;
+  printedAt?: Date;
+}
 
-  let out = build(new Set());
-  if (out.length <= QR_MAX_LENGTH) return out;
-
-  for (const drop of [["lc_name"], ["lc_name", "item_name"]]) {
-    out = build(new Set(drop));
-    if (out.length <= QR_MAX_LENGTH) return out;
-  }
-  return out.slice(0, QR_MAX_LENGTH);
+export function buildShippingLabelQr(i: ShippingLabelQrInput): string {
+  const stamp = qrTimestamp(i.printedAt ?? new Date());
+  return composeQr(keyPath(i.gtin, i.lotNo), [
+    ["13", stamp.slice(0, 6)],
+    ["37", i.qty],
+    ["item_cd", i.itemCode],
+    ["item_name", i.itemName],
+    ["print_at", stamp],
+  ]);
 }

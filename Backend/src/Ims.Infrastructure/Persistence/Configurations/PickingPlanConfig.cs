@@ -17,7 +17,7 @@ public class PickingPlanConfig : IEntityTypeConfiguration<PickingPlan>
         b.Property(x => x.ItemCode).HasColumnName("item_code").Code(20);
         b.Property(x => x.LocationCode).HasColumnName("location_code").CodeN(20);
         b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("decimal(18,4)");
-        b.Property(x => x.PickedQty).HasColumnName("picked_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        b.Property(x => x.PickedQty).HasColumnName("picked_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m).IsConcurrencyToken();
         b.Property(x => x.ScheduledDate).HasColumnName("scheduled_date");
         b.Property(x => x.Status).HasColumnName("status").HasDefaultValue(PickingStatus.NotPicked);
         b.MapAudit();

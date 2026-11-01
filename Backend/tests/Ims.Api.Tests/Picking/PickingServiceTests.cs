@@ -53,6 +53,8 @@ public class PickingServiceTests
         var h = Assert.Single(await t.Db.InventoryHistories.ToListAsync());
         Assert.Equal(("IT-01", "W1_ZA", "LOT-1", "Picking", -10m, "U001"),
             (h.ItemCode, h.LocationCode, h.LotNo, h.ActionType, h.Qty, h.CreatedBy));
+        var allocation = Assert.Single(await t.Db.PickingResultLots.ToListAsync());
+        Assert.Equal(("LOT-1", "SN-SEED", 10m), (allocation.LotNo, allocation.SerialNo, allocation.Qty));
     }
 
     [Fact]
@@ -717,5 +719,19 @@ public class PickingServiceTests
         Assert.StartsWith("no,created_at,item_code,item_name,qty,unit,so_no,so_branch_no,", csv);
         Assert.Contains("LOT-1", csv);
         Assert.Contains("W1_ZA", csv);
+    }
+
+    [Fact]
+    public async Task CreatePlan_rejects_the_same_so_and_branch_twice_even_padded()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        ResultAssert.Created<ApiSuccess<PickingPlanDto>>(await new PickingService(t.Db).CreatePlanAsync(Valid(), Worker(), default));
+        t.Db.ChangeTracker.Clear();
+        var first = Valid();
+
+        var dup = await new PickingService(t.Db).CreatePlanAsync(first with { SoNo = " " + first.SoNo + " ", SerialNo = " " + (first.SerialNo ?? "01") + " " }, Worker(), default);
+
+        ResultAssert.Conflict(dup);
+        Assert.Equal(1, await t.Db.PickingPlans.CountAsync());
     }
 }

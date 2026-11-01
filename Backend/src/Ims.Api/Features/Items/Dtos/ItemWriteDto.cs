@@ -12,4 +12,5 @@ public sealed record ItemWriteDto(
     string? DefaultLocationCode = null,
     bool IsActive = true,
     string? Remark1 = null, string? Remark2 = null, string? Remark3 = null,
-    string? Remark4 = null, string? Remark5 = null);
+    string? Remark4 = null, string? Remark5 = null,
+    bool IsLotManaged = false, bool HtScanRequired = true);

@@ -68,8 +68,9 @@ class ReceivingDetailModeTest {
 
 
     @Test
-    fun `expected splits the planned quantity across the packages`() {
-        assertEquals(10.0, state().expected, 0.0001)
+    fun `expected is the units one case holds`() {
+        assertEquals(12.0, state().expected, 0.0001)
+        assertEquals(10.0, state().packageCount!!, 0.0001)
     }
 
     @Test
@@ -80,7 +81,7 @@ class ReceivingDetailModeTest {
 
     @Test
     fun `a full package is not a shortage even though the line is far from complete`() {
-        val s = state(actual = "10")
+        val s = state(actual = "12")
         assertEquals(0.0, s.diff!!, 0.0001)
         assertFalse(s.needsReason)
     }
@@ -113,7 +114,7 @@ class ReceivingDetailModeTest {
     @Test
     fun `a package short of expected does need a reason`() {
         val s = state(actual = "7")
-        assertEquals(-3.0, s.diff!!, 0.0001)
+        assertEquals(-5.0, s.diff!!, 0.0001)
         assertTrue(s.needsReason)
     }
 }

@@ -111,4 +111,16 @@ public class TransferTests
 
         ResultAssert.NotFound(r);
     }
+
+    [Fact]
+    public async Task Transfer_into_a_location_that_has_child_locations_is_refused()
+    {
+        using var t = await InventoryTestData.WithStockAsync(
+            InventoryTestData.Stock(location: "W1_ZA", qty: 40));
+
+        var r = await new InventoryService(t.Db).TransferStockAsync(new StockTransferDto("IT-01", "0000000001", "W2"), InventoryTestData.User(), default);
+
+        ResultAssert.BadRequest(r, "LOC-001");
+        Assert.Equal("W1_ZA", (await t.Db.Stocks.AsNoTracking().SingleAsync()).LocationCode);
+    }
 }

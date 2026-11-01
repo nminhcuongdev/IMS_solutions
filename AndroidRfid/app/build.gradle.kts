@@ -45,6 +45,7 @@ android {
 dependencies {
     implementation(files("libs/RfidAPI_V1_1_0.jar"))
     implementation(files("libs/DENSOScannerSDK.aar"))
+    implementation(files("libs/nlscan_sdk_master_eng_v4.5.jar"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)

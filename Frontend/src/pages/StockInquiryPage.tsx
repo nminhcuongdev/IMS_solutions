@@ -22,6 +22,7 @@ import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav, useShortcuts } from "@/lib/useShortcuts";
 import { useUrlNumber, useUrlPatch, useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
+import { errorText } from "@/lib/errorText";
 
 
 const COLS = 16;
@@ -139,7 +140,7 @@ export function StockInquiryPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   return (
@@ -397,7 +398,7 @@ function AdjustModal({ row, onClose, onSaved }: {
             stockQty: Number(qty), reasonCode: reason,
           });
           onSaved();
-        } catch (ex: any) { setErr(ex?.message ?? String(ex)); }
+        } catch (ex: any) { setErr(errorText(t, ex)); }
         finally { setSaving(false); }
       }}>
       <Field label={t("thItemCode", "Item Code")}>
@@ -439,7 +440,7 @@ function DisposalModal({ row, onClose, onSaved }: {
         try {
           await disposeStock({ itemCode: row.itemCode, serialNo: row.serialNo, reasonCode: reason });
           onSaved();
-        } catch (ex: any) { setErr(ex?.message ?? String(ex)); }
+        } catch (ex: any) { setErr(errorText(t, ex)); }
         finally { setSaving(false); }
       }}>
       <Field label={t("thItemCode", "Item Code")}>

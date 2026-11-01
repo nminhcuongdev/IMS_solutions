@@ -1,6 +1,10 @@
 package com.imssolutions.ht.data
 
+import com.imssolutions.ht.scan.LabelQr
+
 class ReceivingRepository {
+
+    private val retryKey = RetryKey()
 
     suspend fun listPlans(
         query: String? = null,
@@ -45,6 +49,7 @@ class ReceivingRepository {
             spec = printerDeviceCode,
         )
         if (!printerDeviceCode.isNullOrBlank()) {
+            val qr = buildReceivingQr(line, qty)
             return ApiClient.call {
                 printLabel(
                     PrintLabelRequest(
@@ -61,7 +66,7 @@ class ReceivingRepository {
                             "ItemQty" to formatQty(qty),
                             "Lot" to (line.lotNo ?: ""),
                             "ScheduledDate" to (line.scheduledDate ?: ""),
-                            "QR" to buildReceivingQr(line, qty),
+                            "QR" to qr,
                         ),
                     ),
                 )
@@ -74,14 +79,17 @@ class ReceivingRepository {
     private fun formatQty(qty: Double): String =
         if (qty == qty.toLong().toDouble()) qty.toLong().toString() else qty.toString()
 
-    private fun buildReceivingQr(line: ReceivingPlan, qty: Double): String {
-        fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
-        val path = line.lotNo?.trim()?.takeIf { it.isNotEmpty() }?.let { "/10/${enc(it)}" } ?: ""
-        val query = buildString {
-            append("30=").append(enc(formatQty(qty)))
-            append("&item_cd=").append(enc(line.itemCode))
-        }
-        return "$path?$query"
+    private suspend fun buildReceivingQr(line: ReceivingPlan, qty: Double): String {
+        val gtin = runCatching { ApiClient.call { getItem(line.itemCode) }.data?.barcode }.getOrNull()
+        return LabelQr.product(
+            gtin = gtin,
+            lotNo = line.lotNo,
+            qty = qty,
+            itemCode = line.itemCode,
+            itemName = line.itemName,
+            productionDate = LabelQr.date(line.scheduledDate),
+            userCode = ApiClient.userCode(),
+        )
     }
 
     suspend fun linesOf(poNo: String): List<ReceivingPlan> = ApiClient.call {
@@ -104,25 +112,30 @@ class ReceivingRepository {
         require(actualQty >= 0) { "actualQty không được âm" }
 
         val lot = lotNo?.trim()?.takeIf { it.isNotBlank() }
-            ?: throw ApiException("LOT-001", 400, "Vui lòng nhập số lô.")
+        if (lot == null && actualQty > 0) throw ApiException("LOT-001", 400, "Vui lòng nhập số lô.")
         val reason = reasonCode?.takeIf { it.isNotBlank() }
         if (actualQty < line.expectedQty && reason == null) {
             throw ApiException("RSN-001", 400, "Vui lòng chọn lý do.")
         }
 
-        return ApiClient.call {
-            createReceivingResult(
-                ReceivingResultRequest(
-                    itemCode = line.itemCode,
-                    qty = actualQty,
-                    poNo = line.poNo,
-                    serialNo = line.serialNo,
-                    locationCode = locationCode?.trim()?.takeIf { it.isNotEmpty() },
-                    lotNo = lot,
-                    reasonCode = reason,
-                ),
-            )
-        }.data ?: throw ApiException("SYS-004", 500, "Máy chủ không trả về dòng vừa ghi.")
+        val request = ReceivingResultRequest(
+            itemCode = line.itemCode,
+            qty = actualQty,
+            poNo = line.poNo,
+            serialNo = line.serialNo,
+            locationCode = locationCode?.trim()?.takeIf { it.isNotEmpty() },
+            lotNo = lot,
+            reasonCode = reason,
+        )
+        val sent = request.copy(requestId = retryKey.idFor(request))
+        val saved = try {
+            ApiClient.call { createReceivingResult(sent) }
+        } catch (e: ApiException) {
+            retryKey.failed(e)
+            throw e
+        }
+        retryKey.succeeded()
+        return saved.data ?: throw ApiException("SYS-004", 500, "Máy chủ không trả về dòng vừa ghi.")
     }
 }
 

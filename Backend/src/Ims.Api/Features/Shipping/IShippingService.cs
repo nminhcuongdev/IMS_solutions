@@ -14,7 +14,7 @@ internal interface IShippingService
 
     Task<ServiceResult> ChangeStatusAsync(ShippingStatusChangeDto body, CancellationToken ct);
 
-    Task<ServiceResult> RegisterShortageAsync(string soNo, ShippingShortageDto body, CancellationToken ct);
+    Task<ServiceResult> RegisterShortageAsync(string soNo, ShippingShortageDto body, CancellationToken ct, ClaimsPrincipal? user = null);
 
     Task<ServiceResult> ListResultsAsync(
         CancellationToken ct, int? page = null, int? pageSize = null, string? sort = null, DateOnly? dateFrom = null,

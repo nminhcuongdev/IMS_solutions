@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
 using Ims.Infrastructure.Persistence;
+using static Ims.Api.Contracts.FieldHelpers;
 
 namespace Ims.Api.Features.Ht;
 
@@ -51,7 +52,7 @@ internal sealed class HtService(ImsDbContext db) : IHtService
         if (!string.IsNullOrWhiteSpace(itemCode))
             query = query.Where(p => p.ItemCode == itemCode.Trim());
         if (!string.IsNullOrWhiteSpace(q))
-            query = query.Where(p => EF.Functions.Like(p.LotNo!, "%" + q.Trim() + "%"));
+            query = query.Where(p => EF.Functions.Like(p.LotNo!, LikeContains(q.Trim()), LikeEscape));
 
         var rows = await query
             .Select(p => new { Lot = p.LotNo!, p.ItemCode })

@@ -199,7 +199,8 @@ fun EmptyBox(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun ErrorBar(code: String, message: String, modifier: Modifier = Modifier) {
-    val text = t(code, message, message)
+    val key = if (code == "VAL-005" && "/ ? & = # %" !in message) "valTooLong" else code
+    val text = t(key, message, message)
     ErrorSound(code to message)
     Row(
         modifier

@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
 import { LanguageProvider } from "@/i18n/LanguageContext";
+import { NativeValidationText } from "@/i18n/NativeValidationText";
 import { ToastProvider } from "@/lib/Toast";
 import { ConfirmProvider } from "@/lib/Confirm";
 import { AppLayout } from "@/layout/AppLayout";
@@ -9,9 +10,13 @@ import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { ZonePage } from "@/pages/ZonePage";
 import { FactoryPage } from "@/pages/FactoryPage";
+import { DevicePage } from "@/pages/DevicePage";
+import { DistributionPage } from "@/pages/DistributionPage";
 import { LocationPage } from "@/pages/LocationPage";
 import { ItemGroupPage } from "@/pages/ItemGroupPage";
 import { ItemPage } from "@/pages/ItemPage";
+import { ProcessPage } from "@/pages/ProcessPage";
+import { TraceabilityPage } from "@/pages/TraceabilityPage";
 import { PartnerPage } from "@/pages/PartnerPage";
 import { ReasonPage } from "@/pages/ReasonPage";
 import { UserPage } from "@/pages/UserPage";
@@ -35,6 +40,8 @@ import { HoldItemPage } from "@/pages/HoldItemPage";
 import { PickingSchedulePage } from "@/pages/PickingSchedulePage";
 import { PickingResultPage } from "@/pages/PickingResultPage";
 import { SuperAdminPage } from "@/pages/SuperAdminPage";
+import { ProductionOrderPage } from "@/pages/ProductionOrderPage";
+import { ProductionResultPage } from "@/pages/ProductionResultPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 
 const Location3DPage = lazy(() =>
@@ -71,6 +78,7 @@ export default function App() {
   return (
     <AuthProvider>
       <LanguageProvider>
+      <NativeValidationText />
       <ToastProvider>
       <ConfirmProvider>
       <Routes>
@@ -80,6 +88,8 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
 
           <Route path="masters/factories"   element={<FactoryPage />} />
+          <Route path="masters/devices"     element={<DevicePage />} />
+          <Route path="masters/distribution" element={<DistributionPage />} />
           <Route path="masters/zones"       element={<ZonePage />} />
           <Route path="masters/locations"   element={<LocationPage />} />
           <Route path="masters/locations-3d" element={
@@ -88,6 +98,9 @@ export default function App() {
             </Suspense>} />
           <Route path="masters/item-groups" element={<ItemGroupPage />} />
           <Route path="masters/items"       element={<ItemPage />} />
+          <Route path="masters/processes"   element={<ProcessPage />} />
+          <Route path="traceability/backward" element={<TraceabilityPage direction="backward" />} />
+          <Route path="traceability/forward" element={<TraceabilityPage direction="forward" />} />
           <Route path="masters/partners"    element={<PartnerPage />} />
           <Route path="masters/reasons"     element={<ReasonPage />} />
           <Route path="masters/users"       element={<UserPage />} />
@@ -105,6 +118,8 @@ export default function App() {
 
           <Route path="shipping/schedule" element={<ShippingSchedulePage />} />
           <Route path="shipping/result"   element={<ShippingResultPage />} />
+          <Route path="production/orders" element={<ProductionOrderPage />} />
+          <Route path="production/results" element={<ProductionResultPage />} />
 
           <Route path="alerts" element={<AlertCenterPage />} />
 

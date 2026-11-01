@@ -9,6 +9,7 @@ class ImsApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ApiClient.init(this)
+        ApiClient.tokens.forgetSessionIfNotRemembered()
 
         ScannerSource.active = IntentScannerSource(applicationContext)
     }

@@ -88,9 +88,41 @@ class LanguageRulesTest {
 
     @Test
     fun `ma ngon ngu la khong lam sap thanh co`() {
-        assertEquals(HtLang.JA, HtLang.of("ja"))
-        assertEquals(HtLang.EN, HtLang.of("EN"))
-        assertEquals(HtLang.VI, HtLang.of("zz"))
-        assertEquals(HtLang.VI, HtLang.of(null))
+        assertEquals("ja", HtLang.of("ja", HtLang.BUILT_IN).code)
+        assertEquals("en", HtLang.of("EN", HtLang.BUILT_IN).code)
+        assertEquals("vi", HtLang.of("zz", HtLang.BUILT_IN).code)
+        assertEquals("vi", HtLang.of(null, HtLang.BUILT_IN).code)
+    }
+
+    private val withKorean = setOf("en", "ja", "vi", "ko")
+
+    @Test
+    fun `ngon ngu them sau van duoc nhan la ngon ngu cua tai khoan`() {
+        assertEquals("ko", resolveLanguage(null, userCode = "U001", userDefault = "ko", known = withKorean))
+    }
+
+    @Test
+    fun `ngon ngu da bi tat thi khong dung nua du da chon truoc do`() {
+        assertEquals("ja", resolveLanguage("ko" to "U001", userCode = "U001", userDefault = "ja", known = setOf("en", "ja", "vi")))
+    }
+
+    @Test
+    fun `khong con tieng Viet thi roi ve ngon ngu dau tien may biet`() {
+        assertEquals("en", resolveLanguage(null, userCode = "", userDefault = null, known = setOf("en", "ko")))
+    }
+
+    @Test
+    fun `ngon ngu khong co trong danh sach van hien bang ma cua no`() {
+        val list = listOf(HtLang("en", "English"), HtLang("ko", "한국어", "data:image/png;base64,AAA"))
+        assertEquals("한국어", HtLang.of("KO", list).name)
+        assertEquals("en", HtLang.of("zz", list).code)
+    }
+
+    @Test
+    fun `chi lay phan base64 cua data URI`() {
+        assertEquals("iVBORw0K", iconPayload("data:image/png;base64,iVBORw0K"))
+        assertEquals(null, iconPayload("https://example.com/flag.png"))
+        assertEquals(null, iconPayload("data:image/png;base64,"))
+        assertEquals(null, iconPayload(null))
     }
 }

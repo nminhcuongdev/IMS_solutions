@@ -8,6 +8,7 @@ import { buildProductLabelQr, qrDate } from "@/lib/qrPayload";
 import { useLanPrinters } from "@/lib/useLanPrinters";
 import { useT } from "@/i18n/LanguageContext";
 import { LanPrinterField } from "@/pages/LanPrinterField";
+import { errorText } from "@/lib/errorText";
 
 const LAYOUTS: Record<string, { file: string; qtyField: "ItemQty" | "TotalQty" }> = {
   Receiving: { file: "Layout_IMS/ReceivingQR_24dpmm.mllayx", qtyField: "ItemQty" },
@@ -78,7 +79,7 @@ export function ReprintModal({ row, onClose, onPrinted }: {
       await reprintPrintHistory(row.no, { deviceCode: lan.deviceCode, count, fields: labelFields(layout) });
       onPrinted(count);
     } catch (e: any) {
-      setErr(e?.message ?? String(e));
+      setErr(errorText(t, e));
       setBusy(null);
     }
   };

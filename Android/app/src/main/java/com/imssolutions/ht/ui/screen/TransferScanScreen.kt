@@ -94,10 +94,7 @@ fun TransferScanScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(
-            clock = nowClock(),
-            right = if (state.empty) t("htRowCount", "{0} dòng", 0) else t("htRowCount", "{0} dòng", state.lines.size) + " · " + fmt(state.totalQty),
-        )
+        HtBottomInset()
     }
 
     if (confirmDiscard) {

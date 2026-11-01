@@ -3,6 +3,7 @@ using Ims.Domain.Masters;
 using Ims.Domain.History;
 using Ims.Domain.System;
 using Ims.Domain.Receiving;
+using Ims.Domain.Production;
 
 namespace Ims.Infrastructure.Persistence;
 
@@ -17,6 +18,14 @@ public class ImsDbContext : DbContext
     public DbSet<Item> Items => Set<Item>();
     public DbSet<Partner> Partners => Set<Partner>();
     public DbSet<Reason> Reasons => Set<Reason>();
+    public DbSet<Ims.Domain.Masters.Process> Processes => Set<Ims.Domain.Masters.Process>();
+    public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
+    public DbSet<ProductionOrderLine> ProductionOrderLines => Set<ProductionOrderLine>();
+    public DbSet<ProductionConsumption> ProductionConsumptions => Set<ProductionConsumption>();
+    public DbSet<ProductionOutput> ProductionOutputs => Set<ProductionOutput>();
+    public DbSet<ProductionReceipt> ProductionReceipts => Set<ProductionReceipt>();
+    public DbSet<ProductionLabel> ProductionLabels => Set<ProductionLabel>();
+    public DbSet<ProductionReturn> ProductionReturns => Set<ProductionReturn>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
 
@@ -47,9 +56,11 @@ public class ImsDbContext : DbContext
 
     public DbSet<Ims.Domain.Shipping.ShippingPlan> ShippingPlans => Set<Ims.Domain.Shipping.ShippingPlan>();
     public DbSet<Ims.Domain.Shipping.ShippingResult> ShippingResults => Set<Ims.Domain.Shipping.ShippingResult>();
+    public DbSet<Ims.Domain.Shipping.ShippingResultLot> ShippingResultLots => Set<Ims.Domain.Shipping.ShippingResultLot>();
     public DbSet<Ims.Domain.Shipping.ShippingTemp> ShippingTemps => Set<Ims.Domain.Shipping.ShippingTemp>();
     public DbSet<Ims.Domain.Picking.PickingPlan> PickingPlans => Set<Ims.Domain.Picking.PickingPlan>();
     public DbSet<Ims.Domain.Picking.PickingResult> PickingResults => Set<Ims.Domain.Picking.PickingResult>();
+    public DbSet<Ims.Domain.Picking.PickingResultLot> PickingResultLots => Set<Ims.Domain.Picking.PickingResultLot>();
 
     public DbSet<Ims.Domain.Inventory.Stock> Stocks => Set<Ims.Domain.Inventory.Stock>();
     public DbSet<Ims.Domain.Inventory.InventoryHistory> InventoryHistories => Set<Ims.Domain.Inventory.InventoryHistory>();
@@ -59,6 +70,14 @@ public class ImsDbContext : DbContext
     public DbSet<Ims.Domain.Stocktaking.StocktakingLabel> StocktakingLabels => Set<Ims.Domain.Stocktaking.StocktakingLabel>();
     public DbSet<Ims.Domain.Stocktaking.StocktakingHistory> StocktakingHistories => Set<Ims.Domain.Stocktaking.StocktakingHistory>();
     public DbSet<Ims.Domain.Stocktaking.StockScan> StockScans => Set<Ims.Domain.Stocktaking.StockScan>();
+
+    public DbSet<Ims.Domain.Distribution.DistPackage> DistPackages => Set<Ims.Domain.Distribution.DistPackage>();
+    public DbSet<Ims.Domain.Distribution.DistRule> DistRules => Set<Ims.Domain.Distribution.DistRule>();
+    public DbSet<Ims.Domain.Distribution.DistDeviceState> DistDeviceStates => Set<Ims.Domain.Distribution.DistDeviceState>();
+    public DbSet<Ims.Domain.Distribution.DistDownload> DistDownloads => Set<Ims.Domain.Distribution.DistDownload>();
+    public DbSet<Ims.Domain.Distribution.DistCheck> DistChecks => Set<Ims.Domain.Distribution.DistCheck>();
+    public DbSet<Ims.Domain.Distribution.DistUnknownDevice> DistUnknownDevices => Set<Ims.Domain.Distribution.DistUnknownDevice>();
+    public DbSet<Ims.Domain.Distribution.DistAudit> DistAudits => Set<Ims.Domain.Distribution.DistAudit>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {

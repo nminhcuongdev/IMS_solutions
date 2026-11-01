@@ -10,9 +10,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
 data class HtStrings(
     val lang: HtLang = HtLang.VI,
     val labels: Map<String, String> = emptyMap(),
+    val languages: List<HtLang> = HtLang.BUILT_IN,
+    val builtin: Map<String, String> = emptyMap(),
 ) {
     fun t(key: String, fallback: String): String =
-        labels[key]?.takeIf { it.isNotBlank() } ?: fallback
+        labels[key]?.takeIf { it.isNotBlank() } ?: builtin[key]?.takeIf { it.isNotBlank() } ?: fallback
 
     fun t(key: String, fallback: String, vararg args: Any?): String {
         var out = t(key, fallback)

@@ -6,7 +6,7 @@ internal interface IDeviceService
 {
     Task<ServiceResult> ListAsync(
         CancellationToken ct, int? page = null, int? pageSize = null, string? q = null, string? sort = null,
-        bool? isActive = null, string? deviceType = null);
+        bool? isActive = null, string? deviceType = null, string? updateStatus = null);
 
     Task<ServiceResult> GetAsync(string code, CancellationToken ct);
 

@@ -3,6 +3,7 @@ import { getSettings, saveSettings, type AppSettings } from "@/api/settings";
 import { mlGetDriverNamesOrFallback } from "@/lib/mlEngine";
 import { useT } from "@/i18n/LanguageContext";
 import { useToast } from "@/lib/Toast";
+import { errorText } from "@/lib/errorText";
 
 export function SettingsPage() {
   const t = useT();
@@ -15,7 +16,7 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    getSettings().then(setForm).catch(e => setErr(e?.message ?? String(e)));
+    getSettings().then(setForm).catch(e => setErr(errorText(t, e)));
     mlGetDriverNamesOrFallback().then(r => { setDrivers(r.names); setDriversLive(r.live); });
   }, []);
 
@@ -26,7 +27,7 @@ export function SettingsPage() {
     if (!form) return;
     setSaving(true); setErr(null); setSaved(false);
     try { setForm(await saveSettings(form)); setSaved(true); toast.ok(t("toastSaved", "Saved")); }
-    catch (e: any) { setErr(e?.message ?? String(e)); toast.err(e?.message ?? String(e)); }
+    catch (e: any) { setErr(errorText(t, e)); toast.err(errorText(t, e)); }
     finally { setSaving(false); }
   };
 

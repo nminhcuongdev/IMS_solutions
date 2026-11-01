@@ -13,6 +13,8 @@ internal interface IImportService
 
     Task<ServiceResult> ImportPickingScheduleAsync(IFormFile? file, ClaimsPrincipal user, CancellationToken ct);
 
+    Task<ServiceResult> ImportProductionOrderAsync(IFormFile? file, ClaimsPrincipal user, CancellationToken ct);
+
     ServiceResult ReceivingTemplateAsync();
 
     ServiceResult ShippingTemplateAsync();

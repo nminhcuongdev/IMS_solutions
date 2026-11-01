@@ -48,7 +48,7 @@ fun StocktakingListScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.busy && state.groups.isEmpty() -> LoadingBox()
-                state.groups.isEmpty() -> EmptyBox(
+                state.groups.isEmpty() && state.error == null -> EmptyBox(
                     t("htStEmptyShelfScan", "Không còn gì để đếm ở kệ này."),
                 )
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
@@ -60,10 +60,7 @@ fun StocktakingListScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(
-            clock = nowClock(),
-            right = t("htItemCount", "{0} mặt hàng", state.groups.size),
-        )
+        HtBottomInset()
     }
 }
 

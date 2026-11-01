@@ -35,6 +35,23 @@ public class ItemServiceTests
     }
 
     [Fact]
+    public async Task Lot_and_scan_flags_round_trip_through_the_item_master()
+    {
+        using var t = TestDb.Seeded();
+        var created = await new ItemService(t.Db).CreateAsync(
+            Valid() with { IsLotManaged = true, HtScanRequired = false }, default);
+        var dto = ResultAssert.Created<ApiSuccess<ItemDto>>(created).Data!;
+        Assert.True(dto.IsLotManaged);
+        Assert.False(dto.HtScanRequired);
+
+        t.Db.ChangeTracker.Clear();
+        var loaded = ResultAssert.Ok<ApiSuccess<ItemDto>>(
+            await new ItemService(t.Db).GetAsync("IT-NEW", default)).Data!;
+        Assert.True(loaded.IsLotManaged);
+        Assert.False(loaded.HtScanRequired);
+    }
+
+    [Fact]
     public async Task Create_rejects_an_unknown_or_deleted_item_group()
     {
         using var t = TestDb.Seeded();
@@ -253,5 +270,57 @@ public class ItemServiceTests
         var csv = await CsvReader.ReadAsync(res);
 
         Assert.Contains(",,", csv);
+    }
+
+    public static TheoryData<ItemWriteDto> NegativeNumbers => new()
+    {
+        Valid() with { PackageQty = -1 },
+        Valid() with { ExpirationPeriod = -1 },
+        Valid() with { SurplusPoint = -1 },
+        Valid() with { ReorderLevel1 = -1 },
+        Valid() with { ReorderLevel2 = -1 },
+    };
+
+    [Theory]
+    [MemberData(nameof(NegativeNumbers))]
+    public async Task Create_rejects_a_negative_number(ItemWriteDto body)
+    {
+        using var t = TestDb.Seeded();
+
+        var res = await new ItemService(t.Db).CreateAsync(body, default);
+
+        ResultAssert.BadRequest(res, "QTY-001");
+    }
+
+    [Theory]
+    [MemberData(nameof(NegativeNumbers))]
+    public async Task Update_rejects_a_negative_number(ItemWriteDto body)
+    {
+        using var t = TestDb.Seeded();
+        ResultAssert.Created<ApiSuccess<ItemDto>>(await new ItemService(t.Db).CreateAsync(Valid(), default));
+
+        var res = await new ItemService(t.Db).UpdateAsync("IT-NEW", body, default);
+
+        ResultAssert.BadRequest(res, "QTY-001");
+    }
+
+    [Theory]
+    [InlineData("HL_PW", "HL_PW209")]
+    [InlineData("100%", "IT-PCT")]
+    [InlineData("[A]", "IT-BRK")]
+    public async Task Search_treats_wildcard_characters_literally(string q, string expected)
+    {
+        using var t = TestDb.Seeded();
+        t.Db.Items.AddRange(
+            new Item { ItemCode = "HL-HND208", ItemName = "Head", ItemGroupCode = "IG-01", PackageQty = 1, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new Item { ItemCode = "HL_PW209", ItemName = "Head", ItemGroupCode = "IG-01", PackageQty = 1, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new Item { ItemCode = "IT-PCT", ItemName = "Cotton 100%", ItemGroupCode = "IG-01", PackageQty = 1, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new Item { ItemCode = "IT-100", ItemName = "Cotton 1000", ItemGroupCode = "IG-01", PackageQty = 1, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new Item { ItemCode = "IT-BRK", ItemName = "Type [A]", ItemGroupCode = "IG-01", PackageQty = 1, IsActive = true, CreatedAt = DateTime.UtcNow });
+        await t.Db.SaveChangesAsync();
+
+        var res = await new ItemService(t.Db).ListAsync(default, q: q);
+
+        Assert.Equal(expected, Assert.Single(ResultAssert.Ok<ApiListSuccess<ItemDto>>(res).Data).ItemCode);
     }
 }

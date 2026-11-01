@@ -8,6 +8,10 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -23,6 +28,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,12 +42,17 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import android.view.ViewTreeObserver
 import com.imssolutions.rfid.R
+import com.imssolutions.rfid.rfid.ReadMode
 import com.imssolutions.rfid.rfid.ReaderState
 import com.imssolutions.rfid.rfid.ReaderKind
 
@@ -63,9 +75,15 @@ object Ht {
     val BarYellow = Color(0xFFFFE033)
     val BarOrange = Color(0xFFFF8A3D)
     val BarGray = Color(0xFFDFE3E8)
+    val BarLost = Color(0xFFFFCBA8)
+    val Purple = Color(0xFF6B46C1)
     val BarTrack = Color(0xFFF0F2F5)
     val Trigger = Color(0xFFDD6B20)
     val TriggerOn = Color(0xFF9C4221)
+    val MatchBg = Color(0xFFC6F6D5)
+    val MatchText = Color(0xFF22543D)
+    val ShortBg = Color(0xFFFED7D7)
+    val ShortText = Color(0xFF9B2C2C)
 }
 
 private val FLAGS = listOf(
@@ -156,15 +174,16 @@ fun Pill(color: Color, modifier: Modifier = Modifier, onClick: (() -> Unit)? = n
 @Composable
 fun PowerPill(vm: AppViewModel) {
     var open by remember { mutableStateOf(false) }
+    val enabled = !vm.scanning && vm.applying == null && vm.rfidActive
     Box {
-        Pill(Ht.Green, onClick = { open = true }) {
+        Pill(if (enabled) Ht.Green else Ht.Green.copy(alpha = .45f), onClick = { if (enabled) open = true }) {
             Text(vm.strings.t("htPower"), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Text("${vm.power} ▾", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             vm.powerRange.forEach { p ->
                 DropdownMenuItem(
-                    text = { Text("$p", fontWeight = if (p == vm.power) FontWeight.Bold else FontWeight.Normal) },
+                    text = { Text("$p dBm", fontWeight = if (p == vm.power) FontWeight.Bold else FontWeight.Normal) },
                     onClick = {
                         open = false
                         vm.changePower(p)
@@ -173,6 +192,54 @@ fun PowerPill(vm: AppViewModel) {
             }
         }
     }
+}
+
+@Composable
+fun ModePill(vm: AppViewModel) {
+    var open by remember { mutableStateOf(false) }
+    val enabled = !vm.scanning && vm.applying == null
+    val color = when (vm.mode) {
+        ReadMode.Rfid -> Ht.Orange
+        ReadMode.Barcode -> Ht.Blue
+        ReadMode.Both -> Ht.Purple
+    }
+    val pick = vm.caps.modes.size > 2
+    Box {
+        Pill(if (enabled) color else color.copy(alpha = .45f), onClick = {
+            if (!enabled) return@Pill
+            if (pick) open = true else vm.toggleMode()
+        }) {
+            Text(vm.strings.t("htMode"), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(vm.modeLabel(vm.mode) + if (pick) " ▾" else " ⇄", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+        if (pick) {
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                vm.caps.modes.forEach { m ->
+                    DropdownMenuItem(
+                        text = { Text(vm.modeLabel(m), fontWeight = if (m == vm.mode) FontWeight.Bold else FontWeight.Normal) },
+                        onClick = {
+                            open = false
+                            vm.changeMode(m)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TriggerHint(vm: AppViewModel, modifier: Modifier = Modifier) {
+    Text(
+        vm.strings.t("htPressTrigger", vm.readerKind.label),
+        color = Color.White,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Ht.Blue)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
@@ -216,32 +283,39 @@ fun ReaderBanner(vm: AppViewModel) {
 }
 
 @Composable
-fun TriggerBar(vm: AppViewModel) {
+fun rememberKeyboardOpen(): State<Boolean> {
+    val view = LocalView.current
+    val open = remember { mutableStateOf(false) }
+    DisposableEffect(view) {
+        val check = ViewTreeObserver.OnGlobalLayoutListener {
+            open.value = ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(check)
+        check.onGlobalLayout()
+        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(check) }
+    }
+    return open
+}
+
+@Composable
+fun ScanFab(vm: AppViewModel, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF1A1A1A))
-            .padding(vertical = 8.dp),
+        modifier = modifier
+            .size(if (vm.scanning) 68.dp else 60.dp)
+            .shadow(6.dp, CircleShape)
+            .clip(CircleShape)
+            .background(if (vm.scanning) Ht.TriggerOn else Ht.Trigger)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown()
+                    vm.startTrigger()
+                    waitForUpOrCancellation()
+                    vm.stopTrigger()
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(.6f)
-                .height(34.dp)
-                .clip(RoundedCornerShape(17.dp))
-                .background(if (vm.scanning) Ht.TriggerOn else Ht.Trigger)
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown()
-                        vm.startTrigger()
-                        waitForUpOrCancellation()
-                        vm.stopTrigger()
-                    }
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(vm.strings.t("htHoldToScan"), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
+        Text(vm.strings.t("htScan"), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
@@ -276,25 +350,45 @@ fun DevicePicker(vm: AppViewModel, modifier: Modifier = Modifier) {
         Row(
             Modifier
                 .fillMaxWidth()
+                .height(IntrinsicSize.Min)
                 .clip(RoundedCornerShape(8.dp))
                 .border(1.5.dp, Color(0xFFCBD5E0), RoundedCornerShape(8.dp)),
         ) {
-            ReaderKind.entries.forEach { kind ->
+            ReaderKind.entries.forEachIndexed { i, kind ->
+                if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(Color(0xFFCBD5E0)))
                 val active = kind == vm.readerKind
-                Box(
+                val split = kind.label.lastIndexOf(' ')
+                val brand = if (split > 0) kind.label.substring(0, split) else kind.label
+                val model = if (split > 0) kind.label.substring(split + 1) else ""
+                Column(
                     modifier = Modifier
                         .weight(1f)
+                        .fillMaxHeight()
                         .background(if (active) Ht.Blue else Color.White)
                         .clickable { vm.selectReader(kind) }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center,
+                        .padding(horizontal = 4.dp, vertical = 9.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
-                        kind.label,
+                        brand,
                         color = if (active) Color.White else Ht.Text,
                         fontSize = 13.sp,
-                        fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
                     )
+                    if (model.isNotEmpty()) {
+                        Text(
+                            model,
+                            color = if (active) Color.White.copy(alpha = .85f) else Ht.Muted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }

@@ -156,7 +156,7 @@ internal static class SeedMasters
                 IsDefault = r.IsDefault, IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         await db.SaveChangesAsync(ct);
     }
@@ -172,7 +172,7 @@ internal static class SeedMasters
                 IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         await db.SaveChangesAsync(ct);
     }
@@ -196,7 +196,7 @@ internal static class SeedMasters
                     IsActive = r.IsActive,
                     Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                     Remark4 = r.Remark4, Remark5 = r.Remark5,
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.Now,
                 });
             await db.SaveChangesAsync(ct);
         }
@@ -212,7 +212,7 @@ internal static class SeedMasters
                 Category = (ItemGroupCategory)r.Category, IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         await db.SaveChangesAsync(ct);
     }
@@ -235,7 +235,7 @@ internal static class SeedMasters
                 IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         await db.SaveChangesAsync(ct);
     }
@@ -251,7 +251,7 @@ internal static class SeedMasters
                 Country = r.Country, Address = r.Address, IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         await db.SaveChangesAsync(ct);
     }
@@ -267,7 +267,7 @@ internal static class SeedMasters
                 IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         await db.SaveChangesAsync(ct);
     }

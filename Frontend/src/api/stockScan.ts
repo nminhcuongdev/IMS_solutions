@@ -18,6 +18,20 @@ export interface StockScanBoard {
   rows: StockScanRow[];
 }
 
+export interface StockScanItem {
+  itemCode: string | null;
+  itemName: string | null;
+  itemCategory: string | null;
+  plan: number;
+  qty: number;
+}
+
+export interface StockScanSummary {
+  scanned: number;
+  total: number;
+  items: StockScanItem[];
+}
+
 export interface StockScanQuery {
   itemCode?: string;
   itemName?: string;
@@ -31,3 +45,6 @@ export const listStockScan = (q: StockScanQuery = {}) =>
 
 export const resetStockScan = () =>
   apiCall<StockScanBoard>("/stock-scan/reset", { method: "POST" });
+
+export const getStockScanSummary = () =>
+  apiCall<StockScanSummary>("/stock-scan/summary");

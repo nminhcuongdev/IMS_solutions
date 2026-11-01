@@ -69,7 +69,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan());
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default);
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default);
 
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res).Data);
         Assert.Equal("PO-001", row.PoNo);
@@ -95,7 +95,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(status: status));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default);
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default);
 
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res).Data);
         Assert.Equal(expected, row.Status);
@@ -110,7 +110,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-002", status: ReceivingStatus.Cancelled));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default);
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default);
 
         var body = ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res);
         Assert.Equal(2, body.Meta.Total);
@@ -127,7 +127,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-C", date: d1.AddDays(2)));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, dateFrom: d1, dateTo: d1.AddDays(1));
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default, dateFrom: d1, dateTo: d1.AddDays(1));
 
         var body = ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res);
         Assert.Equal(new[] { "PO-A", "PO-B" }, body.Data.Select(r => r.PoNo));
@@ -151,9 +151,9 @@ public class ReceivingServiceTests
         });
         await t.Db.SaveChangesAsync();
 
-        var byPo = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, poNo: "20260809");
-        var byItemCode = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, itemCode: "IT-02");
-        var byItemName = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, itemName: "thermal");
+        var byPo = await new ReceivingService(t.Db).ListPlansAsync(default, poNo: "20260809");
+        var byItemCode = await new ReceivingService(t.Db).ListPlansAsync(default, itemCode: "IT-02");
+        var byItemName = await new ReceivingService(t.Db).ListPlansAsync(default, itemName: "thermal");
 
         Assert.Equal("PO-20260809-001",
             Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(byPo).Data).PoNo);
@@ -172,7 +172,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-B", status: ReceivingStatus.Arrived));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, status: "statusArrived");
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default, status: "statusArrived");
 
         Assert.Equal("PO-B",
             Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res).Data).PoNo);
@@ -186,7 +186,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan());
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, status: "statusNope");
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default, status: "statusNope");
 
         Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res).Data);
     }
@@ -200,9 +200,9 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A", qty: 50));
         await t.Db.SaveChangesAsync();
 
-        var asc = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, sort: "qty");
-        var desc = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, sort: "-qty");
-        var junk = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, sort: "drop_table");
+        var asc = await new ReceivingService(t.Db).ListPlansAsync(default, sort: "qty");
+        var desc = await new ReceivingService(t.Db).ListPlansAsync(default, sort: "-qty");
+        var junk = await new ReceivingService(t.Db).ListPlansAsync(default, sort: "drop_table");
 
         Assert.Equal(new[] { 5m, 50m },
             ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(asc).Data.Select(r => r.PlannedQty));
@@ -219,7 +219,7 @@ public class ReceivingServiceTests
         for (var i = 1; i <= 45; i++) t.Db.ReceivingPlans.Add(Plan(poNo: $"PO-{i:D3}"));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default, page: 2, pageSize: 20);
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default, page: 2, pageSize: 20);
 
         var body = ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res);
         Assert.Equal(45, body.Meta.Total);
@@ -233,7 +233,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Equal("PO-NEW", dto.PoNo);
@@ -250,7 +250,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(date: null), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(date: null), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Equal(Today, dto.ScheduledDate);
@@ -262,7 +262,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(poNo: "  PO-T  ", itemCode: "  IT-01  ", supplier: "  BP001  "), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(poNo: "  PO-T  ", itemCode: "  IT-01  ", supplier: "  BP001  "), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Equal("PO-T", dto.PoNo);
@@ -280,7 +280,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(poNo: poNo, itemCode: itemCode), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(poNo: poNo, itemCode: itemCode), default);
 
         ResultAssert.BadRequest(res, "VAL-001");
     }
@@ -295,7 +295,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(poNo: poNo), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(poNo: poNo), default);
 
         ResultAssert.BadRequest(res, "VAL-005");
     }
@@ -309,7 +309,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(qty: qty), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(qty: qty), default);
 
         ResultAssert.BadRequest(res, "QTY-001");
     }
@@ -323,7 +323,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(qty: qty), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(qty: qty), default);
 
         ResultAssert.BadRequest(res, "QTY-001");
     }
@@ -337,7 +337,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(qty: qty), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(qty: qty), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Equal(qty, dto.PlannedQty);
@@ -353,7 +353,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(qty: 7), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(qty: 7), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Equal(7m, dto.PlannedQty);
@@ -365,11 +365,11 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var unknown = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(itemCode: "NOPE"), default);
+        var unknown = await new ReceivingService(t.Db).CreatePlanAsync(Valid(itemCode: "NOPE"), default);
         var item = await t.Db.Items.FirstAsync(i => i.ItemCode == "IT-01");
         item.IsDeleted = true;
         await t.Db.SaveChangesAsync();
-        var deleted = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(), default);
+        var deleted = await new ReceivingService(t.Db).CreatePlanAsync(Valid(), default);
 
         ResultAssert.NotFound(unknown);
         ResultAssert.NotFound(deleted);
@@ -381,8 +381,8 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var unknown = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(supplier: "NOPE"), default);
-        var deleted = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(supplier: "BP-DEL"), default);
+        var unknown = await new ReceivingService(t.Db).CreatePlanAsync(Valid(supplier: "NOPE"), default);
+        var deleted = await new ReceivingService(t.Db).CreatePlanAsync(Valid(supplier: "BP-DEL"), default);
 
         ResultAssert.NotFound(unknown);
         ResultAssert.NotFound(deleted);
@@ -396,7 +396,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(supplier: supplier), default);
+        var res = await new ReceivingService(t.Db).CreatePlanAsync(Valid(supplier: supplier), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Null(dto.SupplierCode);
@@ -408,8 +408,8 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var first = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(serialNo: "01"), default);
-        var second = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreatePlanAsync(Valid(serialNo: "02"), default);
+        var first = await new ReceivingService(t.Db).CreatePlanAsync(Valid(serialNo: "01"), default);
+        var second = await new ReceivingService(t.Db).CreatePlanAsync(Valid(serialNo: "02"), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(first);
         ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(second);
@@ -429,7 +429,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-A" }, action), default);
+        var res = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-A" }, action), default);
 
         var data = ResultAssert.Ok<ApiSuccess<ReceivingStatusChangeResult>>(res).Data!;
         Assert.Equal(1, data.Updated);
@@ -448,7 +448,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-OPEN", "PO-DONE", "PO-CANX" }, "done"), default);
+        var res = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-OPEN", "PO-DONE", "PO-CANX" }, "done"), default);
 
         var data = ResultAssert.Ok<ApiSuccess<ReceivingStatusChangeResult>>(res).Data!;
         Assert.Equal(1, data.Updated);
@@ -467,7 +467,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(null, "cancelled", new[] { new ReceivingPlanKeyDto("PO-A", "02") }), default);
+        var res = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(null, "cancelled", new[] { new ReceivingPlanKeyDto("PO-A", "02") }), default);
 
         var data = ResultAssert.Ok<ApiSuccess<ReceivingStatusChangeResult>>(res).Data!;
         Assert.Equal(1, data.Updated);
@@ -486,7 +486,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(null, "done",
+        var res = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(null, "done",
                 new[] { new ReceivingPlanKeyDto("PO-A", "01"), new ReceivingPlanKeyDto("PO-A", "09") }), default);
 
         var data = ResultAssert.Ok<ApiSuccess<ReceivingStatusChangeResult>>(res).Data!;
@@ -506,7 +506,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A"));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-A" }, status), default);
+        var res = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-A" }, status), default);
 
         ResultAssert.BadRequest(res, "SEL-006");
     }
@@ -517,8 +517,8 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var empty = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(Array.Empty<string>(), "done"), default);
-        var missing = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(null, "done"), default);
+        var empty = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(Array.Empty<string>(), "done"), default);
+        var missing = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(null, "done"), default);
 
         ResultAssert.BadRequest(empty, "SEL-002");
         ResultAssert.BadRequest(missing, "SEL-002");
@@ -534,7 +534,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-A" }, "done"), default);
+        var res = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(new[] { "PO-A" }, "done"), default);
 
         var data = ResultAssert.Ok<ApiSuccess<ReceivingStatusChangeResult>>(res).Data!;
         Assert.Equal(2, data.Updated);
@@ -552,7 +552,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(4, "RS-SHORT"), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(4, "RS-SHORT"), default);
 
         var dto = ResultAssert.Ok<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Equal(11m, dto.ActualQty);
@@ -572,7 +572,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(0, "RS-SHORT"), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(0, "RS-SHORT"), default);
 
         Assert.Equal(15m, ResultAssert.Ok<ApiSuccess<ReceivingPlanDto>>(res).Data!.ActualQty);
     }
@@ -585,7 +585,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A"));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(null, "RS-SHORT"), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(null, "RS-SHORT"), default);
 
         ResultAssert.BadRequest(res, "QTY-001");
     }
@@ -600,7 +600,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A"));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(qty, "RS-SHORT"), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(qty, "RS-SHORT"), default);
 
         ResultAssert.BadRequest(res, "QTY-001");
     }
@@ -613,7 +613,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A", qty: 15));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(16, "RS-SHORT"), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(16, "RS-SHORT"), default);
 
         ResultAssert.BadRequest(res, "QTY-001");
     }
@@ -629,7 +629,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A"));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, reason), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, reason), default);
 
         ResultAssert.BadRequest(res, "RSN-001");
     }
@@ -647,8 +647,8 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A"));
         await t.Db.SaveChangesAsync();
 
-        var unknown = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "NOPE"), default);
-        var wrongCategory = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-DEF"), default);
+        var unknown = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "NOPE"), default);
+        var wrongCategory = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-DEF"), default);
 
         ResultAssert.NotFound(unknown);
         ResultAssert.NotFound(wrongCategory);
@@ -660,7 +660,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("NOPE", new ReceivingShortageDto(1, "RS-SHORT"), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("NOPE", new ReceivingShortageDto(1, "RS-SHORT"), default);
 
         ResultAssert.NotFound(res);
     }
@@ -675,7 +675,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A", status: status));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-SHORT"), default);
+        var res = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-SHORT"), default);
 
         ResultAssert.NotFound(res);
     }
@@ -690,8 +690,8 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var ambiguous = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-SHORT"), default);
-        var explicitLine = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-SHORT", SerialNo: "02"), default);
+        var ambiguous = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-SHORT"), default);
+        var explicitLine = await new ReceivingService(t.Db).RegisterShortageAsync("PO-A", new ReceivingShortageDto(1, "RS-SHORT", SerialNo: "02"), default);
 
         ResultAssert.NotFound(ambiguous);
         var dto = ResultAssert.Ok<ApiSuccess<ReceivingPlanDto>>(explicitLine).Data!;
@@ -710,7 +710,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A", status: ReceivingStatus.Arrived));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ExportPlansCsvAsync(default);
+        var res = await new ReceivingService(t.Db).ExportPlansCsvAsync(default);
         var csv = await CsvReader.ReadAsync(res);
 
         var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -727,7 +727,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(poNo: "PO-A", qty: 12.5m));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ExportPlansCsvAsync(default);
+        var res = await new ReceivingService(t.Db).ExportPlansCsvAsync(default);
         var csv = await CsvReader.ReadAsync(res);
 
         Assert.Contains("12.5", csv);
@@ -751,7 +751,7 @@ public class ReceivingServiceTests
         });
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ExportResultsCsvAsync(default);
+        var res = await new ReceivingService(t.Db).ExportResultsCsvAsync(default);
         var csv = await CsvReader.ReadAsync(res);
 
         var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -777,7 +777,7 @@ public class ReceivingServiceTests
         });
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListResultsAsync(default);
+        var res = await new ReceivingService(t.Db).ListResultsAsync(default);
 
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingResultDto>>(res).Data);
         Assert.Equal("Industrial Printer 4in", row.ItemName);
@@ -801,9 +801,9 @@ public class ReceivingServiceTests
         });
         await t.Db.SaveChangesAsync();
 
-        var all = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListResultsAsync(default, poNoPresence: "all");
-        var with = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListResultsAsync(default, poNoPresence: "with");
-        var without = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListResultsAsync(default, poNoPresence: "without");
+        var all = await new ReceivingService(t.Db).ListResultsAsync(default, poNoPresence: "all");
+        var with = await new ReceivingService(t.Db).ListResultsAsync(default, poNoPresence: "with");
+        var without = await new ReceivingService(t.Db).ListResultsAsync(default, poNoPresence: "without");
 
         Assert.Equal(2, ResultAssert.Ok<ApiListSuccess<ReceivingResultDto>>(all).Meta.Total);
         Assert.Equal("PO-001",
@@ -825,7 +825,7 @@ public class ReceivingServiceTests
             });
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListResultsAsync(default, page: 1, pageSize: 20, dateFrom: DateOnly.FromDateTime(start), dateTo: DateOnly.FromDateTime(start.AddDays(9)));
+        var res = await new ReceivingService(t.Db).ListResultsAsync(default, page: 1, pageSize: 20, dateFrom: DateOnly.FromDateTime(start), dateTo: DateOnly.FromDateTime(start.AddDays(9)));
 
         var body = ResultAssert.Ok<ApiListSuccess<ReceivingResultDto>>(res);
         Assert.Equal(10, body.Meta.Total);
@@ -845,7 +845,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(locationCode: "  "), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(locationCode: "  "), Worker(), default);
 
         ResultAssert.BadRequest(res, "LOC-001");
         Assert.Equal(0, await t.Db.ReceivingResults.CountAsync());
@@ -862,7 +862,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 0, reasonCode: "RS-SHORT", locationCode: null), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 0, reasonCode: "RS-SHORT", locationCode: null), Worker(), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res).Data!;
         Assert.Null(dto.LocationCode);
@@ -885,7 +885,7 @@ public class ReceivingServiceTests
         t.Db.ChangeTracker.Clear();
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(
-            await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
+            await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
 
         var stock = Assert.Single(await t.Db.Stocks.ToListAsync());
         Assert.Equal(("IT-01", "FAC-01", "W1_ZA", "LOT-A"),
@@ -908,8 +908,8 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
 
         var rows = await t.Db.Stocks.ToListAsync();
         Assert.Equal(2, rows.Count);
@@ -927,7 +927,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 0, reasonCode: "RS-SHORT"), Worker(), default));
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 0, reasonCode: "RS-SHORT"), Worker(), default));
 
         Assert.Empty(await t.Db.Stocks.ToListAsync());
         Assert.Empty(await t.Db.InventoryHistories.ToListAsync());
@@ -942,7 +942,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10) with { IsOnHold = true }, Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10) with { IsOnHold = true }, Worker(), default);
 
         var stock = Assert.Single(await t.Db.Stocks.ToListAsync());
         Assert.Equal((10m, 0m, true), (stock.StockQty, stock.AvailableQty, stock.IsOnHold));
@@ -959,7 +959,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
 
         var stock = Assert.Single(await t.Db.Stocks.ToListAsync());
         Assert.Equal(DateOnly.FromDateTime(DateTime.Now).AddDays(365), stock.ExpiryDate);
@@ -974,7 +974,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        ResultAssert.BadRequest(await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 30), Worker(), default), "QTY-002");
+        ResultAssert.BadRequest(await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 30), Worker(), default), "QTY-002");
 
         Assert.Empty(await t.Db.Stocks.ToListAsync());
         Assert.Empty(await t.Db.InventoryHistories.ToListAsync());
@@ -991,9 +991,9 @@ public class ReceivingServiceTests
         t.Db.ChangeTracker.Clear();
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(
-            await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
+            await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(
-            await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
+            await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
 
         var plan = await t.Db.ReceivingPlans.FirstAsync();
         Assert.Equal(20m, plan.ActualQty);
@@ -1012,7 +1012,7 @@ public class ReceivingServiceTests
         for (var i = 0; i < 3; i++)
         {
             ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(
-                await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
+                await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default));
         }
 
         var plan = await t.Db.ReceivingPlans.FirstAsync();
@@ -1029,7 +1029,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
         var plan = await t.Db.ReceivingPlans.FirstAsync();
@@ -1052,8 +1052,8 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 6, reasonCode: "RS-SHORT"), Worker(), default);
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 4, reasonCode: "RS-LATE"), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 6, reasonCode: "RS-SHORT"), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 4, reasonCode: "RS-LATE"), Worker(), default);
 
         var plan = await t.Db.ReceivingPlans.FirstAsync();
         Assert.Equal("RS-LATE", plan.ReasonCode);
@@ -1068,8 +1068,8 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 6, reasonCode: "RS-SHORT"), Worker(), default);
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 6, reasonCode: "RS-SHORT"), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
 
         var plan = await t.Db.ReceivingPlans.FirstAsync();
         Assert.Equal("RS-SHORT", plan.ReasonCode);
@@ -1083,9 +1083,9 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(qty: 20));
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 20), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 20), Worker(), default);
 
         ResultAssert.BadRequest(res, "QTY-002");
     }
@@ -1101,7 +1101,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
 
         ResultAssert.BadRequest(res, "RSN-001");
     }
@@ -1116,7 +1116,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(serialNo: "01", qty: 15), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(serialNo: "01", qty: 15), Worker(), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
         var line1 = await t.Db.ReceivingPlans.FirstAsync(p => p.PoBranchNo == "01");
@@ -1135,7 +1135,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 15), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 15), Worker(), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
         var plan = await t.Db.ReceivingPlans.FirstAsync();
@@ -1152,7 +1152,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 12, reasonCode: "RS-SHORT"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 12, reasonCode: "RS-SHORT"), Worker(), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
         var plan = await t.Db.ReceivingPlans.FirstAsync();
@@ -1171,7 +1171,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 7, reasonCode: null), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 7, reasonCode: null), Worker(), default);
 
         ResultAssert.BadRequest(res, "RSN-001");
         Assert.Equal(0m, (await t.Db.ReceivingPlans.FirstAsync()).ActualQty);
@@ -1186,7 +1186,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 15, reasonCode: null), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 15, reasonCode: null), Worker(), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
     }
@@ -1205,7 +1205,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 12, reasonCode: "RS-DEF"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 12, reasonCode: "RS-DEF"), Worker(), default);
 
         ResultAssert.NotFound(res);
     }
@@ -1219,7 +1219,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 16, reasonCode: "RS-SHORT"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 16, reasonCode: "RS-SHORT"), Worker(), default);
 
         ResultAssert.BadRequest(res, "QTY-002");
     }
@@ -1232,7 +1232,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan());
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: -1, reasonCode: "RS-SHORT"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: -1, reasonCode: "RS-SHORT"), Worker(), default);
 
         ResultAssert.BadRequest(res, "QTY-001");
     }
@@ -1245,13 +1245,13 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan());
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: null), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: null), Worker(), default);
 
         ResultAssert.BadRequest(res, "QTY-001");
     }
 
     [Fact]
-    public async Task CreateResult_accepts_zero_qty_as_a_full_shortage()
+    public async Task CreateResult_accepts_zero_qty_and_keeps_the_line_not_arrived()
     {
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
@@ -1259,12 +1259,12 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 0, reasonCode: "RS-SHORT"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 0, reasonCode: "RS-SHORT"), Worker(), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
         var plan = await t.Db.ReceivingPlans.FirstAsync();
         Assert.Equal(0m, plan.ActualQty);
-        Assert.Equal(ReceivingStatus.Partial, plan.Status);
+        Assert.Equal(ReceivingStatus.NotArrived, plan.Status);
     }
 
     [Fact]
@@ -1273,7 +1273,7 @@ public class ReceivingServiceTests
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(itemCode: "   "), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(itemCode: "   "), Worker(), default);
 
         ResultAssert.BadRequest(res, "VAL-001");
     }
@@ -1286,7 +1286,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan());
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(itemCode: "IT-NOPE"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(itemCode: "IT-NOPE"), Worker(), default);
 
         ResultAssert.NotFound(res);
     }
@@ -1299,7 +1299,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan());
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(locationCode: "W9_NOPE"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(locationCode: "W9_NOPE"), Worker(), default);
 
         ResultAssert.NotFound(res);
     }
@@ -1318,7 +1318,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(itemCode: "IT-02"), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(itemCode: "IT-02"), Worker(), default);
 
         ResultAssert.NotFound(res);
         Assert.Empty(t.Db.ReceivingResults);
@@ -1333,7 +1333,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(), Worker(), default);
 
         ResultAssert.NotFound(res);
         Assert.Empty(t.Db.ReceivingResults);
@@ -1348,7 +1348,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(), Worker(), default);
 
         ResultAssert.NotFound(res);
     }
@@ -1363,7 +1363,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(serialNo: null), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(serialNo: null), Worker(), default);
 
         ResultAssert.NotFound(res);
         Assert.Empty(t.Db.ReceivingResults);
@@ -1378,7 +1378,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(poNo: null, serialNo: null, qty: 7), Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(poNo: null, serialNo: null, qty: 7), Worker(), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res).Data!;
         Assert.Null(dto.PoNo);
@@ -1400,7 +1400,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 15), Worker("U001"), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 15), Worker("U001"), default);
 
         var dto = ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res).Data!;
         Assert.Equal("PO-001", dto.PoNo);
@@ -1423,8 +1423,8 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(qty: 15), Worker(), default);
-        var list = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListResultsAsync(default);
+        await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 15), Worker(), default);
+        var list = await new ReceivingService(t.Db).ListResultsAsync(default);
 
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingResultDto>>(list).Data);
         Assert.Equal("PO-001", row.PoNo);
@@ -1442,24 +1442,36 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult() with { LotNo = "   " }, Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult() with { LotNo = "   " }, Worker(), default);
 
         ResultAssert.BadRequest(res, "LOT-001");
         Assert.Empty(t.Db.ReceivingResults);
     }
 
     [Fact]
-    public async Task CreateResult_rejects_a_lot_that_is_unknown_to_the_system()
+    public async Task CreateResult_accepts_a_lot_the_system_has_never_seen_when_the_plan_names_none()
     {
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
-        t.Db.ReceivingPlans.Add(Plan(lot: "LOT-A"));
+        t.Db.ReceivingPlans.Add(Plan(lot: null));
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult() with { LotNo = "LOT-KHONG-CO" }, Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult() with { LotNo = "LOT-MOI" }, Worker(), default);
 
-        ResultAssert.Error(res, 404, "LOT-002");
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
+        Assert.Equal("LOT-MOI", (await t.Db.Stocks.SingleAsync()).LotNo);
+    }
+
+    [Fact]
+    public async Task CreateResult_without_a_plan_accepts_a_lot_the_system_has_never_seen()
+    {
+        using var t = TestDb.Seeded();
+        await SeedRefsAsync(t);
+
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(poNo: null, serialNo: null, qty: 7) with { LotNo = "LOT-MOI" }, Worker(), default);
+
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
     }
 
     [Fact]
@@ -1472,7 +1484,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(serialNo: "01") with { LotNo = "LOT-B" }, Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(serialNo: "01") with { LotNo = "LOT-B" }, Worker(), default);
 
         ResultAssert.Error(res, 409, "SCN-006");
         Assert.Empty(t.Db.ReceivingResults);
@@ -1488,7 +1500,7 @@ public class ReceivingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).CreateResultAsync(ValidResult(serialNo: "01") with { LotNo = "LOT-B" }, Worker(), default);
+        var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(serialNo: "01") with { LotNo = "LOT-B" }, Worker(), default);
 
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
         Assert.Equal("LOT-B", (await t.Db.ReceivingResults.FirstAsync()).LotNo);
@@ -1502,7 +1514,7 @@ public class ReceivingServiceTests
         t.Db.ReceivingPlans.Add(Plan(lot: "LOT-A"));
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default);
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default);
 
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res).Data);
         Assert.Equal("LOT-A", row.LotNo);
@@ -1523,9 +1535,114 @@ public class ReceivingServiceTests
         });
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new Ims.Api.Features.Ht.LotLookup(t.Db)).ListPlansAsync(default);
+        var res = await new ReceivingService(t.Db).ListPlansAsync(default);
 
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingPlanDto>>(res).Data);
         Assert.True(row.LabelIssued);
+    }
+
+    [Fact]
+    public async Task CreatePlan_rejects_the_same_po_and_branch_twice_even_padded()
+    {
+        using var t = TestDb.Seeded();
+        await SeedRefsAsync(t);
+        ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(await new ReceivingService(t.Db).CreatePlanAsync(Valid(serialNo: "01"), default));
+        t.Db.ChangeTracker.Clear();
+
+        var dup = await new ReceivingService(t.Db).CreatePlanAsync(Valid(serialNo: " 01 "), default);
+
+        ResultAssert.Conflict(dup);
+        Assert.Equal(1, await t.Db.ReceivingPlans.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreatePlan_rejects_a_po_and_branch_held_by_a_cancelled_line()
+    {
+        using var t = TestDb.Seeded();
+        await SeedRefsAsync(t);
+        t.Db.ReceivingPlans.Add(Plan(branch: "01", status: ReceivingStatus.Cancelled));
+        await t.Db.SaveChangesAsync();
+        t.Db.ChangeTracker.Clear();
+
+        ResultAssert.Conflict(await new ReceivingService(t.Db).CreatePlanAsync(Valid(poNo: "PO-001", serialNo: "01"), default));
+    }
+
+    [Fact]
+    public async Task CreatePlan_records_the_signed_in_user_as_the_creator()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        ResultAssert.Created<ApiSuccess<ReceivingPlanDto>>(
+            await new ReceivingService(t.Db).CreatePlanAsync(Valid(), default, Worker("U009")));
+        Assert.Equal("U009", (await t.Db.ReceivingPlans.SingleAsync()).CreatedBy);
+    }
+
+    [Fact]
+    public async Task CreatePlan_refuses_a_partner_that_is_not_a_supplier()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        t.Db.Partners.Add(new Partner { PartnerCode = "CUS-1", PartnerName = "Customer", IsCustomer = true, IsActive = true, CreatedAt = DateTime.Now });
+        await t.Db.SaveChangesAsync();
+        ResultAssert.NotFound(await new ReceivingService(t.Db).CreatePlanAsync(Valid(supplier: "CUS-1"), default));
+        Assert.Empty(await t.Db.ReceivingPlans.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePlan_refuses_a_location_that_does_not_exist()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        ResultAssert.NotFound(await new ReceivingService(t.Db).CreatePlanAsync(Valid() with { LocationCode = "NOPE_LOC" }, default));
+    }
+
+    [Fact]
+    public async Task Receiving_nothing_leaves_the_line_not_arrived_and_needs_no_lot()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        t.Db.ReceivingPlans.Add(Plan(qty: 20));
+        await t.Db.SaveChangesAsync(); t.Db.ChangeTracker.Clear();
+
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(await new ReceivingService(t.Db).CreateResultAsync(
+            new ReceivingResultWriteDto("IT-01", 0, "PO-001", "01", ReasonCode: "RS-SHORT"), Worker(), default));
+
+        var plan = await t.Db.ReceivingPlans.SingleAsync();
+        Assert.Equal((ReceivingStatus.NotArrived, 0m), (plan.Status, plan.ActualQty));
+        Assert.Empty(await t.Db.Stocks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Stock_cannot_be_received_into_a_location_that_has_child_locations()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        ResultAssert.BadRequest(await new ReceivingService(t.Db).CreateResultAsync(
+            new ReceivingResultWriteDto("IT-01", 10, null, null, "W1", "LOT-A"), Worker(), default), "LOC-001");
+        Assert.Empty(await t.Db.Stocks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task A_shortage_of_zero_closes_the_line_as_arrived()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        t.Db.ReceivingPlans.Add(Plan(qty: 20));
+        await t.Db.SaveChangesAsync(); t.Db.ChangeTracker.Clear();
+
+        ResultAssert.Ok<ApiSuccess<ReceivingPlanDto>>(await new ReceivingService(t.Db).RegisterShortageAsync(
+            "PO-001", new ReceivingShortageDto(0, "RS-SHORT", "01"), default));
+
+        Assert.Equal(ReceivingStatus.Arrived, (await t.Db.ReceivingPlans.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task A_shortage_books_the_rest_under_the_lot_that_actually_arrived()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        t.Db.ReceivingPlans.Add(Plan(qty: 20, lot: null));
+        await t.Db.SaveChangesAsync(); t.Db.ChangeTracker.Clear();
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(await new ReceivingService(t.Db).CreateResultAsync(
+            new ReceivingResultWriteDto("IT-01", 4, "PO-001", "01", "W1_ZA", "LOT-R2", ReasonCode: "RS-SHORT"), Worker(), default));
+        t.Db.ChangeTracker.Clear();
+
+        ResultAssert.Ok<ApiSuccess<ReceivingPlanDto>>(await new ReceivingService(t.Db).RegisterShortageAsync(
+            "PO-001", new ReceivingShortageDto(6, "RS-SHORT", "01"), default));
+
+        Assert.All(await t.Db.Stocks.ToListAsync(), s => Assert.Equal("LOT-R2", s.LotNo));
     }
 }

@@ -6,8 +6,44 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import kotlinx.serialization.json.JsonObject
 
 interface ApiService {
+
+    @GET("permissions/me")
+    suspend fun myPermissions(): ApiSuccess<MyPermissions>
+
+    @GET("production-order")
+    suspend fun listProductionOrders(@Query("pageSize") pageSize: Int = 200, @Query("page") page: Int = 1,
+        @Query("orderNo") orderNo: String? = null): ApiListSuccess<ProductionOrder>
+
+    @GET("production-order")
+    suspend fun listProductionLines(@Query("unit") unit: String = "line", @Query("pageSize") pageSize: Int = 200,
+        @Query("page") page: Int = 1): ApiListSuccess<ProductionLine>
+
+    @GET("production-order/{orderNo}")
+    suspend fun productionOrder(@Path("orderNo") orderNo: String): ApiSuccess<ProductionOrderDetail>
+
+    @GET("production-order/{orderNo}/lines")
+    suspend fun productionLines(@Path("orderNo") orderNo: String): ApiSuccess<List<ProductionLine>>
+
+    @GET("production-order/{orderNo}/works")
+    suspend fun productionWorks(@Path("orderNo") orderNo: String): ApiSuccess<ProductionWorks>
+
+    @POST("production-order/{orderNo}/receipt")
+    suspend fun productionReceipt(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<JsonObject>
+
+    @POST("production-order/{orderNo}/consumption")
+    suspend fun productionConsumption(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<List<JsonObject>>
+
+    @POST("production-order/{orderNo}/return")
+    suspend fun productionReturn(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<List<JsonObject>>
+
+    @POST("production-order/{orderNo}/output")
+    suspend fun productionOutput(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<ProductionOutputResult>
+
+    @POST("production-order/{orderNo}/label")
+    suspend fun productionLabel(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<JsonObject>
 
     @POST("auth/login")
     suspend fun login(@Body body: LoginRequest): ApiSuccess<LoginResponse>
@@ -163,6 +199,9 @@ interface ApiService {
         @Query("type") type: String? = null,
     ): ApiListSuccess<Location>
 
+    @GET("masters/items/{code}")
+    suspend fun getItem(@Path("code") code: String): ApiSuccess<ItemBrief>
+
     @GET("masters/zones")
     suspend fun listZones(
         @Query("pageSize") pageSize: Int = 200,
@@ -171,6 +210,9 @@ interface ApiService {
 
     @GET("ht/printers")
     suspend fun listDevices(): ApiListSuccess<Device>
+
+    @GET("languages")
+    suspend fun languages(): ApiSuccess<List<LanguageOption>>
 
     @GET("language-data/labels")
     suspend fun languageLabels(

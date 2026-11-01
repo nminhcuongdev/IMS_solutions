@@ -28,7 +28,7 @@ public class ColumnSortTests
     public async Task Receiving_plans_sort_on_every_column()
     {
         using var t = SortSeed.Receiving();
-        var svc = new ReceivingService(t.Db, new LotLookup(t.Db));
+        var svc = new ReceivingService(t.Db);
         Task<Contracts.ServiceResult> List(string s) => svc.ListPlansAsync(default, sort: s);
 
         await SortsAsync<ReceivingPlanDto>(List, "no", d => d.PoNo);
@@ -45,7 +45,7 @@ public class ColumnSortTests
     public async Task Receiving_results_sort_on_every_column()
     {
         using var t = SortSeed.Receiving();
-        var svc = new ReceivingService(t.Db, new LotLookup(t.Db));
+        var svc = new ReceivingService(t.Db);
         Task<Contracts.ServiceResult> List(string s) => svc.ListResultsAsync(default, sort: s);
 
         await SortsAsync<ReceivingResultDto>(List, "no", d => d.No);

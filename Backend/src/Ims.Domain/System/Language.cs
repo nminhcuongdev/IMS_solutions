@@ -7,4 +7,5 @@ public class Language : SoftDeletableEntity
     public string LanguageCode { get; set; } = null!;
     public string LanguageName { get; set; } = null!;
     public bool IsActive { get; set; } = true;
+    public string? IconImage { get; set; }
 }

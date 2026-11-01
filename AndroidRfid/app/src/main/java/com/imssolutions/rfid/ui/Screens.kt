@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -32,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,7 +51,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import com.imssolutions.rfid.data.ServerAddress
 import com.imssolutions.rfid.logic.BarKind
+import com.imssolutions.rfid.logic.LineStatus
 import com.imssolutions.rfid.logic.StockLine
 
 @Composable
@@ -59,12 +66,28 @@ fun HtApp(vm: AppViewModel) {
             Screen.StockCount -> StockCountScreen(vm)
             Screen.Search -> SearchScreen(vm)
             Screen.SearchDetail -> SearchDetailScreen(vm)
+            Screen.Settings -> SettingsScreen(vm)
         }
         if (vm.busy) {
             Box(
                 Modifier.fillMaxSize().background(Color.Black.copy(alpha = .15f)).clickable(enabled = true) {},
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator(color = Ht.Blue) }
+        }
+        vm.applying?.let { message ->
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f)).clickable(enabled = true) {},
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White).padding(horizontal = 28.dp, vertical = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    CircularProgressIndicator(color = Ht.Blue)
+                    Text(message, color = Ht.TextStrong, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
         HtDialogHost(vm)
     }
@@ -83,9 +106,10 @@ private fun LoginScreen(vm: AppViewModel) {
     val s = vm.strings
     var userId by remember { mutableStateOf(vm.prefs.lastUserId) }
     var password by remember { mutableStateOf("") }
-    var server by remember { mutableStateOf(vm.prefs.serverUrl) }
-    val submit = { vm.login(userId, password, server) }
+    var rememberMe by remember { mutableStateOf(vm.prefs.rememberMe) }
+    val submit = { vm.login(userId, password, rememberMe) }
 
+    Box(Modifier.fillMaxSize().background(Color.White)) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -100,8 +124,17 @@ private fun LoginScreen(vm: AppViewModel) {
         Spacer(Modifier.height(32.dp))
         LoginField(s.t("htUserId"), userId, { userId = it })
         LoginField(s.t("htPassword"), password, { password = it }, password = true, onDone = submit)
-        LoginField(s.t("htServer"), server, { server = it }, keyboard = KeyboardType.Uri)
-        DevicePicker(vm)
+        Row(
+            Modifier.fillMaxWidth().clickable { rememberMe = !rememberMe },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = rememberMe,
+                onCheckedChange = { rememberMe = it },
+                colors = CheckboxDefaults.colors(checkedColor = Ht.Blue),
+            )
+            Text(s.t("htRememberMe"), color = Ht.Text, fontSize = 13.sp)
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -116,6 +149,18 @@ private fun LoginScreen(vm: AppViewModel) {
         }
         Spacer(Modifier.height(20.dp))
         Flags(s.lang, vm::setLanguage, big = true, onBlue = false)
+    }
+    Text(
+        "⚙",
+        color = Ht.Muted,
+        fontSize = 26.sp,
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(10.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = vm::openSettings)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
     }
 }
 
@@ -160,7 +205,7 @@ private fun MenuScreen(vm: AppViewModel) {
         ) {
             MenuItem(s.t("htStockCount"), vm::openStockCount)
             MenuItem(s.t("htSearch"), vm::openSearch)
-            DevicePicker(vm, Modifier.padding(top = 6.dp))
+            MenuItem(s.t("htSettings"), vm::openSettings)
             Spacer(Modifier.weight(1f))
             Row(
                 modifier = Modifier
@@ -221,6 +266,7 @@ private fun StockCountScreen(vm: AppViewModel) {
     val total = lines.sumOf { it.qty }
     BackHandler { vm.backFromStockCount() }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         HtHeader(s.t("htStockCount"), vm, onBack = vm::backFromStockCount)
         ReaderBanner(vm)
@@ -230,10 +276,7 @@ private fun StockCountScreen(vm: AppViewModel) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PowerPill(vm)
-            Pill(if (vm.barcodeMode) Ht.Blue else Ht.Orange, onClick = vm::toggleMode) {
-                Text(s.t("htMode"), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(if (vm.barcodeMode) "Barcode" else "RFID", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
+            ModePill(vm)
             Spacer(Modifier.weight(1f))
             if (vm.pending.isNotEmpty()) {
                 Text(s.t("htPending", vm.pending.size), color = Ht.OrangeText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -244,7 +287,7 @@ private fun StockCountScreen(vm: AppViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(s.t("htTotalCount"), color = Ht.Text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-            Text("$total", color = Ht.TextStrong, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 44.sp)
+            Text("$total", color = Ht.TextStrong, fontSize = 80.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 84.sp)
         }
         HorizontalDivider(color = Ht.Line)
         Column(Modifier.weight(1f).fillMaxWidth().background(Color.White).padding(horizontal = 14.dp)) {
@@ -259,26 +302,38 @@ private fun StockCountScreen(vm: AppViewModel) {
         ) {
             ActionButton(s.t("htSave"), Ht.Red, Modifier.weight(1f), enabled = board != null) { vm.saveStockCount() }
         }
-        TriggerBar(vm)
+    }
+    if (vm.softTriggerAvailable) {
+        ScanFab(vm, Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = FAB_ABOVE_ACTIONS))
+    } else {
+        TriggerHint(vm, Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = FAB_ABOVE_ACTIONS))
+    }
     }
 }
 
 @Composable
 private fun StockLineRow(line: StockLine) {
-    StockRow(line.itemName, "${line.qty}", "${line.plan}", highlight = line.isComplete)
+    StockRow(line.itemName, "${line.qty}", "${line.plan}", status = line.status)
     HorizontalDivider(color = Ht.LineSoft)
 }
 
 @Composable
-private fun StockRow(product: String, qty: String, plan: String, header: Boolean = false, highlight: Boolean = false) {
+private fun StockRow(product: String, qty: String, plan: String, header: Boolean = false, status: LineStatus = LineStatus.NotScanned) {
     val color = when {
         header -> Ht.Blue
-        highlight -> Ht.OrangeText
+        status == LineStatus.Match -> Ht.MatchText
+        status == LineStatus.Short -> Ht.ShortText
         else -> Ht.TextStrong
     }
-    val weight = if (header || highlight) FontWeight.Bold else FontWeight.Normal
+    val background = when {
+        header -> Color.Transparent
+        status == LineStatus.Match -> Ht.MatchBg
+        status == LineStatus.Short -> Ht.ShortBg
+        else -> Color.White
+    }
+    val weight = if (header || status != LineStatus.NotScanned) FontWeight.Bold else FontWeight.Normal
     val size = if (header) 12.sp else 13.sp
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 4.dp)) {
+    Row(Modifier.fillMaxWidth().background(background).padding(vertical = 8.dp, horizontal = 4.dp)) {
         Text(product, color = color, fontWeight = weight, fontSize = size, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(qty, color = color, fontWeight = weight, fontSize = size, textAlign = TextAlign.End, modifier = Modifier.width(72.dp))
         Text(plan, color = color, fontWeight = weight, fontSize = size, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
@@ -291,8 +346,10 @@ private fun SearchScreen(vm: AppViewModel) {
     val names = remember(vm.board) { vm.board?.itemNames().orEmpty() }
     var serial by remember { mutableStateOf("") }
     var open by remember { mutableStateOf(false) }
+    val keyboardOpen by rememberKeyboardOpen()
     BackHandler { vm.backToMenu() }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         HtHeader(s.t("htSearch"), vm, onBack = vm::backToMenu)
         ReaderBanner(vm)
@@ -361,7 +418,10 @@ private fun SearchScreen(vm: AppViewModel) {
             ActionButton(s.t("htClear"), Ht.Gray, Modifier.weight(1f)) { vm.clearSearch() }
             ActionButton(s.t("htDetailSearch"), Ht.Red, Modifier.weight(1f)) { vm.openSearchDetail() }
         }
-        TriggerBar(vm)
+    }
+    if (!keyboardOpen) {
+        ScanFab(vm, Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = FAB_ABOVE_ACTIONS))
+    }
     }
 }
 
@@ -379,11 +439,16 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun SearchDetailScreen(vm: AppViewModel) {
     val s = vm.strings
-    val bars = remember(vm.board, vm.searchItem, vm.searchRead) {
-        vm.board?.searchBars(vm.searchItem, vm.searchRead).orEmpty()
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(SIGNAL_TICK_MS)
+            value = System.currentTimeMillis()
+        }
     }
+    val bars = vm.board?.searchBars(vm.searchItem, vm.searchRead, now).orEmpty()
     BackHandler { vm.backFromSearchDetail() }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         HtHeader(s.t("htSearchDetailTitle"), vm, onBack = vm::backFromSearchDetail)
         ReaderBanner(vm)
@@ -413,24 +478,35 @@ private fun SearchDetailScreen(vm: AppViewModel) {
         HorizontalDivider(color = Ht.Line)
         LazyColumn(Modifier.weight(1f).fillMaxWidth().background(Color.White).padding(horizontal = 16.dp, vertical = 4.dp)) {
             items(bars, key = { it.epc }) { bar ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        bar.epc,
-                        color = Ht.Text,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.width(150.dp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            bar.epc,
+                            color = if (bar.kind == BarKind.Lost) Ht.Muted else Ht.Text,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace,
+                            softWrap = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            if (bar.kind == BarKind.Read || bar.kind == BarKind.Lost) "${bar.percent}%" else "",
+                            color = Ht.Muted,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.width(44.dp),
+                        )
+                    }
                     Box(
-                        Modifier.weight(1f).height(20.dp).clip(RoundedCornerShape(3.dp)).background(Ht.BarTrack),
+                        Modifier.fillMaxWidth().padding(top = 4.dp).height(14.dp).clip(RoundedCornerShape(3.dp)).background(Ht.BarTrack),
                     ) {
                         Box(
                             Modifier.fillMaxHeight().fillMaxWidth(bar.percent / 100f).clip(RoundedCornerShape(3.dp)).background(
                                 when (bar.kind) {
                                     BarKind.Confirmed -> Ht.BarYellow
                                     BarKind.Read -> Ht.BarOrange
+                                    BarKind.Lost -> Ht.BarLost
                                     BarKind.Unread -> Ht.BarGray
                                 },
                             ),
@@ -439,6 +515,39 @@ private fun SearchDetailScreen(vm: AppViewModel) {
                 }
             }
         }
-        TriggerBar(vm)
+    }
+    ScanFab(vm, Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp))
+    }
+}
+
+private val FAB_ABOVE_ACTIONS = 84.dp
+private const val SIGNAL_TICK_MS = 250L
+
+@Composable
+private fun SettingsScreen(vm: AppViewModel) {
+    val s = vm.strings
+    var server by remember { mutableStateOf(ServerAddress.toDisplay(vm.prefs.serverUrl)) }
+    val resolved = vm.resolveServer(server)
+    val save = { vm.saveServer(server)?.let { server = it } }
+    BackHandler { vm.backFromSettings() }
+
+    Column(Modifier.fillMaxSize()) {
+        HtHeader(s.t("htSettings"), vm, onBack = vm::backFromSettings)
+        ReaderBanner(vm)
+        Column(
+            Modifier.weight(1f).fillMaxWidth().background(Color.White).verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+        ) {
+            LoginField(s.t("htServer"), server, { server = it }, keyboard = KeyboardType.Decimal, onDone = { save() })
+            Text(
+                resolved ?: if (server.isBlank()) "" else s.t("errServerInvalid"),
+                color = if (resolved == null) Ht.Logout else Ht.Muted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+            )
+            ActionButton(s.t("htSaveServer"), Ht.Blue, Modifier.fillMaxWidth()) { save() }
+            Spacer(Modifier.height(22.dp))
+            DevicePicker(vm)
+        }
     }
 }

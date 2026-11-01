@@ -11,6 +11,13 @@ data class ApiSuccess<T>(
 )
 
 @Serializable
+data class LanguageOption(
+    val languageCode: String,
+    val languageName: String,
+    val iconImage: String? = null,
+)
+
+@Serializable
 data class ApiListSuccess<T>(
     val success: Boolean = true,
     val data: List<T> = emptyList(),
@@ -84,7 +91,14 @@ data class ReceivingPlan(
     val lineKey: String get() = "$poNo/$serialNo"
 
     val expectedQty: Double
-        get() = packingQty?.takeIf { it > 0 }?.let { plannedQty / it } ?: plannedQty
+        get() {
+            val remaining = (plannedQty - actualQty).coerceAtLeast(0.0)
+            val pack = packingQty ?: 0.0
+            return if (pack > 1) minOf(pack, remaining) else remaining
+        }
+
+    val caseCount: Double?
+        get() = packingQty?.takeIf { it > 1 }?.let { kotlin.math.ceil(plannedQty / it) }
 
     val isOpen: Boolean get() = status == STATUS_NOT_ARRIVED || status == STATUS_PARTIAL
 }
@@ -138,6 +152,7 @@ data class ReceivingResultRequest(
     val reasonCode: String? = null,
     val invoiceNo: String? = null,
     val isOnHold: Boolean = false,
+    val requestId: String? = null,
 )
 
 @Serializable
@@ -230,6 +245,17 @@ data class Device(
     val deviceCode: String = "",
     val deviceName: String = "",
     val ipAddress: String? = null,
+)
+
+@Serializable
+data class ItemBrief(
+    val itemCode: String = "",
+    val itemName: String? = null,
+    val barcode: String? = null,
+    val packageQty: Double = 1.0,
+    val uomCode: String? = null,
+    val expirationPeriod: Double? = null,
+    val isLotManaged: Boolean = false,
 )
 
 @Serializable

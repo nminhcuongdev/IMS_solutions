@@ -45,7 +45,7 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
                 var added = new GeneralSetting
                 {
                     ConfigCode = i.ConfigCode, ConfigValue = i.ConfigValue,
-                    Category = i.Category, CreatedAt = DateTime.UtcNow,
+                    Category = i.Category, CreatedAt = DateTime.Now,
                 };
                 db.GeneralSettings.Add(added);
                 existing.Add(added);
@@ -54,7 +54,7 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
             {
                 row.ConfigValue = i.ConfigValue;
                 if (!string.IsNullOrWhiteSpace(i.Category)) row.Category = i.Category;
-                row.UpdatedAt = DateTime.UtcNow;
+                row.UpdatedAt = DateTime.Now;
             }
         }
         await db.SaveChangesAsync(ct);
@@ -93,12 +93,12 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
                 db.FunctionVisibilities.Add(new FunctionVisibility
                 {
                     TargetType = i.TargetType, TargetCode = i.TargetCode,
-                    IsVisible = i.IsVisible, UpdatedAt = DateTime.UtcNow,
+                    IsVisible = i.IsVisible, UpdatedAt = DateTime.Now,
                 });
             else
             {
                 row.IsVisible = i.IsVisible;
-                row.UpdatedAt = DateTime.UtcNow;
+                row.UpdatedAt = DateTime.Now;
             }
         }
         await db.SaveChangesAsync(ct);
@@ -156,7 +156,7 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
                     row.StatusNameLang1 = i.NameLang1;
                     row.StatusNameLang2 = i.NameLang2;
                     row.StatusNameLang3 = i.NameLang3;
-                    row.UpdatedAt = DateTime.UtcNow;
+                    row.UpdatedAt = DateTime.Now;
                 }
                 break;
             }
@@ -173,7 +173,7 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
                     row.NameLang1 = i.NameLang1;
                     row.NameLang2 = i.NameLang2;
                     row.NameLang3 = i.NameLang3;
-                    row.UpdatedAt = DateTime.UtcNow;
+                    row.UpdatedAt = DateTime.Now;
                 }
                 break;
             }

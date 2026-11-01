@@ -1,5 +1,5 @@
 
-const ICON = (name: string) => `/Images/Icon/${name}_50_FFFFFF.png`;
+const ICON = (name: string) => `/Images/Icon/${name}_50_FFFFFF.svg`;
 
 export const GROUP_ICON: Record<string, string> = {
   menu:           ICON("dashboard"),
@@ -27,6 +27,8 @@ export const FUNCTION_ICON: Record<string, string> = {
   pick_result:       ICON("content_paste_search"),
   shp_import:        ICON("upload"),
   shp_result:        ICON("content_paste_search"),
+  prd_import:        ICON("precision_manufacturing"),
+  prd_result:        ICON("content_paste_search"),
   st_label:          ICON("Stocktakingbucket_check"),
   st_ref:            ICON("folder"),
   st_rfid_demo:      ICON("Stocktakingbucket_check"),
@@ -38,8 +40,10 @@ export const FUNCTION_ICON: Record<string, string> = {
   m_location_3d:        ICON("shelves"),
   m_itemgroup:       ICON("box"),
   m_item:            ICON("box"),
+  m_process:         ICON("precision_manufacturing"),
   m_partner:         ICON("person"),
   m_device:          ICON("sensors"),
+  dist_status:       ICON("upload"),
   m_user:            ICON("person"),
   m_reason:          ICON("warning"),
   m_permission:      ICON("person"),
@@ -49,12 +53,12 @@ export const FUNCTION_ICON: Record<string, string> = {
 };
 
 export const BTN_ICON = {
-  search:  "/Images/Icon/search_50_FFFFFF.png",
-  edit:    "/Images/Icon/edit_50_000000.png",
-  copy:    "/Images/Icon/file_copy_50_000000.png",
-  upload:  "/Images/Icon/upload_50_000000.png",
-  print:   "/Images/Icon/print_50_000000.png",
-  warning: "/Images/Icon/warning_50_FFFFFF.png",
-  login:   "/Images/Icon/login_50_FFFFFF.png",
-  logout:  "/Images/Icon/logout_50_FFFFFF.png",
+  search:  "/Images/Icon/search_50_FFFFFF.svg",
+  edit:    "/Images/Icon/edit_50_000000.svg",
+  copy:    "/Images/Icon/file_copy_50_000000.svg",
+  upload:  "/Images/Icon/upload_50_000000.svg",
+  print:   "/Images/Icon/print_50_000000.svg",
+  warning: "/Images/Icon/warning_50_FFFFFF.svg",
+  login:   "/Images/Icon/login_50_FFFFFF.svg",
+  logout:  "/Images/Icon/logout_50_FFFFFF.svg",
 };

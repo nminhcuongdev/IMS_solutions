@@ -154,7 +154,7 @@ public class ItemGroupServiceTests
 
         var res = await new ItemGroupService(t.Db).DeleteAsync("IG-01", default);
 
-        ResultAssert.Conflict(res);
+        ResultAssert.InUse(res);
     }
 
     [Fact]

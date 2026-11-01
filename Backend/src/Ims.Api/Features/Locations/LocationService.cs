@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
 using Ims.Domain.Masters;
@@ -45,8 +45,8 @@ internal sealed class LocationService(ImsDbContext db) : ILocationService
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(l => EF.Functions.Like(l.LocationCode, "%" + s + "%")
-                                  || EF.Functions.Like(l.LocationName, "%" + s + "%"));
+            query = query.Where(l => EF.Functions.Like(l.LocationCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(l.LocationName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
@@ -131,7 +131,7 @@ internal sealed class LocationService(ImsDbContext db) : ILocationService
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.Locations.Add(l);
         await db.SaveChangesAsync(ct);
@@ -154,7 +154,7 @@ internal sealed class LocationService(ImsDbContext db) : ILocationService
         l.IsActive = body.IsActive;
         l.Remark1 = body.Remark1; l.Remark2 = body.Remark2; l.Remark3 = body.Remark3;
         l.Remark4 = body.Remark4; l.Remark5 = body.Remark5;
-        l.UpdatedAt = DateTime.UtcNow;
+        l.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<LocationDto>(Map(l)));
     }
@@ -164,10 +164,14 @@ internal sealed class LocationService(ImsDbContext db) : ILocationService
         var l = await db.Locations.FirstOrDefaultAsync(x => x.LocationCode == code && !x.IsDeleted, ct);
         if (l is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Location")));
         if (await db.Locations.AnyAsync(c => c.ParentLocationCode == code && !c.IsDeleted, ct))
-            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        if (await db.Items.AnyAsync(i => i.DefaultLocationCode == code && !i.IsDeleted, ct))
-            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        l.IsDeleted = true; l.UpdatedAt = DateTime.UtcNow;
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        if (await db.Items.AnyAsync(i => i.DefaultLocationCode == code && !i.IsDeleted, ct)
+            || await db.ProductionOrders.AnyAsync(x => x.StorageLocationCode == code, ct)
+            || await db.ProductionConsumptions.AnyAsync(x => x.LocationCode == code, ct)
+            || await db.ProductionOutputs.AnyAsync(x => x.LocationCode == code, ct)
+            || await db.ProductionReturns.AnyAsync(x => x.LocationCode == code, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        l.IsDeleted = true; l.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

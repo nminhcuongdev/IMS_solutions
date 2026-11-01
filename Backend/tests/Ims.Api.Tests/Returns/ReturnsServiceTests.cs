@@ -22,7 +22,7 @@ public class ReturnsServiceTests
         t.Db.Items.Add(new Item
         {
             ItemCode = "IT-01", ItemName = "Industrial Printer 4in", ItemGroupCode = "IG-01",
-            UomCode = "pcs", PackingTypeCode = "BOX", PackageQty = 10,
+            UomCode = "pcs", PackingTypeCode = "BOX", PackageQty = 10, DefaultLocationCode = "W1_ZA",
             IsActive = true, CreatedAt = now,
         });
         t.Db.Partners.Add(new Partner
@@ -564,5 +564,40 @@ public class ReturnsServiceTests
         Assert.StartsWith("return_no,return_branch_no,partner_code,partner_name", lines[0]);
         Assert.Contains("\"Alpha, Beta & Co.\"", lines[1]);
         Assert.Contains("statusPendingReturn", lines[1]);
+    }
+
+    [Fact]
+    public async Task CreatePlan_rejects_the_same_return_and_branch_twice_even_padded()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        ResultAssert.Created<ApiSuccess<ReturnPlanDto>>(await new ReturnsService(t.Db).CreatePlanAsync(Valid(), default));
+        t.Db.ChangeTracker.Clear();
+        var first = Valid();
+
+        var dup = await new ReturnsService(t.Db).CreatePlanAsync(first with { ReturnNo = " " + first.ReturnNo + " ", SerialNo = " " + (first.SerialNo ?? "01") + " " }, default);
+
+        ResultAssert.Conflict(dup);
+        Assert.Equal(1, await t.Db.ReturnPlans.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreatePlan_records_the_signed_in_user_as_the_creator()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        ResultAssert.Created<ApiSuccess<ReturnPlanDto>>(
+            await new ReturnsService(t.Db).CreatePlanAsync(Valid(), default, Worker("U009")));
+        Assert.Equal("U009", (await t.Db.ReturnPlans.SingleAsync()).CreatedBy);
+    }
+
+    [Fact]
+    public async Task Returning_more_on_a_completed_line_is_over_the_plan_not_missing()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        t.Db.ReturnPlans.Add(Plan(qty: 5));
+        await t.Db.SaveChangesAsync(); t.Db.ChangeTracker.Clear();
+        ResultAssert.Created<ApiSuccess<ReturnResultDto>>(await new ReturnsService(t.Db).CreateResultAsync(ValidResult(qty: 5), Worker(), default));
+        t.Db.ChangeTracker.Clear();
+
+        ResultAssert.BadRequest(await new ReturnsService(t.Db).CreateResultAsync(ValidResult(qty: 6), Worker(), default), "QTY-002");
     }
 }

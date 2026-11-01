@@ -84,7 +84,7 @@ fun StockDetailScreen(
             }
         }
 
-        HtStatusBar(clock = nowClock(), right = t("htLotCount", "{0} lô", state.lines.size))
+        HtBottomInset()
     }
 }
 

@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
-using Ims.Api.Features.Ht;
 using Ims.Api.Features.Receiving;
 using Ims.Api.Tests.Infrastructure;
 using Ims.Domain.Inventory;
@@ -36,7 +35,7 @@ public class ReceivingStatusChangeTests
         LotNo = "LOT-A", LocationCode = location, CreatedAt = DateTime.UtcNow, CreatedBy = "admin",
     };
 
-    private static ReceivingService Service(TestDb t) => new(t.Db, new LotLookup(t.Db));
+    private static ReceivingService Service(TestDb t) => new(t.Db);
 
     private static async Task<ReceivingStatusChangeResult> ChangeAsync(TestDb t, string action, params string[] poNos)
     {
@@ -67,6 +66,26 @@ public class ReceivingStatusChangeTests
         Assert.Equal((10m, "W1_ZA"), (stock.StockQty, stock.LocationCode));
         var history = await t.Db.InventoryHistories.SingleAsync();
         Assert.Equal((InventoryAction.Receiving, 10m), (history.ActionType, history.Qty));
+    }
+
+    [Fact]
+    public async Task Done_requires_a_lot_for_a_managed_item()
+    {
+        using var t = TestDb.Seeded();
+        await SeedAsync(t);
+        var item = await t.Db.Items.SingleAsync();
+        item.IsLotManaged = true;
+        var plan = Plan("PO-A");
+        plan.LotNo = null;
+        t.Db.ReceivingPlans.Add(plan);
+        await t.Db.SaveChangesAsync();
+        t.Db.ChangeTracker.Clear();
+
+        var result = await Service(t).ChangeStatusAsync(
+            new ReceivingStatusChangeDto(new[] { "PO-A" }, "done"), default);
+
+        ResultAssert.BadRequest(result, "LOT-001");
+        Assert.Empty(await t.Db.ReceivingResults.ToListAsync());
     }
 
     [Fact]

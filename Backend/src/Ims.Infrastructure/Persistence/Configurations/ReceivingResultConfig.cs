@@ -24,9 +24,13 @@ public class ReceivingResultConfig : IEntityTypeConfiguration<ReceivingResult>
         b.Property(x => x.ExpiryDate).HasColumnName("expiry_date");
         b.Property(x => x.InvoiceNo).HasColumnName("invoice_no").CodeN(30);
         b.Property(x => x.CreatedBy).HasColumnName("created_by").HasColumnType("varchar(20)");
+        b.Property(x => x.RequestId).HasColumnName("request_id").HasColumnType("varchar(40)");
 
         b.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_receiving_result_created_at");
         b.HasIndex(x => x.PoNo).HasDatabaseName("IX_receiving_result_po_no");
+        b.HasIndex(x => new { x.ItemCode, x.LotNo });
+        b.HasIndex(x => x.RequestId).IsUnique().HasFilter("[request_id] IS NOT NULL")
+         .HasDatabaseName("UX_receiving_result_request_id");
 
         b.HasOne<Ims.Domain.Masters.Item>().WithMany()
          .HasForeignKey(x => x.ItemCode).OnDelete(DeleteBehavior.Restrict);

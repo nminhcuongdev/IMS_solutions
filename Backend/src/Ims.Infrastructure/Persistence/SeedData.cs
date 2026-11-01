@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Ims.Domain.Masters;
 using Ims.Domain.History;
@@ -20,6 +20,9 @@ public static class SeedData
         await SeedPermission(db, ct);
         await SeedRole(db, ct);
         await SeedRolePermission(db, ct);
+        await db.SaveChangesAsync(ct);
+        await SeedProductionPermissions(db, ct);
+        await SeedDistributionPermissions(db, ct);
         await SeedMasters.RunAsync(db, ct);
         await SeedUsers(db, ct);
         await SeedHistory(db, ct);
@@ -38,13 +41,13 @@ public static class SeedData
         var admin = new AppUser
         {
             UserCode = "admin", UserName = "Administrator",
-            RoleCode = "Admin", IsActive = true, CreatedAt = DateTime.UtcNow,
+            RoleCode = "Admin", IsActive = true, CreatedAt = DateTime.Now,
         };
         admin.PasswordHash = hasher.HashPassword(admin, "password");
         var superAdmin = new AppUser
         {
             UserCode = "superadmin", UserName = "Super Administrator",
-            RoleCode = "Admin", IsActive = true, CreatedAt = DateTime.UtcNow,
+            RoleCode = "Admin", IsActive = true, CreatedAt = DateTime.Now,
         };
         superAdmin.PasswordHash = hasher.HashPassword(superAdmin, "superadmin");
         foreach (var u in new[] { admin, superAdmin })
@@ -59,7 +62,7 @@ public static class SeedData
                 DefaultLanguage = r.DefaultLanguage, IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             };
             u.PasswordHash = hasher.HashPassword(u, r.UserCode);
             db.AppUsers.Add(u);
@@ -105,7 +108,7 @@ public static class SeedData
                 StatusNameLang1 = r.en,
                 StatusNameLang2 = r.ja,
                 StatusNameLang3 = r.vi,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         }
     }
@@ -132,7 +135,7 @@ public static class SeedData
                 MaxThreshold = r.max,
                 IsActive = true,
                 Remark1 = r.note,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
     }
 
@@ -140,11 +143,15 @@ public static class SeedData
     {
         if (await db.Languages.AnyAsync(ct)) return;
         db.Languages.AddRange(
-            new Language { LanguageCode = "en", LanguageName = "English",    IsActive = true, CreatedAt = DateTime.UtcNow },
-            new Language { LanguageCode = "ja", LanguageName = "日本語",     IsActive = true, CreatedAt = DateTime.UtcNow },
-            new Language { LanguageCode = "vi", LanguageName = "Tiếng Việt", IsActive = true, CreatedAt = DateTime.UtcNow }
+            new Language { LanguageCode = "en", LanguageName = "English",    IconImage = FlagEn, IsActive = true, CreatedAt = DateTime.Now },
+            new Language { LanguageCode = "ja", LanguageName = "日本語",     IconImage = FlagJa, IsActive = true, CreatedAt = DateTime.Now },
+            new Language { LanguageCode = "vi", LanguageName = "Tiếng Việt", IconImage = FlagVi, IsActive = true, CreatedAt = DateTime.Now }
         );
     }
+
+    private const string FlagEn = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAVBAMAAADGNLEtAAAALVBMVEX////GU3LZjKGzGUINM2PsxtAYPWotT3hed5enma46WoBPa46zGkMkR3Jrgp+6ntXWAAAAiklEQVQY02Nwc0lJcQMSxghgw+CRVdaWkVXWooQEGFxaPLxKWjxcGJCBn1fJExAWRAJglUuAKlEEPdyXgA1A0e62LTu9bFt2CopF3iCh9LItKE5yX5tVe31tVgmq9pL0NLcy95RQJMAAdiUQo2ifCQUoKrECY0xgw6CEBWDXLogFYBfECrBahM1JAItMTcEiMDpsAAAAAElFTkSuQmCC";
+    private const string FlagJa = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAbCAMAAAA5zj1cAAAAOVBMVEW8AC3dfJPMPF7ILFHQTGvuvcjADzn////55urjkaXyzte9BTHqrbvDHEP++fr77/Hst8PmobHXZ4H4lhdsAAAAcUlEQVQ4y9XTuw6AIAyF4XKVclXf/2FNjDF0OMjgwj9/YWgLbZPRkjA4Zhc+YbB0Z8MYHp6efB7BmOgtRQyroQ6aCmEm0Q6hklBBqCXUEHoJPYRm9kUr4QkhS8gQttK70vBmHM1tRkyS/7me+Xtc+hdeTWcZDIhvaeAAAAAASUVORK5CYII=";
+    private const string FlagVi = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAbBAMAAAD8PtBdAAAAMFBMVEX/AAD/6wD/1QD/OAD/ggD/SgD/nAD/4QD/GgD/6gD/WgD/CQD/vAD/kwD/IgD/QQDiVXETAAAAY0lEQVQoz2NgoDvg3oBFkDUAiyBbAhbB7dVYBANFsQhelEUX6REEgxOoop4gsSloSvkVBQWFDNAN6BQUnIFhj6GgoDCGoKOQogiGoGL2NiF0MeYqBobl6BZxPWBg4FvAMGgBAGCuDd0kl5lmAAAAAElFTkSuQmCC";
 
     private static async Task SeedHistory(ImsDbContext db, CancellationToken ct)
     {
@@ -159,7 +166,7 @@ public static class SeedData
                 db.PrintHistories.Add(new PrintHistory
                 {
                     Category      = category,
-                    CreatedAt     = ParseDateTime(Str(r, 0)) ?? DateTime.UtcNow,
+                    CreatedAt     = ParseDateTime(Str(r, 0)) ?? DateTime.Now,
                     DocNo         = Str(r, 2),
                     ItemCode      = Str(r, 3),
                     Qty           = Dec(r, 5),
@@ -182,7 +189,7 @@ public static class SeedData
                     ItemCode      = Str(r, 0),
                     SerialNo      = Str(r, 2),
                     GateCode      = Str(r, 3) ?? "",
-                    CreatedAt     = ParseDateTime(Str(r, 4)) ?? DateTime.UtcNow,
+                    CreatedAt     = ParseDateTime(Str(r, 4)) ?? DateTime.Now,
                     DirectionType = "In",
                     Status        = 2,
                 });
@@ -259,7 +266,7 @@ public static class SeedData
             db.LanguageData.Add(new LanguageData
             {
                 LabelKey = key, LanguageCode = lang, LabelText = text,
-                DeviceScope = scope, CreatedAt = DateTime.UtcNow,
+                DeviceScope = scope, CreatedAt = DateTime.Now,
             });
         }
 
@@ -324,7 +331,7 @@ public static class SeedData
                     db.LanguageData.Add(new LanguageData
                     {
                         LabelKey = r.key, LanguageCode = code, LabelText = text,
-                        DeviceScope = "PC", CreatedAt = DateTime.UtcNow,
+                        DeviceScope = "PC", CreatedAt = DateTime.Now,
                     });
     }
 
@@ -362,7 +369,7 @@ public static class SeedData
                 NameLang3 = p.vi,
                 DisplayOrder = p.order,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         }
     }
@@ -387,18 +394,13 @@ public static class SeedData
             ("layout_file_m_location", "Location.mllayx",                 "Layout"),
             ("layout_file_m_user",     "User.mllayx",                     "Layout"),
             ("layout_file_m_partner",  "BusinessPartner.mllayx",          "Layout"),
-            ("language_slot_1",           "en",     "Language"),
-            ("language_slot_2",           "ja",     "Language"),
-            ("language_slot_3",           "vi",     "Language"),
-            ("language_slot_1_flag_icon", "us.png", "Language"),
-            ("language_slot_2_flag_icon", "jp.png", "Language"),
-            ("language_slot_3_flag_icon", "vn.png", "Language"),
+            ("layout_file_m_process",  "Layout_IMS/Process.mllayx",        "Layout"),
         };
         foreach (var r in rows.Where(r => !have.Contains(r.code)))
             db.GeneralSettings.Add(new GeneralSetting
             {
                 ConfigCode = r.code, ConfigValue = r.value, Category = r.cat,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
     }
 
@@ -439,11 +441,11 @@ public static class SeedData
             ("alertCenter",      "Alert Center",     3),
             ("receivingMgmt",    "Receiving",        4),
             ("shippingMgmt",     "Shipping",         5),
-            ("stocktakeMgmt",    "Stocktaking",      6),
-            ("printHistory",     "Print History",    7),
-            ("rfidHistory",      "RFID History",     8),
-            ("masterMgmt",       "Master Data",      9),
-            ("otherMgmt",        "Other",            10),
+            ("stocktakeMgmt",    "Stocktaking",      8),
+            ("printHistory",     "Print History",    9),
+            ("rfidHistory",      "RFID History",     10),
+            ("masterMgmt",       "Master Data",      11),
+            ("otherMgmt",        "Other",            12),
         };
         foreach (var r in rows)
         {
@@ -453,7 +455,7 @@ public static class SeedData
                 LargeName = r.name,
                 DisplayOrder = r.order,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         }
     }
@@ -473,7 +475,7 @@ public static class SeedData
             ("m_device",          "Device Master",              "masterMgmt",    7),
             ("m_user",            "User Master",                "masterMgmt",    8),
             ("m_reason",          "Reason Master",              "masterMgmt",    9),
-            ("m_location_3d",     "Location 3D",                "masterMgmt",    10),
+            ("m_location_3d",     "Location 3D",                "masterMgmt",    11),
             ("inv",              "Stock Inquiry",              "inventoryMgmt", 1),
             ("inv_history",      "Work History",               "inventoryMgmt", 2),
             ("inv_hold",         "Hold Item",                  "inventoryMgmt", 3),
@@ -504,7 +506,7 @@ public static class SeedData
                 LargeCode = r.large,
                 DisplayOrder = r.order,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         }
     }
@@ -522,7 +524,7 @@ public static class SeedData
                     FunctionCode = f,
                     Action = a,
                     IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.Now,
                 });
         foreach (var f in new[] { "m_location", "m_user", "m_partner" })
             db.Permissions.Add(new Permission
@@ -531,7 +533,7 @@ public static class SeedData
                 FunctionCode = f,
                 Action = "label",
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
 
         var otherScreens = new[] { "dashboard","m_permission","settings","lang_data","print_history","rfid_gate_history","super_admin","rcv_result","shp_result","pick_result","m_location_3d","alert_center","m_device" };
@@ -542,7 +544,7 @@ public static class SeedData
                 FunctionCode = f,
                 Action = "view",
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
 
         foreach (var f in new[] { "rcv_import", "returns", "shp_import" })
@@ -553,7 +555,7 @@ public static class SeedData
                 FunctionCode = f,
                 Action = a,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         foreach (var a in new[] { "view", "new", "status", "import", "export" })
             db.Permissions.Add(new Permission
@@ -562,7 +564,7 @@ public static class SeedData
                 FunctionCode = "pick_import",
                 Action = a,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         foreach (var (f, actions) in new[]
         {
@@ -577,7 +579,7 @@ public static class SeedData
                 FunctionCode = f,
                 Action = a,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
 
         foreach (var (f, actions) in new[]
@@ -593,7 +595,7 @@ public static class SeedData
                 FunctionCode = f,
                 Action = a,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
 
         foreach (var f in new[] { "rcv_result", "shp_result", "pick_result" })
@@ -603,7 +605,7 @@ public static class SeedData
                 FunctionCode = f,
                 Action = "export",
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
     }
 
@@ -611,9 +613,9 @@ public static class SeedData
     {
         if (await db.Roles.AnyAsync(ct)) return;
         db.Roles.AddRange(
-            new Role { RoleCode = "Admin",   RoleName = "Administrator", IsActive = true, CreatedAt = DateTime.UtcNow },
-            new Role { RoleCode = "General", RoleName = "General User",  IsActive = true, CreatedAt = DateTime.UtcNow },
-            new Role { RoleCode = "Worker",  RoleName = "Worker",        IsActive = true, CreatedAt = DateTime.UtcNow }
+            new Role { RoleCode = "Admin",   RoleName = "Administrator", IsActive = true, CreatedAt = DateTime.Now },
+            new Role { RoleCode = "General", RoleName = "General User",  IsActive = true, CreatedAt = DateTime.Now },
+            new Role { RoleCode = "Worker",  RoleName = "Worker",        IsActive = true, CreatedAt = DateTime.Now }
         );
     }
 
@@ -628,21 +630,104 @@ public static class SeedData
             db.RolePermissions.Add(new RolePermission
             {
                 RoleCode = "Admin", PermissionCode = code, IsAllowed = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
             db.RolePermissions.Add(new RolePermission
             {
                 RoleCode = "General", PermissionCode = code,
                 IsAllowed = action is "view" or "export" or "import" or "new" or "edit" or "label",
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
             db.RolePermissions.Add(new RolePermission
             {
                 RoleCode = "Worker", PermissionCode = code,
                 IsAllowed = action is "view" or "label",
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
             });
         }
     }
 
+    private static async Task SeedProductionPermissions(ImsDbContext db, CancellationToken ct)
+    {
+        var groups = new[]
+        {
+            (Code: "productionMgmt", Name: "Production", Order: 6),
+            (Code: "traceMgmt", Name: "Traceability", Order: 7),
+            (Code: "ht_production", Name: "Production", Order: 13),
+        };
+        var knownGroups = await db.FunctionLarges.Select(x => x.LargeCode).ToListAsync(ct);
+        foreach (var g in groups.Where(g => !knownGroups.Contains(g.Code)))
+            db.FunctionLarges.Add(new FunctionLarge { LargeCode = g.Code, LargeName = g.Name,
+                DisplayOrder = g.Order, IsActive = true, CreatedAt = DateTime.Now });
+        var definitions = new[]
+        {
+            (Code: "prd_import", Name: "Production Order", Group: "productionMgmt", Order: 1, Actions: new[] { "view", "status_change", "material_picking", "import", "export" }),
+            (Code: "prd_result", Name: "Production Result", Group: "productionMgmt", Order: 2, Actions: new[] { "view", "reverse", "export" }),
+            (Code: "trace_back", Name: "Trace Back", Group: "traceMgmt", Order: 1, Actions: new[] { "view", "export" }),
+            (Code: "trace_fwd", Name: "Trace Forward", Group: "traceMgmt", Order: 2, Actions: new[] { "view", "export" }),
+            (Code: "m_process", Name: "Process Master", Group: "masterMgmt", Order: 10, Actions: new[] { "view", "new", "edit", "copy", "delete", "label", "export" }),
+            (Code: "ht_prd_receipt", Name: "Material Receipt", Group: "ht_production", Order: 1, Actions: new[] { "view" }),
+            (Code: "ht_prd_input", Name: "Production Input", Group: "ht_production", Order: 2, Actions: new[] { "view" }),
+            (Code: "ht_prd_return", Name: "Material Return", Group: "ht_production", Order: 3, Actions: new[] { "view" }),
+            (Code: "ht_prd_output", Name: "Production Output", Group: "ht_production", Order: 4, Actions: new[] { "view" }),
+        };
+        var knownFunctions = await db.AppFunctions.Select(x => x.FunctionCode).ToListAsync(ct);
+        var knownPermissions = await db.Permissions.Select(x => x.PermissionCode).ToListAsync(ct);
+        var knownGrants = await db.RolePermissions.Select(x => x.RoleCode + "|" + x.PermissionCode).ToListAsync(ct);
+        var knownVisibility = await db.FunctionVisibilities.Select(x => x.TargetType + "|" + x.TargetCode).ToListAsync(ct);
+        foreach (var g in groups.Where(g => !knownVisibility.Contains("Group|" + g.Code)))
+            db.FunctionVisibilities.Add(new FunctionVisibility { TargetType = "Group",
+                TargetCode = g.Code, IsVisible = true });
+        foreach (var f in definitions)
+        {
+            if (!knownFunctions.Contains(f.Code))
+                db.AppFunctions.Add(new AppFunction { FunctionCode = f.Code, FunctionName = f.Name,
+                    LargeCode = f.Group, DisplayOrder = f.Order, IsActive = true, CreatedAt = DateTime.Now });
+            foreach (var action in f.Actions)
+            {
+                var code = f.Code + "." + action;
+                if (!knownPermissions.Contains(code))
+                    db.Permissions.Add(new Permission { PermissionCode = code, FunctionCode = f.Code,
+                        Action = action, IsActive = true, CreatedAt = DateTime.Now });
+                foreach (var role in new[] { "Admin", "General", "Worker" })
+                {
+                    if (knownGrants.Contains(role + "|" + code)) continue;
+                    var allowed = role == "Admin" || role == "General" && action != "reverse"
+                        || role == "Worker" && f.Group == "ht_production";
+                    db.RolePermissions.Add(new RolePermission { RoleCode = role, PermissionCode = code,
+                        IsAllowed = allowed, CreatedAt = DateTime.Now });
+                }
+            }
+            var device = f.Group == "ht_production" ? "HT" : "PC";
+            if (!knownVisibility.Contains(device + "|" + f.Code))
+                db.FunctionVisibilities.Add(new FunctionVisibility { TargetType = device,
+                    TargetCode = f.Code, IsVisible = true });
+        }
+    }
+
+    private static async Task SeedDistributionPermissions(ImsDbContext db, CancellationToken ct)
+    {
+        const string code = "dist_status";
+        if (!await db.AppFunctions.AnyAsync(f => f.FunctionCode == code, ct))
+            db.AppFunctions.Add(new AppFunction { FunctionCode = code, FunctionName = "Data Distribution",
+                LargeCode = "masterMgmt", DisplayOrder = 12, IsActive = true, CreatedAt = DateTime.Now });
+        var knownPermissions = await db.Permissions.Select(x => x.PermissionCode).ToListAsync(ct);
+        var knownGrants = await db.RolePermissions.Select(x => x.RoleCode + "|" + x.PermissionCode).ToListAsync(ct);
+        foreach (var action in new[] { "view", "distribute" })
+        {
+            var permission = code + "." + action;
+            if (!knownPermissions.Contains(permission))
+                db.Permissions.Add(new Permission { PermissionCode = permission, FunctionCode = code, Action = action,
+                    IsActive = true, CreatedAt = DateTime.Now });
+            foreach (var role in new[] { "Admin", "General", "Worker" })
+            {
+                if (knownGrants.Contains(role + "|" + permission)) continue;
+                var allowed = role == "Admin" || role == "General" && action == "view";
+                db.RolePermissions.Add(new RolePermission { RoleCode = role, PermissionCode = permission,
+                    IsAllowed = allowed, CreatedAt = DateTime.Now });
+            }
+        }
+        if (!await db.FunctionVisibilities.AnyAsync(v => v.TargetType == "PC" && v.TargetCode == code, ct))
+            db.FunctionVisibilities.Add(new FunctionVisibility { TargetType = "PC", TargetCode = code, IsVisible = true });
+    }
 }

@@ -229,7 +229,7 @@ fun ReceivingDetailScreen(
                     Button(
                         onClick = {
                             val deviceCode = ApiClient.tokens.htSettingsBlocking().printerDeviceCode
-                            if (deviceCode.isBlank()) onOpenSettings() else vm.issueLabelAndConfirm(deviceCode)
+                            vm.issueLabelAndConfirm(deviceCode)
                         },
                         enabled = !state.busy,
                         shape = RoundedCornerShape(8.dp),
@@ -245,7 +245,7 @@ fun ReceivingDetailScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(clock = nowClock(), right = poNo)
+        HtBottomInset()
     }
 
     state.error?.let { (code, message) ->

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
 using Ims.Domain.Masters;
@@ -33,8 +33,8 @@ internal sealed class ZoneService(ImsDbContext db) : IZoneService
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(z => EF.Functions.Like(z.ZoneCode, "%" + s + "%")
-                                  || EF.Functions.Like(z.ZoneName, "%" + s + "%"));
+            query = query.Where(z => EF.Functions.Like(z.ZoneCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(z.ZoneName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
 
@@ -71,7 +71,7 @@ internal sealed class ZoneService(ImsDbContext db) : IZoneService
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.Zones.Add(z);
         await db.SaveChangesAsync(ct);
@@ -92,7 +92,7 @@ internal sealed class ZoneService(ImsDbContext db) : IZoneService
         z.IsActive = body.IsActive;
         z.Remark1 = body.Remark1; z.Remark2 = body.Remark2; z.Remark3 = body.Remark3;
         z.Remark4 = body.Remark4; z.Remark5 = body.Remark5;
-        z.UpdatedAt = DateTime.UtcNow;
+        z.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<ZoneDto>(Map(z)));
     }
@@ -102,8 +102,8 @@ internal sealed class ZoneService(ImsDbContext db) : IZoneService
         var z = await db.Zones.FirstOrDefaultAsync(x => x.ZoneCode == code && !x.IsDeleted, ct);
         if (z is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Zone")));
         if (await db.Locations.AnyAsync(l => l.ZoneCode == code && !l.IsDeleted, ct))
-            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        z.IsDeleted = true; z.UpdatedAt = DateTime.UtcNow;
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        z.IsDeleted = true; z.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

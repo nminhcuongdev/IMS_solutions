@@ -20,6 +20,7 @@ import { useRowNav } from "@/lib/useShortcuts";
 import { useRowSelect } from "@/lib/rowSelect";
 import { BTN_ICON } from "@/layout/icons";
 import { LocationLabelModal } from "@/pages/LocationLabelModal";
+import { errorText } from "@/lib/errorText";
 
 type ModalMode = "new" | "edit" | "copy" | null;
 
@@ -78,12 +79,12 @@ export function LocationPage() {
       for (const c of selected) await deleteLocation(c);
       setSelected(new Set()); await load();
       toast.ok(`${t("toastDeleted", "Deleted")}: ${n}`);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         onExport={async () => {
           try { const { blob, filename } = await exportLocationsCsv();
             const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; a.click(); URL.revokeObjectURL(u);
-          } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+          } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         disableEdit={!selectedRow} disableCopy={!selectedRow} disableDelete={selected.size === 0}
         extraKeys={rowNav}
@@ -212,7 +213,7 @@ function LocationModal({ mode, source, onClose, onSaved }: {
           const saved = isEdit ? await updateLocation(source!.locationCode, form) : await createLocation(form);
           onSaved(saved.locationCode);
         }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); } finally { setSaving(false); }
+        catch (ex: any) { setErr(errorText(t, ex)); } finally { setSaving(false); }
       }}>
       <Field label={t("thType", "Type")}>
         <select value={form.locationType} disabled={isEdit}

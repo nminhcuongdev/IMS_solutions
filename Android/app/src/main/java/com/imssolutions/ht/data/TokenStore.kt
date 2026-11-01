@@ -1,6 +1,7 @@
 package com.imssolutions.ht.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -23,6 +24,8 @@ class TokenStore(private val context: Context) {
         val PRINTER_DEVICE_CODE = stringPreferencesKey("printer_driver")
         val ZONE_CODE = stringPreferencesKey("zone_code")
         val LANG_DATA_AT = stringPreferencesKey("lang_data_at")
+        val REMEMBER_ME = booleanPreferencesKey("remember_me")
+        val REMEMBERED_USER = stringPreferencesKey("remembered_user")
     }
 
     data class HtSettings(
@@ -90,6 +93,24 @@ class TokenStore(private val context: Context) {
             it.remove(Keys.TOKEN); it.remove(Keys.USER_CODE); it.remove(Keys.USER_NAME)
             it.remove(Keys.USER_LANG)
         }
+    }
+
+    data class Remembered(val enabled: Boolean, val userCode: String)
+
+    val remembered: Flow<Remembered> = context.dataStore.data.map { p ->
+        val on = p[Keys.REMEMBER_ME] ?: true
+        Remembered(on, if (on) p[Keys.REMEMBERED_USER].orEmpty() else "")
+    }
+
+    suspend fun saveRemembered(enabled: Boolean, userCode: String) {
+        context.dataStore.edit {
+            it[Keys.REMEMBER_ME] = enabled
+            if (enabled) it[Keys.REMEMBERED_USER] = userCode else it.remove(Keys.REMEMBERED_USER)
+        }
+    }
+
+    fun forgetSessionIfNotRemembered() = runBlocking {
+        if (remembered.first().enabled.not()) clear()
     }
 
     fun tokenBlocking(): String? = runBlocking { session.first()?.token }

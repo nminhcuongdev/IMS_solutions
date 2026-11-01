@@ -2,6 +2,7 @@ package com.imssolutions.ht.data
 
 import android.content.Context
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -11,6 +12,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.HttpException
 import retrofit2.Retrofit
 import com.imssolutions.ht.BuildConfig
+import com.imssolutions.ht.update.UpdateStore
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -32,11 +34,13 @@ object ApiClient {
 
     @Volatile private var service: ApiService? = null
     @Volatile private var tokenStore: TokenStore? = null
+    @Volatile private var updateStore: UpdateStore? = null
 
     fun init(context: Context) {
         if (service != null) return
         val store = TokenStore(context.applicationContext)
         tokenStore = store
+        updateStore = UpdateStore(context.applicationContext)
 
         val auth = Interceptor { chain ->
             val token = store.tokenBlocking()
@@ -88,6 +92,11 @@ object ApiClient {
 
     val tokens: TokenStore
         get() = tokenStore ?: error("ApiClient.init() chưa được gọi")
+
+    val updates: UpdateStore
+        get() = updateStore ?: error("ApiClient.init() chưa được gọi")
+
+    suspend fun userCode(): String? = tokenStore?.session?.first()?.userCode?.takeIf { it.isNotBlank() }
 
     suspend fun <T> call(block: suspend ApiService.() -> T): T =
         try {

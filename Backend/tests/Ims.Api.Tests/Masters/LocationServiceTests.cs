@@ -296,7 +296,7 @@ public class LocationServiceTests
 
         var res = await new LocationService(t.Db).DeleteAsync("W1", default);
 
-        ResultAssert.Conflict(res);
+        ResultAssert.InUse(res);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class LocationServiceTests
 
         var res = await new LocationService(t.Db).DeleteAsync("W1_ZA", default);
 
-        ResultAssert.Conflict(res);
+        ResultAssert.InUse(res);
     }
 
     [Fact]

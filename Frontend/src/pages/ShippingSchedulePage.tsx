@@ -11,7 +11,7 @@ import { listItems } from "@/api/items";
 import { listPartners } from "@/api/partners";
 import { CsvButton, ImportButton, NewButton, PrintButton, SearchButton, ShortageButton, StatusChangeButton } from "@/lib/Buttons";
 import { ScheduleImportModal } from "@/pages/ScheduleImportModal";
-import { defaultDateRange, DateRange, useDateDraft } from "@/lib/DateRange";
+import { defaultDateRange, DateRange, useDateDraft, localIsoDate } from "@/lib/DateRange";
 import { Field, ModalShell } from "@/lib/ModalShell";
 import { PageFooter } from "@/lib/PageFooter";
 import { PAGE_SIZES } from "@/lib/Pager";
@@ -27,6 +27,7 @@ import { ShippingLabelModal } from "@/pages/ShippingLabelModal";
 import { useT } from "@/i18n/LanguageContext";
 import { ShortageModal, ShortageReasonCell, useShortageReasons } from "@/pages/ShortageModal";
 import { StatusChangeModal } from "@/pages/StatusChangeModal";
+import { errorText } from "@/lib/errorText";
 
 
 const COLS = 20;
@@ -124,7 +125,7 @@ export function ShippingSchedulePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   const search = () => {
@@ -330,7 +331,7 @@ function NewShippingModal({ onClose, onSaved }: {
   const t = useT();
   const [form, setForm] = useState<ShippingPlanWrite>({
     slipNo: "", serialNo: "01", customerCode: "", itemCode: "",
-    plannedQty: 1, scheduledDate: new Date().toISOString().slice(0, 10),
+    plannedQty: 1, scheduledDate: localIsoDate(),
     gateCode: "", invoiceNo: "",
   });
   const [saving, setSaving] = useState(false);
@@ -349,7 +350,7 @@ function NewShippingModal({ onClose, onSaved }: {
       onSubmit={async e => {
         e.preventDefault(); setSaving(true); setErr(null);
         try { await createShippingPlan(form); onSaved(form.slipNo.trim()); }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); }
+        catch (ex: any) { setErr(errorText(t, ex)); }
         finally { setSaving(false); }
       }}>
       <Field label={t("thSlipNo", "Slip No")}>

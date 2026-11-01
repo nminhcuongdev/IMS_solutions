@@ -66,15 +66,15 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         if (dateFrom is { } from) query = query.Where(p => p.ScheduledDate >= from);
         if (dateTo is { } to) query = query.Where(p => p.ScheduledDate <= to);
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(p => EF.Functions.Like(p.ItemCode, "%" + ic + "%"));
+            query = query.Where(p => EF.Functions.Like(p.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(slipNo) is { } sn)
-            query = query.Where(p => EF.Functions.Like(p.SoNo, "%" + sn + "%"));
+            query = query.Where(p => EF.Functions.Like(p.SoNo, LikeContains(sn), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(p => db.Items.Any(i =>
-                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
         if (Trimmed(q) is { } free)
-            query = query.Where(p => EF.Functions.Like(p.SoNo, "%" + free + "%")
-                                  || EF.Functions.Like(p.ItemCode, "%" + free + "%"));
+            query = query.Where(p => EF.Functions.Like(p.SoNo, LikeContains(free), LikeEscape)
+                                  || EF.Functions.Like(p.ItemCode, LikeContains(free), LikeEscape));
         if (ShippingStatus.FromApiName(Trimmed(status)) is { } st)
             query = query.Where(p => p.Status == st);
 
@@ -100,7 +100,7 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
 
         var partnerCode = NullIfBlank(body.CustomerCode)?.Trim();
         if (partnerCode is not null
-            && !await db.Partners.AnyAsync(p => p.PartnerCode == partnerCode && !p.IsDeleted, ct))
+            && !await db.Partners.AnyAsync(p => p.PartnerCode == partnerCode && !p.IsDeleted && p.IsCustomer, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Partner")));
 
         var factoryCode = NullIfBlank(body.FactoryCode)?.Trim();
@@ -119,11 +119,13 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
             FactoryCode = factoryCode,
             GateCode = NullIfBlank(body.GateCode)?.Trim(),
             InvoiceNo = NullIfBlank(body.InvoiceNo)?.Trim(),
-            ScheduledDate = body.ScheduledDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            ScheduledDate = body.ScheduledDate ?? DateOnly.FromDateTime(DateTime.Now),
             Status = ShippingStatus.Pending,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             CreatedBy = user.FindFirst(ClaimTypes.NameIdentifier)?.Value,
         };
+        if (await db.ShippingPlans.AnyAsync(x => x.SoNo == plan.SoNo && x.SoBranchNo == plan.SoBranchNo, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
         db.ShippingPlans.Add(plan);
         await db.SaveChangesAsync(ct);
 
@@ -164,7 +166,7 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
 
         var skipped = new SortedSet<string>(StringComparer.Ordinal);
         var updated = 0;
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         foreach (var row in rows)
         {
             if (row.Status is ShippingStatus.Shipped or ShippingStatus.Cancelled)
@@ -191,7 +193,7 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         _ => null,
     };
 
-    public async Task<ServiceResult> RegisterShortageAsync(string soNo, ShippingShortageDto body, CancellationToken ct)
+    public async Task<ServiceResult> RegisterShortageAsync(string soNo, ShippingShortageDto body, CancellationToken ct, ClaimsPrincipal? user = null)
     {
         if (body.ShortageQty is not { } shortageQty || shortageQty < 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
@@ -215,15 +217,163 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
 
         var plan = open[0];
         if (shortageQty > plan.Qty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
+        var shipped = plan.Qty - shortageQty;
+        var delta = shipped - plan.ActualQty;
+        if (delta < 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
-        plan.ActualQty = plan.Qty - shortageQty;
+        var now = DateTime.Now;
+        var worker = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var picks = await db.PickingPlans
+            .Where(p => p.SoNo == plan.SoNo && p.SoBranchNo == plan.SoBranchNo && p.ItemCode == plan.ItemCode
+                     && p.Status != Domain.Picking.PickingStatus.Cancelled)
+            .OrderByDescending(p => p.No)
+            .ToListAsync(ct);
+        if (picks.Count > 0 && shipped > picks.Sum(p => p.PickedQty))
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
+
+        if (delta > 0)
+        {
+            var taken = new List<Domain.Inventory.Stock>();
+            var allocations = new List<Inventory.StockAllocation>();
+            if (picks.Count == 0
+                && await Inventory.StockMovement.TakeAsync(db, plan.ItemCode, null, null, delta,
+                       Domain.Inventory.InventoryAction.Shipping, reasonCode, worker, ErrorCatalog.Lot002(), ct, taken, allocations) is { } refused)
+                return refused;
+
+            var shelves = taken.Select(x => x.LocationCode).Distinct().ToList();
+            var lots = taken.Select(x => x.LotNo).Distinct().ToList();
+            var result = new ShippingResult
+            {
+                SoNo = plan.SoNo,
+                SoBranchNo = plan.SoBranchNo,
+                ItemCode = plan.ItemCode,
+                Qty = shipped,
+                LocationCode = shelves.Count == 1 ? shelves[0] : null,
+                LotNo = lots.Count == 1 ? lots[0] : null,
+                CreatedAt = now,
+                CreatedBy = worker,
+            };
+            db.ShippingResults.Add(result);
+            foreach (var allocation in allocations)
+                db.ShippingResultLots.Add(new ShippingResultLot
+                {
+                    ShippingResult = result, CreatedAt = now, ItemCode = plan.ItemCode,
+                    LotNo = allocation.LotNo, SerialNo = allocation.SerialNo,
+                    Qty = allocation.Qty, CreatedBy = worker ?? "system",
+                });
+            if (picks.Count > 0)
+                await AddPickedShipmentLotsAsync(result, plan.SoNo, plan.SoBranchNo, plan.ItemCode,
+                    plan.ActualQty, delta, worker, ct);
+        }
+
+        var unshipped = picks.Sum(p => p.PickedQty) - shipped;
+        foreach (var pick in picks)
+        {
+            if (unshipped <= 0) break;
+            var back = Math.Min(pick.PickedQty, unshipped);
+            if (back <= 0) continue;
+            unshipped -= back;
+            await ReturnPickedAsync(pick, back, plan.FactoryCode, reasonCode, worker, now, ct);
+            pick.PickedQty -= back;
+            pick.Status = pick.PickedQty >= pick.Qty
+                ? Domain.Picking.PickingStatus.Picked
+                : Domain.Picking.PickingStatus.NotPicked;
+            pick.UpdatedAt = now;
+            if (worker is not null) pick.UpdatedBy = worker;
+        }
+
+        plan.ActualQty = shipped;
         plan.Status = ShippingStatus.Partial;
         plan.ReasonCode = reasonCode;
-        plan.UpdatedAt = DateTime.UtcNow;
+        plan.UpdatedAt = now;
+        if (worker is not null) plan.UpdatedBy = worker;
         await db.SaveChangesAsync(ct);
 
         var dto = await LoadPlanDtoAsync(db, plan.No, ct);
         return Outcome.Ok(new ApiSuccess<ShippingPlanDto>(dto!));
+    }
+
+    private async Task ReturnPickedAsync(
+        Domain.Picking.PickingPlan pick, decimal qty, string? planFactory, string? reasonCode,
+        string? worker, DateTime now, CancellationToken ct)
+    {
+        var lots = await db.PickingResultLots
+            .Where(l => l.PickingResult.SoNo == pick.SoNo
+                     && l.PickingResult.SoBranchNo == pick.SoBranchNo && l.ItemCode == pick.ItemCode)
+            .OrderByDescending(l => l.PickingResultNo).ThenByDescending(l => l.No)
+            .ToListAsync(ct);
+        if (lots.Count == 0)
+        {
+            var source = await db.PickingResults
+                .Where(r => r.SoNo == pick.SoNo && r.SoBranchNo == pick.SoBranchNo && r.ItemCode == pick.ItemCode)
+                .OrderByDescending(r => r.No).FirstOrDefaultAsync(ct);
+            var location = source?.LocationCode ?? pick.LocationCode;
+            var sourceLot = source?.LotNo;
+            var stock = await db.Stocks.Where(s => s.ItemCode == pick.ItemCode && s.LocationCode == location
+                && s.LotNo == sourceLot && !s.IsOnHold).OrderBy(s => s.SerialNo).FirstOrDefaultAsync(ct);
+            if (stock is null)
+            {
+                var factory = planFactory ?? await db.Locations.Where(l => l.LocationCode == location && l.ZoneCode != null)
+                    .Join(db.Zones, l => l.ZoneCode, z => z.ZoneCode, (l, z) => z.FactoryCode)
+                    .FirstAsync(ct);
+                stock = new Domain.Inventory.Stock
+                {
+                    ItemCode = pick.ItemCode, SerialNo = $"PCK-{source?.No ?? pick.No:D10}-{now:yyMMddHHmmss}",
+                    LotNo = source?.LotNo, LocationCode = location, FactoryCode = factory,
+                };
+                db.Stocks.Add(stock);
+            }
+            stock.StockQty += qty;
+            stock.Recalculate();
+            stock.UpdatedAt = now;
+            stock.UpdatedBy = worker;
+            db.InventoryHistories.Add(new Domain.Inventory.InventoryHistory
+            {
+                CreatedAt = now, ItemCode = stock.ItemCode, FactoryCode = stock.FactoryCode,
+                LocationCode = stock.LocationCode, LotNo = stock.LotNo, SerialNo = stock.SerialNo,
+                ActionType = Domain.Inventory.InventoryAction.Picking, Qty = qty,
+                ReasonCode = reasonCode, CreatedBy = worker,
+            });
+            return;
+        }
+        var remaining = qty;
+        foreach (var lot in lots)
+        {
+            if (remaining <= 0) break;
+            var returned = Math.Min(lot.Qty, remaining);
+            if (returned <= 0) continue;
+            remaining -= returned;
+            lot.Qty -= returned;
+            if (lot.Qty == 0) db.PickingResultLots.Remove(lot);
+            var stock = await db.Stocks.SingleOrDefaultAsync(s => s.ItemCode == lot.ItemCode && s.SerialNo == lot.SerialNo, ct);
+            if (stock is null)
+            {
+                var location = await db.PickingResults.Where(r => r.No == lot.PickingResultNo)
+                    .Select(r => r.LocationCode).SingleAsync(ct);
+                var factory = planFactory ?? await db.Locations.Where(l => l.LocationCode == location && l.ZoneCode != null)
+                    .Join(db.Zones, l => l.ZoneCode, z => z.ZoneCode, (l, z) => z.FactoryCode)
+                    .FirstAsync(ct);
+                stock = new Domain.Inventory.Stock
+                {
+                    ItemCode = lot.ItemCode, SerialNo = lot.SerialNo, LotNo = lot.LotNo,
+                    LocationCode = location, FactoryCode = factory,
+                };
+                db.Stocks.Add(stock);
+            }
+            stock.StockQty += returned;
+            stock.Recalculate();
+            stock.UpdatedAt = now;
+            stock.UpdatedBy = worker;
+            db.InventoryHistories.Add(new Domain.Inventory.InventoryHistory
+            {
+                CreatedAt = now, ItemCode = stock.ItemCode, FactoryCode = stock.FactoryCode,
+                LocationCode = stock.LocationCode, LotNo = stock.LotNo, SerialNo = stock.SerialNo,
+                ActionType = Domain.Inventory.InventoryAction.Picking, Qty = returned,
+                ReasonCode = reasonCode, CreatedBy = worker,
+            });
+        }
+        if (remaining > 0)
+            throw new InvalidOperationException("Picking allocation is missing for stock restoration.");
     }
 
     public async Task<ServiceResult> ListResultsAsync(
@@ -238,12 +388,12 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         if (dateTo is { } to)
             query = query.Where(r => r.CreatedAt < to.AddDays(1).ToDateTime(TimeOnly.MinValue));
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(r => EF.Functions.Like(r.ItemCode, "%" + ic + "%"));
+            query = query.Where(r => EF.Functions.Like(r.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(slipNo) is { } sn)
-            query = query.Where(r => r.SoNo != null && EF.Functions.Like(r.SoNo, "%" + sn + "%"));
+            query = query.Where(r => r.SoNo != null && EF.Functions.Like(r.SoNo, LikeContains(sn), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(r => db.Items.Any(i =>
-                i.ItemCode == r.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == r.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
 
         query = Trimmed(slipNoPresence) switch
         {
@@ -312,7 +462,7 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         var delta = qty - (plan?.ActualQty ?? 0m);
         if (delta < 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         var worker = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         var picks = plan is null
@@ -322,12 +472,13 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
                          && p.Status != Domain.Picking.PickingStatus.Cancelled)
                 .Select(p => new { p.PickedQty, p.LocationCode }).ToListAsync(ct);
         var taken = new List<Domain.Inventory.Stock>();
+        var allocations = new List<Inventory.StockAllocation>();
         if (picks is { Count: > 0 })
         {
             if (qty > picks.Sum(p => p.PickedQty)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
         }
         else if (await Inventory.StockMovement.TakeAsync(db, itemCode, lotNo, locationCode, delta,
-                     Domain.Inventory.InventoryAction.Shipping, reasonCode, worker, ErrorCatalog.Lot002(), ct, taken) is { } refused)
+                     Domain.Inventory.InventoryAction.Shipping, reasonCode, worker, ErrorCatalog.Lot002(), ct, taken, allocations) is { } refused)
             return refused;
 
         var shelves = new List<string?>();
@@ -362,6 +513,16 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
             CreatedBy = worker,
         };
         db.ShippingResults.Add(row);
+        foreach (var allocation in allocations)
+            db.ShippingResultLots.Add(new ShippingResultLot
+            {
+                ShippingResult = row, CreatedAt = now, ItemCode = itemCode,
+                LotNo = allocation.LotNo, SerialNo = allocation.SerialNo,
+                Qty = allocation.Qty, CreatedBy = worker ?? "system",
+            });
+        if (plan is not null && picks is { Count: > 0 })
+            await AddPickedShipmentLotsAsync(row, plan.SoNo, plan.SoBranchNo, itemCode,
+                plan.ActualQty, delta, worker, ct);
 
         if (plan is not null)
         {
@@ -378,6 +539,34 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         var dto = await LoadResultDtoAsync(db, row.No, ct);
         return Outcome.Created($"/shipping-result?slipNo={row.SoNo}",
             new ApiSuccess<ShippingResultDto>(dto!));
+    }
+
+    private async Task AddPickedShipmentLotsAsync(ShippingResult result, string soNo, string branchNo,
+        string itemCode, decimal alreadyShipped, decimal qty, string? worker, CancellationToken ct)
+    {
+        var lots = await db.PickingResultLots
+            .Where(l => l.PickingResult.SoNo == soNo && l.PickingResult.SoBranchNo == branchNo && l.ItemCode == itemCode)
+            .OrderBy(l => l.PickingResultNo).ThenBy(l => l.No).ToListAsync(ct);
+        var skip = alreadyShipped;
+        var remaining = qty;
+        foreach (var lot in lots)
+        {
+            if (remaining <= 0) break;
+            if (skip >= lot.Qty)
+            {
+                skip -= lot.Qty;
+                continue;
+            }
+            var shipped = Math.Min(lot.Qty - skip, remaining);
+            skip = 0;
+            remaining -= shipped;
+            db.ShippingResultLots.Add(new ShippingResultLot
+            {
+                ShippingResult = result, CreatedAt = result.CreatedAt, ItemCode = itemCode,
+                LotNo = lot.LotNo, SerialNo = lot.SerialNo, Qty = shipped,
+                CreatedBy = worker ?? "system",
+            });
+        }
     }
 
     public async Task<ServiceResult> ExportPlansCsvAsync(CancellationToken ct)

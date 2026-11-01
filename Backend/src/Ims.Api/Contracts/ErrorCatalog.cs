@@ -15,6 +15,12 @@ public static class ErrorCatalog
         new("VAL-005", 400, "Error",
             $"コードは{max}文字以内で入力してください（現在 {code.Length} 文字: {code}）。");
 
+    public static ApiErrorBody Val005FieldTooLong() =>
+        new("VAL-005", 400, "Error", "入力値が項目の最大文字数を超えています。");
+
+    public static ApiErrorBody Val006() =>
+        new("VAL-006", 400, "Error", "終了日は開始日以降にしてください。");
+
     public static ApiErrorBody Sel002() =>
         new("SEL-002", 400, "Error", "削除する行を1件以上選択してください。");
 
@@ -27,14 +33,36 @@ public static class ErrorCatalog
     public static ApiErrorBody Qty002() =>
         new("QTY-002", 400, "Error", "スキャンした数量が予定数量を超えています。数量をご確認ください。");
 
+    public static ApiErrorBody Qty003() => new("QTY-003", 400, "Error", "0より大きい数量を入力してください。");
+    public static ApiErrorBody Qty004() => new("QTY-004", 409, "Error", "数量が、正味の投入数量（投入 − 返却）を超えています。");
+    public static ApiErrorBody Val008() => new("VAL-008", 400, "Error", "単位が品目マスタの単位と一致しません。");
+    public static ApiErrorBody Val009() => new("VAL-009", 400, "Error", "この品目は品目グループの区分のため、ここでは使用できません。");
+    public static ApiErrorBody Val010() => new("VAL-010", 400, "Error", "製造する製品はロット管理対象の品目にしてください。");
+
     public static ApiErrorBody Rsn001() =>
         new("RSN-001", 400, "Error", "理由を選択してください。");
 
     public static ApiErrorBody Dup001() =>
         new("DUP-001", 409, "Error", "このコードは既に使用されています。別のコードを入力してください。");
 
+    public static ApiErrorBody Del001() =>
+        new("DEL-001", 409, "Error", "このデータは他のデータから参照されているため削除できません。");
+
     public static ApiErrorBody Dup002() =>
         new("DUP-002", 409, "Error", "このラベルは既に登録されています。");
+
+    public static ApiErrorBody Dup003() => new("DUP-003", 409, "Error", "このロット番号は同じ品目ですでに使用されています。");
+    public static ApiErrorBody Sts004() => new("STS-004", 409, "Error", "完了済みまたは取消済みの製造指示には実績を登録できません。");
+    public static ApiErrorBody Sts002() => new("STS-002", 409, "Error", "選択した行はすでに完了しています。");
+    public static ApiErrorBody Sts003() => new("STS-003", 409, "Error", "選択した行の状態が混在しています。");
+    public static ApiErrorBody Sts005() => new("STS-005", 409, "Error", "実績のある製造指示は取消できません。先に実績を取消してください。");
+    public static ApiErrorBody Scn010() => new("SCN-010", 409, "Error", "スキャンした工程は、この製造指示のHT投入対象ではありません。");
+    public static ApiErrorBody Loc004() => new("LOC-004", 409, "Error", "このロケーションは、製造指示の工場に属していません。");
+    public static ApiErrorBody Inv008() => new("INV-008", 409, "Error", "この実績はすでに取消済みです。");
+    public static ApiErrorBody Inv009() => new("INV-009", 409, "Error", "入力した数量に対して在庫が不足しています。");
+    public static ApiErrorBody Auth006() => new("AUTH-006", 403, "Error", "この操作を行う権限がありません。");
+    public static ApiErrorBody Imp004() => new("IMP-004", 400, "Error", "同じ製造指示番号の行で、製造指示の項目が一致しません。ファイルをご確認ください。");
+    public static ApiErrorBody Imp005() => new("IMP-005", 400, "Error", "同じ製造指示内で行番号（Line No）が重複しています。");
 
 
     public static ApiErrorBody Lot001() =>
@@ -51,6 +79,11 @@ public static class ErrorCatalog
 
     public static ApiErrorBody Inv005() =>
         new("INV-005", 409, "Error", "この在庫は現在利用できません。");
+
+    public static ApiErrorBody Inv006() =>
+        new("INV-006", 409, "Error", "この在庫は出荷済みです。");
+
+    public static ApiErrorBody Inv001() => new("INV-001", 409, "Error", "使用期限が切れています。");
 
     public static ApiErrorBody Scn006() =>
         new("SCN-006", 409, "Error", "指定されたLotと一致しません。");
@@ -71,6 +104,8 @@ public static class ErrorCatalog
     public static ApiErrorBody Imp002() =>
         new("IMP-002", 400, "Error", "CSVのヘッダーがこの画面の想定列と一致しません。ファイルをご確認の上、再度お試しください。");
 
+    public static ApiErrorBody Sys404(string what) => new("SYS-404", 404, "Error", $"{what}が存在しない、または無効です。");
+
     public static ApiErrorBody Prn001() =>
         new("PRN-001", 500, "Error",
             "Label Engineからのプレビュー取得に失敗しました。アプリケーションが起動していること、プリンタドライバー名が正しいことを確認してください。");
@@ -81,6 +116,9 @@ public static class ErrorCatalog
 
     public static ApiErrorBody NotFound(string what) =>
         new("SYS-404", 404, "Error", $"{what} が見つかりません。");
+
+    public static ApiErrorBody Db001() =>
+        new("DB-001", 500, "Critical", "DBに接続できません。");
 
     public static ApiErrorBody Sys004() =>
         new("SYS-004", 500, "Error", "APIからエラーレスポンスを受信しました。");

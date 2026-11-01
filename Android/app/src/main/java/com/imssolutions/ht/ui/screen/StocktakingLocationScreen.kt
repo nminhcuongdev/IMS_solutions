@@ -113,7 +113,7 @@ fun StocktakingLocationScreen(
             }
         }
 
-        HtStatusBar(clock = nowClock(), right = state.locationCode ?: "—")
+        HtBottomInset()
     }
 }
 

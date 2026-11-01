@@ -30,8 +30,8 @@ public static class ReturnsEndpoints
         (await service.ListPlansAsync(ct: ct, page: page, pageSize: pageSize, sort: sort, q: q, dateFrom: dateFrom, dateTo: dateTo, itemCode: itemCode, itemName: itemName, returnNo: returnNo, status: status)).ToHttpResult();
 
     private static async Task<IResult> CreatePlanAsync(
-        [FromServices] IReturnsService service, [FromBody] ReturnPlanWriteDto body, CancellationToken ct) =>
-        (await service.CreatePlanAsync(body: body, ct: ct)).ToHttpResult();
+        [FromServices] IReturnsService service, [FromBody] ReturnPlanWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.CreatePlanAsync(body: body, ct: ct, user: user)).ToHttpResult();
 
     private static async Task<IResult> ChangeStatusAsync(
         [FromServices] IReturnsService service, [FromBody] ReturnStatusChangeDto body, CancellationToken ct) =>
@@ -39,8 +39,8 @@ public static class ReturnsEndpoints
 
     private static async Task<IResult> RegisterShortageAsync(
         [FromServices] IReturnsService service, string returnNo, [FromBody] ReturnShortageDto body,
-        CancellationToken ct) =>
-        (await service.RegisterShortageAsync(returnNo: returnNo, body: body, ct: ct)).ToHttpResult();
+        ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.RegisterShortageAsync(returnNo: returnNo, body: body, ct: ct, user: user)).ToHttpResult();
 
     private static async Task<IResult> ListResultsAsync(
         [FromServices] IReturnsService service, CancellationToken ct, [FromQuery] int? page = null,

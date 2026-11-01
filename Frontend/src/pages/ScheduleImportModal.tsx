@@ -5,6 +5,7 @@ import {
 } from "@/api/imports";
 import { ModalShell } from "@/lib/ModalShell";
 import { useT } from "@/i18n/LanguageContext";
+import { errorText } from "@/lib/errorText";
 
 function reason(t: (k: string, f: string) => string, r: ImportRowError): string {
   const s = t(r.code, r.message);
@@ -33,7 +34,7 @@ export function ScheduleImportModal({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { setErr(ex?.message ?? String(ex)); }
+    } catch (ex: any) { setErr(errorText(t, ex)); }
   };
 
   const onSubmit = async (e: FormEvent) => {
@@ -48,7 +49,7 @@ export function ScheduleImportModal({
         onDone(r.importedCount);
       }
     } catch (ex: any) {
-      setErr(ex?.code ? t(ex.code, ex.message) : (ex?.message ?? String(ex)));
+      setErr(errorText(t, ex));
     } finally {
       setBusy(false);
     }

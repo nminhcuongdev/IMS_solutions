@@ -26,7 +26,8 @@ internal sealed class ImportService(ImsDbContext db) : IImportService
         string[] Sample,
         Dictionary<string, Fld> Aliases,
         bool BlankDateIsToday,
-        bool PackageMultiple);
+        bool PackageMultiple,
+        Func<ImsDbContext, List<string>, CancellationToken, Task<List<(string No, string Branch)>>> Existing);
 
     private static int MaxLength(Fld f) =>
         f is Fld.DocNo or Fld.BranchNo or Fld.InvoiceNo ? 30 : MaxCodeLength;
@@ -50,7 +51,10 @@ internal sealed class ImportService(ImsDbContext db) : IImportService
         Aliases(("pono", Fld.DocNo), ("pobranchno", Fld.BranchNo), ("serialno", Fld.BranchNo),
                 ("partnercode", Fld.PartnerCode), ("supplier", Fld.PartnerCode), ("suppliercode", Fld.PartnerCode),
                 ("factorycode", Fld.FactoryCode), ("factory", Fld.FactoryCode)),
-        BlankDateIsToday: true, PackageMultiple: true);
+        BlankDateIsToday: true, PackageMultiple: true,
+        Existing: async (db, nos, ct) => (await db.ReceivingPlans.AsNoTracking()
+            .Where(p => nos.Contains(p.PoNo)).Select(p => new { p.PoNo, p.PoBranchNo }).ToListAsync(ct))
+            .Select(p => (p.PoNo, p.PoBranchNo)).ToList());
 
     private static readonly ImportDef Shipping = new(
         "shipping_schedule",
@@ -62,7 +66,10 @@ internal sealed class ImportService(ImsDbContext db) : IImportService
                 ("partnercode", Fld.PartnerCode), ("customer", Fld.PartnerCode), ("customercode", Fld.PartnerCode),
                 ("factorycode", Fld.FactoryCode), ("factory", Fld.FactoryCode),
                 ("gatecode", Fld.GateCode), ("gate", Fld.GateCode), ("invoiceno", Fld.InvoiceNo)),
-        BlankDateIsToday: true, PackageMultiple: false);
+        BlankDateIsToday: true, PackageMultiple: false,
+        Existing: async (db, nos, ct) => (await db.ShippingPlans.AsNoTracking()
+            .Where(p => nos.Contains(p.SoNo)).Select(p => new { p.SoNo, p.SoBranchNo }).ToListAsync(ct))
+            .Select(p => (p.SoNo, p.SoBranchNo)).ToList());
 
     private static readonly ImportDef Returns = new(
         "returns_schedule",
@@ -75,7 +82,10 @@ internal sealed class ImportService(ImsDbContext db) : IImportService
                 ("factorycode", Fld.FactoryCode), ("factory", Fld.FactoryCode),
                 ("expectedqty", Fld.Qty), ("returndate", Fld.ScheduledDate),
                 ("invoiceno", Fld.InvoiceNo), ("lotno", Fld.LotNo), ("lot", Fld.LotNo)),
-        BlankDateIsToday: true, PackageMultiple: false);
+        BlankDateIsToday: true, PackageMultiple: false,
+        Existing: async (db, nos, ct) => (await db.ReturnPlans.AsNoTracking()
+            .Where(p => nos.Contains(p.ReturnNo)).Select(p => new { p.ReturnNo, p.ReturnBranchNo }).ToListAsync(ct))
+            .Select(p => (p.ReturnNo, p.ReturnBranchNo)).ToList());
 
     private static readonly ImportDef Picking = new(
         "picking_schedule",
@@ -83,7 +93,10 @@ internal sealed class ImportService(ImsDbContext db) : IImportService
         ["SO-20260901-001", "01", "PR-IND4-01", "X01_Y01_Z01", "5", "2026-09-30"],
         Aliases(("sono", Fld.DocNo), ("slipno", Fld.DocNo), ("sobranchno", Fld.BranchNo), ("serialno", Fld.BranchNo),
                 ("locationcode", Fld.LocationCode), ("location", Fld.LocationCode)),
-        BlankDateIsToday: false, PackageMultiple: false);
+        BlankDateIsToday: false, PackageMultiple: false,
+        Existing: async (db, nos, ct) => (await db.PickingPlans.AsNoTracking()
+            .Where(p => nos.Contains(p.SoNo)).Select(p => new { p.SoNo, p.SoBranchNo }).ToListAsync(ct))
+            .Select(p => (p.SoNo, p.SoBranchNo)).ToList());
 
     internal static readonly string[] TemplateHeader = Receiving.Header;
 
@@ -214,6 +227,9 @@ internal sealed class ImportService(ImsDbContext db) : IImportService
         }
         return Done(rows);
     }
+
+    public Task<ServiceResult> ImportProductionOrderAsync(IFormFile? file, ClaimsPrincipal user, CancellationToken ct) =>
+        new ProductionOrderImport(db).RunAsync(file, user, ct);
 
     public ServiceResult ReceivingTemplateAsync() => Template(Receiving);
     public ServiceResult ShippingTemplateAsync() => Template(Shipping);
@@ -354,6 +370,15 @@ internal sealed class ImportService(ImsDbContext db) : IImportService
                 : ((ApiErrorBody?)null, null);
             r.Error = err;
             r.Detail = detail;
+        }
+
+        var taken = (await def.Existing(db, Codes(Fld.DocNo), ct)).ToHashSet();
+        foreach (var r in rows.Where(x => x.Error is null))
+        {
+            var key = (r.Val(Fld.DocNo)!, r.Val(Fld.BranchNo) ?? "01");
+            if (taken.Add(key)) continue;
+            r.Error = ErrorCatalog.Dup001();
+            r.Detail = $"{key.Item1}/{key.Item2}";
         }
         return (null, rows);
     }

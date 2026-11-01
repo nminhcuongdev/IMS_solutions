@@ -3,11 +3,10 @@ import { fillBold, fillText } from "@/lib/fillLabel";
 import { createPrintHistory } from "@/api/history";
 import { getItem, type Item } from "@/api/items";
 import type { ShippingPlanRow } from "@/api/shipping";
-import { useAuth } from "@/auth/AuthContext";
 import { useT } from "@/i18n/LanguageContext";
 import { mlPreviewLabel, mlPrintLabel } from "@/lib/mlEngine";
 import { printErrorText } from "@/lib/printErrors";
-import { buildProductLabelQr, qrDate } from "@/lib/qrPayload";
+import { buildShippingLabelQr } from "@/lib/qrPayload";
 import { useLanPrinters } from "@/lib/useLanPrinters";
 import { LanPrinterField } from "@/pages/LanPrinterField";
 
@@ -20,7 +19,6 @@ export function ShippingLabelModal({
   onPrinted: (labels: number) => void;
 }) {
   const t = useT();
-  const { user } = useAuth();
   const lan = useLanPrinters();
   const [items, setItems] = useState<Record<string, Item>>({});
   const [index, setIndex] = useState(0);
@@ -62,13 +60,11 @@ export function ShippingLabelModal({
     ProductionDate: "",
     ScheduledDate: row.scheduledDate ?? "",
     ReprintFlag: reprint ? "R" : "",
-    QR: buildProductLabelQr({
+    QR: buildShippingLabelQr({
       gtin: items[row.itemCode]?.barcode,
       qty: row.plannedQty,
-      productionDate: qrDate(row.scheduledDate),
       itemCode: row.itemCode,
       itemName: row.itemName,
-      userCode: user?.userCode,
     }),
   });
 

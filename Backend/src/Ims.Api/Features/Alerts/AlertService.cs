@@ -72,23 +72,30 @@ internal sealed class AlertService(ImsDbContext db) : IAlertService
 
     private static Task<(int, IReadOnlyList<AlertRowDto>)> LowStockAsync(ImsDbContext db, CancellationToken ct)
     {
-        var q = from s in db.Stocks.AsNoTracking()
-                join i in db.Items.AsNoTracking() on s.ItemCode equals i.ItemCode
-                where !i.IsDeleted && i.ReorderLevel1 != null && s.StockQty < i.ReorderLevel1
-                orderby s.StockQty, s.ItemCode, s.SerialNo
-                select new QtyRow(s.ItemCode, i.ItemName, s.StockQty, i.ReorderLevel1!.Value);
+        var q = from x in Totals(db)
+                where x.Item.ReorderLevel1 != null && x.Total < x.Item.ReorderLevel1
+                orderby x.Total, x.Item.ItemCode
+                select new QtyRow(x.Item.ItemCode, x.Item.ItemName, x.Total, x.Item.ReorderLevel1!.Value);
         return QtyRowsAsync(q, ct);
     }
 
     private static Task<(int, IReadOnlyList<AlertRowDto>)> OverflowAsync(ImsDbContext db, CancellationToken ct)
     {
-        var q = from s in db.Stocks.AsNoTracking()
-                join i in db.Items.AsNoTracking() on s.ItemCode equals i.ItemCode
-                where !i.IsDeleted && i.SurplusPoint != null && s.StockQty >= i.SurplusPoint
-                orderby s.StockQty descending, s.ItemCode, s.SerialNo
-                select new QtyRow(s.ItemCode, i.ItemName, s.StockQty, i.SurplusPoint!.Value);
+        var q = from x in Totals(db)
+                where x.Item.SurplusPoint != null && x.Total >= x.Item.SurplusPoint
+                orderby x.Total descending, x.Item.ItemCode
+                select new QtyRow(x.Item.ItemCode, x.Item.ItemName, x.Total, x.Item.SurplusPoint!.Value);
         return QtyRowsAsync(q, ct);
     }
+
+    private static IQueryable<ItemTotal> Totals(ImsDbContext db) =>
+        db.Items.AsNoTracking()
+            .Where(i => !i.IsDeleted)
+            .Select(i => new ItemTotal
+            {
+                Item = i,
+                Total = db.Stocks.Where(s => s.ItemCode == i.ItemCode).Sum(s => (decimal?)s.StockQty) ?? 0m,
+            });
 
     private static async Task<(int, IReadOnlyList<AlertRowDto>)> QtyRowsAsync(
         IQueryable<QtyRow> q, CancellationToken ct)

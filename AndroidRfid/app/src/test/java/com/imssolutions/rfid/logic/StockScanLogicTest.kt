@@ -47,6 +47,22 @@ class StockScanLogicTest {
     }
 
     @Test
+    fun a_line_is_not_scanned_short_or_matched_against_its_plan() {
+        assertEquals(LineStatus.NotScanned, StockLine("X", "X", qty = 0, plan = 3).status)
+        assertEquals(LineStatus.Short, StockLine("X", "X", qty = 1, plan = 3).status)
+        assertEquals(LineStatus.Match, StockLine("X", "X", qty = 3, plan = 3).status)
+        assertEquals(LineStatus.NotScanned, StockLine("X", "X", qty = 0, plan = 0).status)
+    }
+
+    @Test
+    fun an_item_that_reached_its_plan_counts_no_further_reads() {
+        val full = board.stockLines(setOf("B01", "B02")).single { it.itemName == "Printer head" }
+        assertEquals(LineStatus.Match, full.status)
+        assertNull(board.acceptStockRead(setOf("B01", "B02"), "B03"))
+        assertEquals(3, board.stockLines(setOf("B01", "B02")).single { it.itemName == "Printer head" }.qty)
+    }
+
+    @Test
     fun item_names_are_distinct_in_list_order() {
         assertEquals(listOf("IND4", "Printer head"), board.itemNames())
     }
@@ -69,12 +85,12 @@ class StockScanLogicTest {
 
     @Test
     fun search_bars_put_confirmed_first_then_strongest_reads_then_unread() {
-        val bars = board.searchBars("Printer head", mapOf("B02" to 40, "B01" to 80))
+        val bars = board.searchBars("Printer head", mapOf("B02" to SearchHit(40, 0L), "B01" to SearchHit(80, 0L)), 0L)
         assertEquals(listOf("B03", "B01", "B02"), bars.map { it.epc })
         assertEquals(listOf(BarKind.Confirmed, BarKind.Read, BarKind.Read), bars.map { it.kind })
         assertEquals(listOf(100, 80, 40), bars.map { it.percent })
 
-        val none = board.searchBars("Printer head", emptyMap())
+        val none = board.searchBars("Printer head", emptyMap(), 0L)
         assertEquals(listOf("B03", "B01", "B02"), none.map { it.epc })
         assertEquals(BarKind.Unread, none[1].kind)
         assertEquals(UNREAD_PERCENT, none[1].percent)
@@ -86,5 +102,69 @@ class StockScanLogicTest {
         assertEquals(MIN_READ_PERCENT, rssiToPercent(-120.0))
         assertTrue(rssiToPercent(-45.0) > rssiToPercent(-70.0))
         assertEquals(55, rssiToPercent(55.0))
+    }
+
+    @Test
+    fun a_tag_keeps_its_signal_while_it_is_still_being_read() {
+        val hit = SearchHit(70, seenAt = 10_000L)
+        assertEquals(70, liveSignal(hit, 10_000L))
+        assertEquals(70, liveSignal(hit, 10_000L + SIGNAL_HOLD_MS))
+    }
+
+    @Test
+    fun a_tag_that_stops_answering_fades_down_to_the_floor_and_is_marked_lost() {
+        val hit = SearchHit(90, seenAt = 0L)
+        val halfway = liveSignal(hit, SIGNAL_HOLD_MS + SIGNAL_FADE_MS / 2)
+        assertTrue(halfway in (MIN_READ_PERCENT + 1) until 90)
+        assertEquals(MIN_READ_PERCENT, liveSignal(hit, SIGNAL_HOLD_MS + SIGNAL_FADE_MS))
+        assertEquals(MIN_READ_PERCENT, liveSignal(hit, 60_000L))
+
+        val bars = board.searchBars("Printer head", mapOf("B01" to hit), 60_000L)
+        assertEquals(BarKind.Lost, bars.single { it.epc == "B01" }.kind)
+        assertEquals(BarKind.Read, board.searchBars("Printer head", mapOf("B01" to hit), 0L).single { it.epc == "B01" }.kind)
+    }
+
+    @Test
+    fun a_serial_typed_by_hand_never_fades() {
+        val hit = SearchHit(100, seenAt = 0L, manual = true)
+        assertEquals(100, liveSignal(hit, 60_000L))
+        assertEquals(BarKind.Read, board.searchBars("Printer head", mapOf("B01" to hit), 60_000L).single { it.epc == "B01" }.kind)
+    }
+
+    @Test
+    fun a_fresh_read_ranks_above_a_lost_tag_that_was_once_stronger() {
+        val bars = board.searchBars(
+            "Printer head",
+            mapOf("B01" to SearchHit(95, seenAt = 0L), "B02" to SearchHit(30, seenAt = 60_000L)),
+            60_000L,
+        )
+        assertEquals(listOf("B03", "B02", "B01"), bars.map { it.epc })
+    }
+
+    @Test
+    fun a_barcode_tells_the_operator_why_it_was_not_counted() {
+        assertEquals(StockScan.Counted("A02"), board.stockScan(emptySet(), " a02\r\n"))
+        assertEquals(StockScan.AlreadyCounted, board.stockScan(setOf("A02"), "A02"))
+        assertEquals(StockScan.AlreadyCounted, board.stockScan(emptySet(), "A01"))
+        assertEquals(StockScan.Unknown, board.stockScan(emptySet(), "ZZZ"))
+        assertEquals(StockScan.Unknown, board.stockScan(emptySet(), "  "))
+    }
+
+    @Test
+    fun a_barcode_for_a_product_already_at_plan_is_refused() {
+        val full = Board(
+            listOf(
+                ScanTag("C01", "X", "Box", isScanned = false),
+                ScanTag("C02", "X", "Box", isScanned = false),
+            ),
+        )
+        assertEquals(StockScan.Counted("C01"), full.stockScan(emptySet(), "C01"))
+        assertEquals(StockScan.AlreadyCounted, full.stockScan(setOf("C01", "C02"), "C01"))
+    }
+
+    @Test
+    fun rfid_reads_and_barcodes_share_one_rule() {
+        assertEquals("A02", board.acceptStockRead(emptySet(), "a02"))
+        assertNull(board.acceptStockRead(setOf("A02"), "A02"))
     }
 }

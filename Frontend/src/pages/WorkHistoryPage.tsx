@@ -15,6 +15,7 @@ import { useToast } from "@/lib/Toast";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useUrlBool, useUrlNumber, useUrlPatch, useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
+import { errorText } from "@/lib/errorText";
 
 
 const COLS = 13;
@@ -22,11 +23,13 @@ const COLS = 13;
 const ACTIONS = [
   "Receiving", "Shipping", "Picking", "Returns",
   "Adjust", "Hold", "HoldRelease", "Disposal",
+  "Consume", "Produce", "ProdReturn", "ProdPick", "ProdReceipt", "ProdLabel",
 ] as const;
 
 const ACTION_FALLBACK: Record<string, string> = {
   Receiving: "Receiving", Shipping: "Shipping", Picking: "Picking", Returns: "Returns",
   Adjust: "Adjust", Hold: "Hold", HoldRelease: "Release Hold", Disposal: "Disposal",
+  Consume: "Production: Material input", Produce: "Production: Completion", ProdReturn: "Production: Return", ProdPick: "Production: Picking", ProdReceipt: "Production: Material receipt", ProdLabel: "Production: Label issue",
 };
 
 const ACTION_BADGE: Record<string, string> = {
@@ -38,6 +41,12 @@ const ACTION_BADGE: Record<string, string> = {
   Hold: "badge-ng",
   HoldRelease: "badge-ok",
   Disposal: "badge-ng",
+  Consume: "badge-warn", Produce: "badge-ok", ProdReturn: "badge-info", ProdPick: "badge-info", ProdReceipt: "badge-info", ProdLabel: "badge-info",
+};
+
+const ACTION_KEY: Record<string, string> = {
+  Consume: "actionProdInput", Produce: "actionProdOutput", ProdReturn: "actionProdReturn",
+  ProdPick: "actionProdPick", ProdReceipt: "actionProdReceipt", ProdLabel: "actionProdLabel",
 };
 
 const dash = (v: string | number | null | undefined) =>
@@ -108,7 +117,7 @@ export function WorkHistoryPage() {
         toast.err(`${t("toastSkipped", "Skipped")}: ${res.skipped.join(", ")}`);
       }
       toast.ok(`${t("toastUpdated", "Updated")}: ${res.updated}`);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
     finally { setBusy(false); }
   };
 
@@ -118,7 +127,7 @@ export function WorkHistoryPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   const search = () => {
@@ -143,7 +152,7 @@ export function WorkHistoryPage() {
             onChange={e => { setPage(1); setAction(e.target.value); }}>
             <option value="">{t("statusAll", "All")}</option>
             {ACTIONS.map(a => (
-              <option key={a} value={a}>{t("action" + a, ACTION_FALLBACK[a])}</option>
+              <option key={a} value={a}>{t(ACTION_KEY[a] ?? "action" + a, ACTION_FALLBACK[a])}</option>
             ))}
           </select>
           <input className="w-55 ml-3.5" type="text" placeholder={t("searchWorkHistory", "Item, Location, Worker...")}
@@ -208,7 +217,7 @@ export function WorkHistoryPage() {
                 <td>{dash(r.lotNo)}</td>
                 <td>
                   <span className={"badge " + (ACTION_BADGE[r.actionType] ?? "badge-info")}>
-                    {t(r.actionLabelKey, ACTION_FALLBACK[r.actionType] ?? r.actionType)}
+                    {t(ACTION_KEY[r.actionType] ?? r.actionLabelKey, ACTION_FALLBACK[r.actionType] ?? r.actionType)}
                   </span>
                 </td>
                 <td className="text-right">

@@ -23,6 +23,7 @@ internal static class ServiceCollectionExtensions
             o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
             o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
         });
+        services.Configure<Microsoft.AspNetCore.Routing.RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
         return services;
     }
 }

@@ -1,11 +1,14 @@
-import { useState } from "react";
-import { listStockScan, resetStockScan, type ScannedFilter, type StockScanRow } from "@/api/stockScan";
+import { useEffect, useMemo, useState } from "react";
+import { getStockScanSummary, listStockScan, resetStockScan, type ScannedFilter, type StockScanRow } from "@/api/stockScan";
 import { SearchButton } from "@/lib/Buttons";
 import { useConfirm } from "@/lib/Confirm";
 import { useToast } from "@/lib/Toast";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
+import { errorText } from "@/lib/errorText";
+
+const POLL_MS = 3000;
 
 const SCANNED_VALUES: readonly ScannedFilter[] = ["all", "yes", "no"];
 
@@ -20,9 +23,13 @@ function ResetIcon() {
   );
 }
 
-function Tile({ row }: { row: StockScanRow }) {
+type TileState = "" | " short" | " scanned";
+
+const itemKey = (code: string | null, name: string | null) => `${code ?? ""}|${name ?? ""}`;
+
+function Tile({ row, state }: { row: StockScanRow; state: TileState }) {
   return (
-    <div className={"rsd-tile" + (row.isScanned ? " scanned" : "")}
+    <div className={"rsd-tile" + state}
       title={row.workerName ? `${row.workerCode ?? ""} ${row.workerName}`.trim() : undefined}>
       <div className="rsd-item">{row.itemName || row.itemCode || "—"}</div>
       <div className="rsd-epc">{row.epc}</div>
@@ -49,13 +56,39 @@ export function RfidStockCountPage() {
     qs("stockScan", { itemCode, itemName, scanned }),
     () => listStockScan({ itemCode: itemCode || undefined, itemName: itemName || undefined, scanned }));
 
+  const summary = useFetch("stockScanSummary", getStockScanSummary);
+  const reloadSummary = summary.reload;
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void reload();
+      void reloadSummary();
+    }, POLL_MS);
+    return () => window.clearInterval(id);
+  }, [reload, reloadSummary]);
+
   const rows = data?.rows ?? [];
+
+  const complete = useMemo(() => {
+    const done = new Set<string>();
+    for (const it of summary.data?.items ?? []) {
+      if (it.plan > 0 && it.qty >= it.plan) done.add(itemKey(it.itemCode, it.itemName));
+    }
+    return done;
+  }, [summary.data]);
+
+  const stateOf = (r: StockScanRow): TileState => {
+    if (!r.isScanned) return "";
+    return complete.has(itemKey(r.itemCode, r.itemName)) ? " scanned" : " short";
+  };
 
   const search = () => {
     setItemCode(codeDraft.trim());
     setItemName(nameDraft.trim());
     setScanned(scannedDraft);
     refresh();
+    void reloadSummary();
   };
 
   const onEnter = (e: React.KeyboardEvent) => { if (e.key === "Enter") search(); };
@@ -70,8 +103,8 @@ export function RfidStockCountPage() {
     try {
       await resetStockScan();
       invalidate("stockScan");
-      await reload();
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+      await Promise.all([reload(), reloadSummary()]);
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
     finally { setBusy(false); }
   };
 
@@ -113,7 +146,7 @@ export function RfidStockCountPage() {
         {!loading && rows.length === 0 && (
           <div className="rsd-empty">{t("noResults", "No matching records found.")}</div>
         )}
-        {!loading && rows.map(r => <Tile key={r.epc} row={r} />)}
+        {!loading && rows.map(r => <Tile key={r.epc} row={r} state={stateOf(r)} />)}
       </div>
     </div>
   );

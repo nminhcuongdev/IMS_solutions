@@ -72,7 +72,7 @@ public class ResultReprintHistoryTests
         });
         await t.Db.SaveChangesAsync();
 
-        var res = await new ReceivingService(t.Db, new LotLookup(t.Db)).ListResultsAsync(default);
+        var res = await new ReceivingService(t.Db).ListResultsAsync(default);
 
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<ReceivingResultDto>>(res).Data);
         Assert.Equal(("LOT-RESULT", "BP001", "Contoso Corporation", new DateOnly(2026, 9, 1)),

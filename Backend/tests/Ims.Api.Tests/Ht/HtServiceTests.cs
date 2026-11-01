@@ -134,19 +134,4 @@ public class HtServiceTests
         var row = Assert.Single(ResultAssert.Ok<ApiListSuccess<HtLotDto>>(res).Data);
         Assert.Equal("LOT260809", row.LotNo);
     }
-
-    [Fact]
-    public async Task IsKnownLot_answers_from_the_receiving_plan_pool()
-    {
-        using var t = TestDb.Seeded();
-        await SeedItemAsync(t);
-        t.Db.ReceivingPlans.Add(Plan("PO-001", "LOT-A"));
-        await t.Db.SaveChangesAsync();
-
-        var known = await new Ims.Api.Features.Ht.LotLookup(t.Db).IsKnownLotAsync("LOT-A", default);
-        var unknown = await new Ims.Api.Features.Ht.LotLookup(t.Db).IsKnownLotAsync("LOT-Z", default);
-
-        Assert.True(known);
-        Assert.False(unknown);
-    }
 }

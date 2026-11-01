@@ -75,7 +75,7 @@ fun TransferPickScreen(
             ) { Text(t("htNext", "Next"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
         }
 
-        HtStatusBar(clock = nowClock(), right = state.toLocationCode ?: "—")
+        HtBottomInset()
     }
 }
 

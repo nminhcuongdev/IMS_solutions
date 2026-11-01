@@ -20,8 +20,8 @@ public static class DeviceEndpoints
     private static async Task<IResult> ListAsync(
         [FromServices] IDeviceService service, CancellationToken ct, [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null, [FromQuery] string? q = null, [FromQuery] string? sort = null,
-        [FromQuery] bool? isActive = null, [FromQuery] string? deviceType = null) =>
-        (await service.ListAsync(ct: ct, page: page, pageSize: pageSize, q: q, sort: sort, isActive: isActive, deviceType: deviceType)).ToHttpResult();
+        [FromQuery] bool? isActive = null, [FromQuery] string? deviceType = null, [FromQuery] string? updateStatus = null) =>
+        (await service.ListAsync(ct: ct, page: page, pageSize: pageSize, q: q, sort: sort, isActive: isActive, deviceType: deviceType, updateStatus: updateStatus)).ToHttpResult();
 
     private static async Task<IResult> GetAsync(
         [FromServices] IDeviceService service, string code, CancellationToken ct) =>

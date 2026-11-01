@@ -3,9 +3,12 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { fetchMenu, type MenuResponse } from "@/api/menu";
 import { useAuth } from "@/auth/AuthContext";
 import { useLang } from "@/i18n/LanguageContext";
+import { LanguageSelect } from "@/i18n/LanguageSelect";
 import { FUNCTION_LABEL_KEY } from "@/i18n/labelKeys";
 import { ROUTE_MAP, Sidebar } from "./Sidebar";
 import { BRAND } from "@/brand";
+import { errorText } from "@/lib/errorText";
+import { useSearchConditionToggle } from "@/lib/useSearchConditionToggle";
 
 const CODE_BY_PATH: Record<string, string> = Object.fromEntries(
   Object.entries(ROUTE_MAP).map(([code, path]) => [path, code]),
@@ -25,12 +28,13 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
+  useSearchConditionToggle(loc.pathname);
   const [menu, setMenu] = useState<MenuResponse | null>(null);
   const [menuError, setMenuError] = useState<string | null>(null);
-  const { lang, setLang, slots, t } = useLang();
+  const { t } = useLang();
 
   useEffect(() => {
-    fetchMenu().then(setMenu).catch(e => setMenuError(e.message ?? String(e)));
+    fetchMenu().then(setMenu).catch(e => setMenuError(errorText(t, e)));
   }, []);
 
   const cur = findCurrent(loc.pathname, menu);
@@ -52,16 +56,8 @@ export function AppLayout() {
             <span className="font-semibold text-brand-700">{current}</span>
           </div>
           <div className="flex items-center gap-3.5 text-[13px]">
-            <div className="flex items-center gap-1 border-r border-slate-200 pr-3.5">
-              {slots.map(sl => (
-                <img
-                  key={sl.languageCode}
-                  className={"lang-flag" + (lang === sl.languageCode ? " active" : "")}
-                  src={`/Images/NationalFlag/${sl.flagIcon ?? sl.languageCode + ".png"}`}
-                  onClick={() => setLang(sl.languageCode)}
-                  alt={sl.languageCode}
-                  title={sl.languageName} />
-              ))}
+            <div className="flex items-center border-r border-slate-200 pr-3.5">
+              <LanguageSelect />
             </div>
             <span className="text-slate-500">{t("welcome", "Welcome,")}</span>
             <strong className="text-slate-800">{user?.userName}</strong>
@@ -70,7 +66,7 @@ export function AppLayout() {
             </div>
           </div>
         </header>
-        <main className="flex-1 overflow-auto px-6 py-5 max-md:p-3">
+        <main className="content flex-1 overflow-auto px-6 py-5 max-md:p-3">
           {menuError && <div className="page-info">{t("errMenuLoad", "Menu load failed")}: {menuError}</div>}
           <Outlet />
         </main>

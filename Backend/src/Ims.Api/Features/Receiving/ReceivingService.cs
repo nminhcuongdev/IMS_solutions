@@ -9,8 +9,10 @@ using static Ims.Api.Contracts.FieldHelpers;
 
 namespace Ims.Api.Features.Receiving;
 
-internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IReceivingService
+internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
 {
+    private const int RequestIdMax = 40;
+
     private const int MaxPoLength = 30;
 
     internal const string PrintCategory = "Receiving";
@@ -64,15 +66,15 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         if (dateFrom is { } from) query = query.Where(p => p.ScheduledDate >= from);
         if (dateTo is { } to) query = query.Where(p => p.ScheduledDate <= to);
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(p => EF.Functions.Like(p.ItemCode, "%" + ic + "%"));
+            query = query.Where(p => EF.Functions.Like(p.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(poNo) is { } po)
-            query = query.Where(p => EF.Functions.Like(p.PoNo, "%" + po + "%"));
+            query = query.Where(p => EF.Functions.Like(p.PoNo, LikeContains(po), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(p => db.Items.Any(i =>
-                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == p.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
         if (Trimmed(q) is { } free)
-            query = query.Where(p => EF.Functions.Like(p.PoNo, "%" + free + "%")
-                                  || EF.Functions.Like(p.ItemCode, "%" + free + "%"));
+            query = query.Where(p => EF.Functions.Like(p.PoNo, LikeContains(free), LikeEscape)
+                                  || EF.Functions.Like(p.ItemCode, LikeContains(free), LikeEscape));
         if (ReceivingStatus.FromApiName(Trimmed(status)) is { } st)
             query = query.Where(p => p.Status == st);
 
@@ -85,7 +87,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             rows.Select(MapPlan).ToList(), new PageMeta(total, pg, sz)));
     }
 
-    public async Task<ServiceResult> CreatePlanAsync(ReceivingPlanWriteDto body, CancellationToken ct)
+    public async Task<ServiceResult> CreatePlanAsync(ReceivingPlanWriteDto body, CancellationToken ct, ClaimsPrincipal? user = null)
     {
         if (ValidateCode(body.PoNo, MaxPoLength) is { } e1) return e1;
         if (ValidateCode(body.ItemCode) is { } e2) return e2;
@@ -103,8 +105,13 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
 
         var supplierCode = NullIfBlank(body.SupplierCode)?.Trim();
         if (supplierCode is not null
-            && !await db.Partners.AnyAsync(p => p.PartnerCode == supplierCode && !p.IsDeleted, ct))
+            && !await db.Partners.AnyAsync(p => p.PartnerCode == supplierCode && !p.IsDeleted && p.IsSupplier, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Partner")));
+
+        var planLocation = NullIfBlank(body.LocationCode)?.Trim();
+        if (planLocation is not null
+            && !await db.Locations.AnyAsync(l => l.LocationCode == planLocation && !l.IsDeleted, ct))
+            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Location")));
 
         var factoryCode = NullIfBlank(body.FactoryCode)?.Trim();
         if (factoryCode is not null
@@ -120,13 +127,16 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             Qty = body.PlannedQty,
             ActualQty = 0,
             FactoryCode = factoryCode,
-            ScheduledDate = body.ScheduledDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            ScheduledDate = body.ScheduledDate ?? DateOnly.FromDateTime(DateTime.Now),
             Status = ReceivingStatus.NotArrived,
             InvoiceNo = NullIfBlank(body.InvoiceNo)?.Trim(),
             LotNo = NullIfBlank(body.LotNo)?.Trim(),
-            LocationCode = NullIfBlank(body.LocationCode)?.Trim(),
-            CreatedAt = DateTime.UtcNow,
+            LocationCode = planLocation,
+            CreatedAt = DateTime.Now,
+            CreatedBy = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value,
         };
+        if (await db.ReceivingPlans.AnyAsync(x => x.PoNo == plan.PoNo && x.PoBranchNo == plan.PoBranchNo, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
         db.ReceivingPlans.Add(plan);
         await db.SaveChangesAsync(ct);
 
@@ -167,9 +177,33 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         List<ReceivingPlan> rows, int target, IEnumerable<string> missing,
         Func<ReceivingPlan, string> label, string? worker, CancellationToken ct)
     {
+        if (target == ReceivingStatus.NotArrived)
+        {
+            foreach (var row in rows)
+            {
+                var lots = await db.ReceivingResults.Where(x => x.PoNo == row.PoNo && x.PoBranchNo == row.PoBranchNo)
+                    .Select(x => x.LotNo).Distinct().ToListAsync(ct);
+                if (await db.ProductionConsumptions.AnyAsync(x => x.ItemCode == row.ItemCode && lots.Contains(x.LotNo)
+                    && x.ReversesNo == null && !db.ProductionConsumptions.Any(r => r.ReversesNo == x.No), ct))
+                    return Outcome.Conflict(new ApiError(ErrorCatalog.Inv005()));
+                if (await db.ShippingResultLots.AnyAsync(x => x.ItemCode == row.ItemCode && lots.Contains(x.LotNo), ct)
+                    || await db.ShippingResults.AnyAsync(x => x.ItemCode == row.ItemCode && lots.Contains(x.LotNo), ct))
+                    return Outcome.Conflict(new ApiError(ErrorCatalog.Inv006()));
+            }
+        }
+        if (target == ReceivingStatus.Arrived)
+        {
+            foreach (var row in rows.Where(r => r.Qty > r.ActualQty && string.IsNullOrWhiteSpace(r.LotNo)))
+            {
+                if (await db.Items.AnyAsync(i => i.ItemCode == row.ItemCode && i.IsLotManaged, ct)
+                    && !await db.ReceivingResults.AnyAsync(r => r.PoNo == row.PoNo
+                        && r.PoBranchNo == row.PoBranchNo && r.LotNo != null, ct))
+                    return Outcome.BadRequest(new ApiError(ErrorCatalog.Lot001()));
+            }
+        }
         var skipped = new SortedSet<string>(StringComparer.Ordinal);
         var updated = 0;
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         foreach (var row in rows)
         {
@@ -180,7 +214,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
                 _ => row.Status is not (ReceivingStatus.Arrived or ReceivingStatus.Cancelled),
             };
             if (!allowed
-                || (target == ReceivingStatus.Arrived && !await ReceiveRemainderAsync(row, worker, now, ct))
+                || (target == ReceivingStatus.Arrived && !await ReceiveUpToAsync(row, row.Qty, worker, now, ct))
                 || (target == ReceivingStatus.NotArrived && !await ReverseReceiptsAsync(row, worker, now, ct)))
             {
                 skipped.Add(label(row));
@@ -235,6 +269,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
                 FactoryCode = stock.FactoryCode,
                 LocationCode = stock.LocationCode,
                 LotNo = stock.LotNo,
+                SerialNo = stock.SerialNo,
                 ActionType = Domain.Inventory.InventoryAction.Adjust,
                 Qty = -receipt.Qty,
                 CreatedBy = worker,
@@ -245,14 +280,14 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         return true;
     }
 
-    private async Task<bool> ReceiveRemainderAsync(ReceivingPlan plan, string? worker, DateTime now, CancellationToken ct)
+    private async Task<bool> ReceiveUpToAsync(ReceivingPlan plan, decimal target, string? worker, DateTime now, CancellationToken ct)
     {
-        var remainder = plan.Qty - plan.ActualQty;
+        var remainder = target - plan.ActualQty;
         if (remainder <= 0) return true;
 
         var item = await db.Items.AsNoTracking()
             .Where(i => i.ItemCode == plan.ItemCode)
-            .Select(i => new { i.DefaultLocationCode, i.ExpirationPeriod })
+            .Select(i => new { i.DefaultLocationCode, i.ExpirationPeriod, i.IsLotManaged })
             .FirstOrDefaultAsync(ct);
         if (item is null) return false;
         var preferred = item.DefaultLocationCode;
@@ -262,6 +297,12 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             .Select(l => l.LocationCode)
             .FirstOrDefaultAsync(ct);
         if (locationCode is null) return false;
+        var lotNo = plan.LotNo ?? await db.ReceivingResults
+            .Where(r => r.PoNo == plan.PoNo && r.PoBranchNo == plan.PoBranchNo && r.LotNo != null)
+            .OrderByDescending(r => r.No)
+            .Select(r => r.LotNo)
+            .FirstOrDefaultAsync(ct);
+        if (item.IsLotManaged && string.IsNullOrWhiteSpace(lotNo)) return false;
 
         var result = new ReceivingResult
         {
@@ -270,7 +311,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             ItemCode = plan.ItemCode,
             Qty = remainder,
             LocationCode = locationCode,
-            LotNo = plan.LotNo,
+            LotNo = lotNo,
             ReasonCode = plan.ReasonCode,
             InvoiceNo = plan.InvoiceNo,
             CreatedAt = now,
@@ -288,7 +329,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             SerialNo = $"RCV-{result.No:D10}",
             FactoryCode = factoryCode,
             LocationCode = locationCode,
-            LotNo = plan.LotNo,
+            LotNo = lotNo,
             StockQty = remainder,
             ExpiryDate = item.ExpirationPeriod is > 0
                 ? DateOnly.FromDateTime(DateTime.Now).AddDays(item.ExpirationPeriod.Value)
@@ -304,13 +345,14 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             ItemCode = plan.ItemCode,
             FactoryCode = factoryCode,
             LocationCode = locationCode,
-            LotNo = plan.LotNo,
+            LotNo = lotNo,
+            SerialNo = stock.SerialNo,
             ActionType = Domain.Inventory.InventoryAction.Receiving,
             Qty = remainder,
             ReasonCode = plan.ReasonCode,
             CreatedBy = worker,
         });
-        plan.ActualQty = plan.Qty;
+        plan.ActualQty = target;
         return true;
     }
 
@@ -322,7 +364,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         _ => null,
     };
 
-    public async Task<ServiceResult> RegisterShortageAsync(string poNo, ReceivingShortageDto body, CancellationToken ct)
+    public async Task<ServiceResult> RegisterShortageAsync(string poNo, ReceivingShortageDto body, CancellationToken ct, ClaimsPrincipal? user = null)
     {
         if (body.ShortageQty is not { } shortageQty || shortageQty < 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
@@ -346,12 +388,20 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
 
         var plan = open[0];
         if (shortageQty > plan.Qty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
+        var arrived = plan.Qty - shortageQty;
+        if (arrived < plan.ActualQty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
-        plan.ActualQty = plan.Qty - shortageQty;
-        plan.Status = ReceivingStatus.Partial;
+        var now = DateTime.Now;
+        var worker = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         plan.ReasonCode = reasonCode;
-        plan.UpdatedAt = DateTime.UtcNow;
+        if (!await ReceiveUpToAsync(plan, arrived, worker, now, ct))
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
+        plan.Status = shortageQty == 0 ? ReceivingStatus.Arrived : ReceivingStatus.Partial;
+        plan.UpdatedAt = now;
+        if (worker is not null) plan.UpdatedBy = worker;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         var dto = await LoadPlanDtoAsync(db, plan.No, ct);
         return Outcome.Ok(new ApiSuccess<ReceivingPlanDto>(dto!));
@@ -369,12 +419,12 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         if (dateTo is { } to)
             query = query.Where(r => r.CreatedAt < to.AddDays(1).ToDateTime(TimeOnly.MinValue));
         if (Trimmed(itemCode) is { } ic)
-            query = query.Where(r => EF.Functions.Like(r.ItemCode, "%" + ic + "%"));
+            query = query.Where(r => EF.Functions.Like(r.ItemCode, LikeContains(ic), LikeEscape));
         if (Trimmed(poNo) is { } po)
-            query = query.Where(r => r.PoNo != null && EF.Functions.Like(r.PoNo, "%" + po + "%"));
+            query = query.Where(r => r.PoNo != null && EF.Functions.Like(r.PoNo, LikeContains(po), LikeEscape));
         if (Trimmed(itemName) is { } iname)
             query = query.Where(r => db.Items.Any(i =>
-                i.ItemCode == r.ItemCode && EF.Functions.Like(i.ItemName, "%" + iname + "%")));
+                i.ItemCode == r.ItemCode && EF.Functions.Like(i.ItemName, LikeContains(iname), LikeEscape)));
 
         query = Trimmed(poNoPresence) switch
         {
@@ -396,6 +446,16 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         ReceivingResultWriteDto body, ClaimsPrincipal user, CancellationToken ct)
     {
         if (ValidateCode(body.ItemCode) is { } e1) return e1;
+        var requestId = NullIfBlank(body.RequestId)?.Trim();
+        if (requestId is { Length: > RequestIdMax })
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Val005TooLong(requestId, RequestIdMax)));
+        if (requestId is not null
+            && await db.ReceivingResults.Where(r => r.RequestId == requestId)
+                   .Select(r => (long?)r.No).FirstOrDefaultAsync(ct) is { } done)
+        {
+            var replay = await LoadResultDtoAsync(db, done, ct);
+            return Outcome.Created($"/receiving-result?poNo={replay!.PoNo}", new ApiSuccess<ReceivingResultDto>(replay));
+        }
         if (body.Qty is not { } qty || qty < 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
@@ -412,6 +472,9 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         if (locationCode is not null
             && !await db.Locations.AnyAsync(l => l.LocationCode == locationCode && !l.IsDeleted, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Location")));
+        if (locationCode is not null && qty > 0
+            && await db.Locations.AnyAsync(l => l.ParentLocationCode == locationCode && !l.IsDeleted, ct))
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
 
         var reasonCode = NullIfBlank(body.ReasonCode)?.Trim();
         if (reasonCode is not null
@@ -420,9 +483,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Reason")));
 
         var lotNo = NullIfBlank(body.LotNo)?.Trim();
-        if (lotNo is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Lot001()));
-        if (!await lots.IsKnownLotAsync(lotNo, ct))
-            return Outcome.NotFound(new ApiError(ErrorCatalog.Lot002()));
+        if (lotNo is null && qty > 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Lot001()));
 
         var poNo = NullIfBlank(body.PoNo)?.Trim();
         ReceivingPlan? plan = null;
@@ -442,10 +503,11 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
                 return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Receiving plan")));
 
             plan = open[0];
-            if (!string.IsNullOrWhiteSpace(plan.LotNo)
+            if (lotNo is not null && !string.IsNullOrWhiteSpace(plan.LotNo)
                 && !string.Equals(plan.LotNo, lotNo, StringComparison.Ordinal))
                 return Outcome.Conflict(new ApiError(ErrorCatalog.Scn006()));
-            var expected = packageQty is > 0 ? plan.Qty / packageQty.Value : plan.Qty;
+            var remaining = Math.Max(plan.Qty - plan.ActualQty, 0m);
+            var expected = packageQty is > 1 ? Math.Min(packageQty.Value, remaining) : remaining;
 
             if (plan.ActualQty + qty > plan.Qty)
                 return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
@@ -453,7 +515,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
                 return Outcome.BadRequest(new ApiError(ErrorCatalog.Rsn001()));
         }
 
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         var worker = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -470,6 +532,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
             ReasonCode = reasonCode,
             ExpiryDate = body.ExpiryDate,
             InvoiceNo = NullIfBlank(body.InvoiceNo)?.Trim() ?? plan?.InvoiceNo,
+            RequestId = requestId,
             CreatedAt = now,
             CreatedBy = worker,
         };
@@ -478,7 +541,9 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
         if (plan is not null)
         {
             plan.ActualQty += qty;
-            plan.Status = plan.ActualQty >= plan.Qty ? ReceivingStatus.Arrived : ReceivingStatus.Partial;
+            plan.Status = plan.ActualQty >= plan.Qty ? ReceivingStatus.Arrived
+                : plan.ActualQty > 0 ? ReceivingStatus.Partial
+                : plan.Status;
             if (reasonCode is not null) plan.ReasonCode = reasonCode;
             plan.UpdatedAt = now;
             plan.UpdatedBy = worker;
@@ -523,6 +588,7 @@ internal sealed class ReceivingService(ImsDbContext db, Ht.ILotLookup lots) : IR
                 FactoryCode = factoryCode,
                 LocationCode = locationCode,
                 LotNo = lotNo,
+                SerialNo = stock.SerialNo,
                 ActionType = Domain.Inventory.InventoryAction.Receiving,
                 Qty = qty,
                 ReasonCode = reasonCode,

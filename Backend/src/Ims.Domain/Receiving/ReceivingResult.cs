@@ -18,4 +18,6 @@ public class ReceivingResult
     public string? CreatedBy { get; set; }
 
     public string? InvoiceNo { get; set; }
+
+    public string? RequestId { get; set; }
 }

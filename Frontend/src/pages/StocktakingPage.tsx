@@ -19,6 +19,7 @@ import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useUrlNumber, useUrlPatch, useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
 import type { ApiListSuccess } from "@/api/types";
+import { errorText } from "@/lib/errorText";
 
 
 const MODEL_COLS = 9;
@@ -113,7 +114,7 @@ export function StocktakingPage() {
       setStartModal(false);
       await reloadAll();
       toast.ok(t("slStarted", "Stocktaking started."));
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
     finally { setBusy(false); }
   };
 
@@ -124,7 +125,7 @@ export function StocktakingPage() {
       setSelected(new Set());
       await reloadAll();
       toast.ok(t("slCompleted", "Stocktaking closed for counting."));
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
     finally { setBusy(false); }
   };
 
@@ -137,7 +138,7 @@ export function StocktakingPage() {
       setView("model");
       await reloadAll();
       toast.ok(t("slFinalized", "Stocktaking finalized."));
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
     finally { setBusy(false); }
   };
 
@@ -147,7 +148,7 @@ export function StocktakingPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
   };
 
   const badgeKey = s?.statusLabelKey ?? "slStatusBeforeBadge";

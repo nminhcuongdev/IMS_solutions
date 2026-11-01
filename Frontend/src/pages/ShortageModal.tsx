@@ -3,6 +3,7 @@ import { listReasons, type Reason } from "@/api/reasons";
 import { useT } from "@/i18n/LanguageContext";
 import { Field, ModalShell } from "@/lib/ModalShell";
 import { useFetch } from "@/lib/useFetch";
+import { errorText } from "@/lib/errorText";
 
 
 export function useShortageReasons(): Reason[] {
@@ -54,7 +55,7 @@ export function ShortageModal({ docLabel, docNo, itemCode, itemName, planned, ac
         if (!reason) { setErr(t("alertReasonRequired", "Please enter a shortage reason.")); return; }
         setSaving(true); setErr(null);
         try { await onSave(n, reason); onSaved(); }
-        catch (ex: any) { setErr(ex?.code ? t(ex.code, ex.message).replace("{0}", docNo) : (ex?.message ?? String(ex))); }
+        catch (ex: any) { setErr(ex?.code ? t(ex.code, ex.message).replace("{0}", docNo) : (errorText(t, ex))); }
         finally { setSaving(false); }
       }}>
       <Field label={docLabel}><input type="text" readOnly value={docNo} style={RO} /></Field>

@@ -70,6 +70,21 @@ public class ShippingServiceTests
         string slipNo = "SO-100", string item = "IT-01", decimal qty = 10) =>
         new(slipNo, "01", "BP001", item, qty, Today, "FAC-01", "GATE-1");
 
+    [Fact]
+    public async Task Direct_shipment_records_the_allocated_serial()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        t.Db.ShippingPlans.Add(Plan());
+        await t.Db.SaveChangesAsync();
+        t.Db.ChangeTracker.Clear();
+
+        ResultAssert.Created<ApiSuccess<ShippingResultDto>>(await new ShippingService(t.Db).CreateResultAsync(
+            new ShippingResultWriteDto("IT-01", 10, "SO-001", "01", LotNo: "LOT-1"), Worker(), default));
+
+        var allocation = Assert.Single(await t.Db.ShippingResultLots.ToListAsync());
+        Assert.Equal(("LOT-1", "SN-SEED", 10m), (allocation.LotNo, allocation.SerialNo, allocation.Qty));
+    }
+
 
     [Fact]
     public async Task Create_records_the_signed_in_user_as_the_creator()
@@ -850,5 +865,28 @@ public class ShippingServiceTests
         Assert.StartsWith("no,created_at,item_code,item_name,qty,unit,so_no,so_branch_no,", csv);
         Assert.Contains("LOT-1", csv);
         Assert.Contains("statusShipped", csv);
+    }
+
+    [Fact]
+    public async Task CreatePlan_rejects_the_same_slip_and_branch_twice_even_padded()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        ResultAssert.Created<ApiSuccess<ShippingPlanDto>>(await new ShippingService(t.Db).CreatePlanAsync(Valid(), Worker(), default));
+        t.Db.ChangeTracker.Clear();
+        var first = Valid();
+
+        var dup = await new ShippingService(t.Db).CreatePlanAsync(first with { SlipNo = " " + first.SlipNo + " ", SerialNo = " " + (first.SerialNo ?? "01") + " " }, Worker(), default);
+
+        ResultAssert.Conflict(dup);
+        Assert.Equal(1, await t.Db.ShippingPlans.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreatePlan_refuses_a_partner_that_is_not_a_customer()
+    {
+        using var t = TestDb.Seeded(); await SeedRefsAsync(t);
+        t.Db.Partners.Add(new Partner { PartnerCode = "SUP-1", PartnerName = "Supplier", IsSupplier = true, IsActive = true, CreatedAt = DateTime.Now });
+        await t.Db.SaveChangesAsync();
+        ResultAssert.NotFound(await new ShippingService(t.Db).CreatePlanAsync(Valid() with { CustomerCode = "SUP-1" }, Worker(), default));
     }
 }

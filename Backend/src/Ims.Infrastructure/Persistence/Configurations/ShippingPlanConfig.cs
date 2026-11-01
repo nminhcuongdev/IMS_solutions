@@ -17,7 +17,7 @@ public class ShippingPlanConfig : IEntityTypeConfiguration<ShippingPlan>
         b.Property(x => x.PartnerCode).HasColumnName("partner_code").CodeN(20);
         b.Property(x => x.ItemCode).HasColumnName("item_code").Code(20);
         b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("decimal(18,4)");
-        b.Property(x => x.ActualQty).HasColumnName("actual_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        b.Property(x => x.ActualQty).HasColumnName("actual_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m).IsConcurrencyToken();
         b.Property(x => x.FactoryCode).HasColumnName("factory_code").CodeN(20);
         b.Property(x => x.GateCode).HasColumnName("gate_code").CodeN(20);
         b.Property(x => x.ScheduledDate).HasColumnName("scheduled_date");

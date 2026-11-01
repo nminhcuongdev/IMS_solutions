@@ -24,6 +24,7 @@ public class ShippingResultConfig : IEntityTypeConfiguration<ShippingResult>
 
         b.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_shipping_result_created_at");
         b.HasIndex(x => x.SoNo).HasDatabaseName("IX_shipping_result_so_no");
+        b.HasIndex(x => new { x.ItemCode, x.LotNo });
 
         b.HasOne<Ims.Domain.Masters.Item>().WithMany()
          .HasForeignKey(x => x.ItemCode).OnDelete(DeleteBehavior.Restrict);

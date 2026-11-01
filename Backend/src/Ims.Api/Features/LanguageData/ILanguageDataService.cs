@@ -12,7 +12,7 @@ internal interface ILanguageDataService
 
     Task<ServiceResult> LabelsAsync(CancellationToken ct, string? lang = null, string deviceScope = "PC");
 
-    Task<ServiceResult> SlotsAsync(CancellationToken ct);
+    Task<ServiceResult> LanguagesAsync(CancellationToken ct);
 
     Task<ServiceResult> ExportCsvAsync(
         CancellationToken ct, string? q = null, string? labelKey = null, string? deviceScope = null,

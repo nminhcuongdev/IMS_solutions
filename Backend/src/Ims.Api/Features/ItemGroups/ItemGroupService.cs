@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
 using Ims.Domain.Masters;
@@ -33,8 +33,8 @@ internal sealed class ItemGroupService(ImsDbContext db) : IItemGroupService
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(g => EF.Functions.Like(g.ItemGroupCode, "%" + s + "%")
-                                  || EF.Functions.Like(g.ItemGroupName, "%" + s + "%"));
+            query = query.Where(g => EF.Functions.Like(g.ItemGroupCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(g.ItemGroupName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
@@ -68,7 +68,7 @@ internal sealed class ItemGroupService(ImsDbContext db) : IItemGroupService
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.ItemGroups.Add(g);
         await db.SaveChangesAsync(ct);
@@ -87,7 +87,7 @@ internal sealed class ItemGroupService(ImsDbContext db) : IItemGroupService
         g.IsActive = body.IsActive;
         g.Remark1 = body.Remark1; g.Remark2 = body.Remark2; g.Remark3 = body.Remark3;
         g.Remark4 = body.Remark4; g.Remark5 = body.Remark5;
-        g.UpdatedAt = DateTime.UtcNow;
+        g.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<ItemGroupDto>(Map(g)));
     }
@@ -97,8 +97,8 @@ internal sealed class ItemGroupService(ImsDbContext db) : IItemGroupService
         var g = await db.ItemGroups.FirstOrDefaultAsync(x => x.ItemGroupCode == code && !x.IsDeleted, ct);
         if (g is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("ItemGroup")));
         if (await db.Items.AnyAsync(i => i.ItemGroupCode == code && !i.IsDeleted, ct))
-            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        g.IsDeleted = true; g.UpdatedAt = DateTime.UtcNow;
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        g.IsDeleted = true; g.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

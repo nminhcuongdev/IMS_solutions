@@ -17,7 +17,7 @@ public class StockConfig : IEntityTypeConfiguration<Stock>
         b.Property(x => x.LocationCode).HasColumnName("location_code").CodeN(20);
         b.Property(x => x.LotNo).HasColumnName("lot_no").CodeN(20);
 
-        b.Property(x => x.StockQty).HasColumnName("stock_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        b.Property(x => x.StockQty).HasColumnName("stock_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m).IsConcurrencyToken();
         b.Property(x => x.ReservedQty).HasColumnName("reserved_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m);
         b.Property(x => x.AvailableQty).HasColumnName("available_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m);
 
@@ -28,6 +28,7 @@ public class StockConfig : IEntityTypeConfiguration<Stock>
         b.Property(x => x.UpdatedBy).HasColumnName("updated_by").CodeN(20);
 
         b.HasIndex(x => x.LotNo).HasDatabaseName("IX_stock_lot_no");
+        b.HasIndex(x => new { x.ItemCode, x.LotNo });
         b.HasIndex(x => x.LocationCode).HasDatabaseName("IX_stock_location_code");
         b.HasIndex(x => x.IsOnHold).HasDatabaseName("IX_stock_is_on_hold");
 

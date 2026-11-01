@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,6 +52,28 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private val wedge = StringBuilder()
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (!vm.listensToKeyboard) {
+            wedge.clear()
+            return super.dispatchKeyEvent(event)
+        }
+        if (event.action != KeyEvent.ACTION_DOWN) return true
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_TAB -> {
+                if (wedge.isNotEmpty()) vm.onBarcode(wedge.toString())
+                wedge.clear()
+            }
+            KeyEvent.KEYCODE_BACK -> return super.dispatchKeyEvent(event)
+            else -> {
+                val c = event.unicodeChar
+                if (c > 0) wedge.append(c.toChar()) else return super.dispatchKeyEvent(event)
+            }
+        }
+        return true
     }
 
     override fun onStart() {

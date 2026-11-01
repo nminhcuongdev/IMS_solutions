@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { packingBadge } from "@/lib/badges";
+import { htScanBadge, packingBadge, statusBadge } from "@/lib/badges";
 import {
   createItem, deleteItem, exportItemsCsv, listItems, updateItem,
   type Item, type ItemWrite,
@@ -21,6 +21,7 @@ import { TableSkeleton, useRowFlash } from "@/lib/TableSkeleton";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav } from "@/lib/useShortcuts";
 import { useRowSelect } from "@/lib/rowSelect";
+import { errorText } from "@/lib/errorText";
 
 type ModalMode = "new" | "edit" | "copy" | null;
 
@@ -96,12 +97,12 @@ export function ItemPage() {
       for (const c of selected) await deleteItem(c);
       setSelected(new Set()); await load();
       toast.ok(`${t("toastDeleted", "Deleted")}: ${n}`);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         onExport={async () => {
           try { const { blob, filename } = await exportItemsCsv();
             const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; a.click(); URL.revokeObjectURL(u);
-          } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+          } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         disableEdit={!selectedRow} disableCopy={!selectedRow} disableDelete={selected.size === 0}
         extraKeys={rowNav} />
@@ -127,6 +128,8 @@ export function ItemPage() {
             <SortTh field="reorder_level_1" sort={sort} onSort={onSort}>{t("thReorderLevel1", "Reorder Level 1")}</SortTh>
             <SortTh field="reorder_level_2" sort={sort} onSort={onSort}>{t("thReorderLevel2", "Reorder Level 2")}</SortTh>
             <SortTh field="default_location_code" sort={sort} onSort={onSort}>{t("thDefaultLocation", "Default Location")}</SortTh>
+            <SortTh field="is_lot_managed" sort={sort} onSort={onSort}>{t("imLotManaged", "Lot Managed")}</SortTh>
+            <SortTh field="ht_scan_required" sort={sort} onSort={onSort}>{t("imHtScan", "HT Scan on Input")}</SortTh>
             <SortTh field="is_active" sort={sort} onSort={onSort}>{t("thStatus", "Status")}</SortTh>
             <SortTh field="remark_1" sort={sort} onSort={onSort}>{t("thRemark1", "Remark 1")}</SortTh>
             <SortTh field="remark_2" sort={sort} onSort={onSort}>{t("thRemark2", "Remark 2")}</SortTh>
@@ -135,8 +138,8 @@ export function ItemPage() {
             <SortTh field="remark_5" sort={sort} onSort={onSort}>{t("thRemark5", "Remark 5")}</SortTh>
           </tr></thead>
           <tbody>
-            {loading && <TableSkeleton cols={19} />}
-            {!loading && rows.length === 0 && <tr className="no-results-row"><td colSpan={19} className="text-center">{t("noResults", "No matching records found.")}</td></tr>}
+            {loading && <TableSkeleton cols={21} />}
+            {!loading && rows.length === 0 && <tr className="no-results-row"><td colSpan={21} className="text-center">{t("noResults", "No matching records found.")}</td></tr>}
             {!loading && rows.map(r => (
               <tr key={r.itemCode} data-row-code={r.itemCode} {...rowProps(r.itemCode)} className={[flashCls(r.itemCode), r.itemCode === cursorCode ? "is-cursor" : ""].filter(Boolean).join(" ") || undefined}>
                 <td className="chk-col"><input type="checkbox" className="row-chk"
@@ -155,7 +158,9 @@ export function ItemPage() {
                 <td className="text-right">{r.reorderLevel1 ?? "—"}</td>
                 <td className="text-right">{r.reorderLevel2 ?? "—"}</td>
                 <td className="text-left">{r.defaultLocationCode ?? "—"}</td>
-                <td className="text-left"><span className={"badge " + (r.isActive ? "badge-ok" : "badge-ng")}>{r.isActive ? t("statusEnable", "Enable") : t("statusDisable", "Disable")}</span></td>
+                <td className="text-left">{r.isLotManaged ? t("statusOn", "ON") : t("statusOff", "OFF")}</td>
+                <td className="text-left"><span className={"badge " + htScanBadge(r.htScanRequired !== false)}>{r.htScanRequired !== false ? t("prdRequired", "Required") : t("prdNotRequired", "Not required")}</span></td>
+                <td className="text-left"><span className={"badge " + statusBadge(r.isActive)}>{r.isActive ? t("statusEnable", "Enable") : t("statusDisable", "Disable")}</span></td>
                 <td className="text-left">{r.remark1 ?? "—"}</td>
                 <td className="text-left">{r.remark2 ?? "—"}</td>
                 <td className="text-left">{r.remark3 ?? "—"}</td>
@@ -196,6 +201,8 @@ function ItemModal({ mode, source, onClose, onSaved }: {
     reorderLevel1: source?.reorderLevel1 ?? null,
     reorderLevel2: source?.reorderLevel2 ?? null,
     defaultLocationCode: source?.defaultLocationCode ?? "",
+    isLotManaged: source?.isLotManaged ?? false,
+    htScanRequired: source?.htScanRequired ?? true,
     isActive: source?.isActive ?? true,
     remark1: source?.remark1 ?? "", remark2: source?.remark2 ?? "",
     remark3: source?.remark3 ?? "", remark4: source?.remark4 ?? "",
@@ -223,7 +230,7 @@ function ItemModal({ mode, source, onClose, onSaved }: {
           if (isEdit) await updateItem(source!.itemCode, form); else await createItem(form);
           onSaved(form.itemCode);
         }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); } finally { setSaving(false); }
+        catch (ex: any) { setErr(errorText(t, ex)); } finally { setSaving(false); }
       }}>
       <Field label={t("thItemCode", "Item Code")}>
         <input maxLength={20} required value={form.itemCode} readOnly={isEdit}
@@ -276,6 +283,14 @@ function ItemModal({ mode, source, onClose, onSaved }: {
       <Field label={t("thDefaultLocation", "Default Location")}>
         <RefSelect value={form.defaultLocationCode ?? ""} options={locations}
           onChange={v => setForm(f => ({ ...f, defaultLocationCode: v || null }))} />
+      </Field>
+      <Field label={t("imLotManaged", "Lot Managed")}>
+        <input type="checkbox" checked={form.isLotManaged ?? false} onChange={e => setForm(f => ({ ...f, isLotManaged: e.target.checked }))} style={{ width: "auto" }} />
+      </Field>
+      <Field label={t("imHtScan", "HT Scan on Input")}>
+        <><select value={form.htScanRequired === false ? "0" : "1"} onChange={e => setForm(f => ({ ...f, htScanRequired: e.target.value === "1" }))}>
+          <option value="1">{t("prdRequired", "Required")}</option><option value="0">{t("prdNotRequired", "Not required")}</option>
+        </select><div className="prd-note">{t("imHtScanNote", "Required: the material label is scanned on the HT when the material is input. Not required: no scan (the input lot is unknown in traceability).")}</div></>
       </Field>
       <Field label={t("thStatus", "Status")}>
         <select value={form.isActive ? "1" : "0"} onChange={e => setForm(f => ({ ...f, isActive: e.target.value === "1" }))}>

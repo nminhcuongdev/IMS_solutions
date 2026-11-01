@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.imssolutions.ht.scan.OnScan
+import com.imssolutions.ht.ui.distinctKeys
 import com.imssolutions.ht.ui.*
 import com.imssolutions.ht.ui.theme.statusColor
 import com.imssolutions.ht.ui.vm.PickFilter
@@ -114,12 +116,13 @@ fun PickingListScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.visible.isEmpty() -> EmptyBox(
+                state.visible.isEmpty() && state.error == null -> EmptyBox(
                     if (state.query.isBlank()) t("htNoResults", "Không có dòng nhặt hàng nào khớp bộ lọc.")
                     else t("htNotFoundQuery", "Không tìm thấy \"{0}\".", state.query)
                 )
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                    items(state.visible, key = { it.lineKey }) { line ->
+                    val keys = distinctKeys(state.visible.map { it.lineKey })
+                    itemsIndexed(state.visible, key = { i, _ -> keys[i] }) { _, line ->
                         HtItemCard(
                             code = "${line.locationCode ?: "—"} · ${line.soNo}",
                             subtitle = buildString {
@@ -138,7 +141,7 @@ fun PickingListScreen(
             }
         }
 
-        HtStatusBar(clock = nowClock(), right = t("htRowCount", "{0} dòng", state.visible.size))
+        HtBottomInset()
     }
 }
 

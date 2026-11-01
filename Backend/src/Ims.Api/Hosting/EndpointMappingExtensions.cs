@@ -2,6 +2,7 @@ using Ims.Api.Features.Alerts;
 using Ims.Api.Features.Auth;
 using Ims.Api.Features.Defaults;
 using Ims.Api.Features.Devices;
+using Ims.Api.Features.Distribution;
 using Ims.Api.Features.Factories;
 using Ims.Api.Features.History;
 using Ims.Api.Features.Ht;
@@ -16,6 +17,8 @@ using Ims.Api.Features.Partners;
 using Ims.Api.Features.Permissions;
 using Ims.Api.Features.Picking;
 using Ims.Api.Features.Print;
+using Ims.Api.Features.Processes;
+using Ims.Api.Features.Production;
 using Ims.Api.Features.Reasons;
 using Ims.Api.Features.Receiving;
 using Ims.Api.Features.Returns;
@@ -24,6 +27,7 @@ using Ims.Api.Features.Shipping;
 using Ims.Api.Features.StockScan;
 using Ims.Api.Features.Stocktaking;
 using Ims.Api.Features.SuperAdmin;
+using Ims.Api.Features.Traceability;
 using Ims.Api.Features.Users;
 using Ims.Api.Features.Zones;
 
@@ -36,36 +40,44 @@ internal static class EndpointMappingExtensions
         app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
         app.MapAuthEndpoints();
-        app.MapMenuEndpoints();
+        app.MapDistributionDownloadEndpoints();
+        var secured = app.MapGroup("");
+        secured.AddEndpointFilter<ProductionPermissionFilter>();
+        secured.MapMenuEndpoints();
 
-        app.MapDefaultValueEndpoints();
-        app.MapFactoryEndpoints();
-        app.MapZoneEndpoints();
-        app.MapDeviceEndpoints();
-        app.MapLocationEndpoints();
-        app.MapItemGroupEndpoints();
-        app.MapItemEndpoints();
-        app.MapPartnerEndpoints();
-        app.MapReasonEndpoints();
-        app.MapUserEndpoints();
+        secured.MapDefaultValueEndpoints();
+        secured.MapFactoryEndpoints();
+        secured.MapZoneEndpoints();
+        secured.MapDeviceEndpoints();
+        secured.MapDistributionEndpoints();
+        secured.MapLocationEndpoints();
+        secured.MapItemGroupEndpoints();
+        secured.MapItemEndpoints();
+        secured.MapPartnerEndpoints();
+        secured.MapReasonEndpoints();
+        secured.MapProcessEndpoints();
+        secured.MapProductionEndpoints();
+        secured.MapUserEndpoints();
 
-        app.MapSettingsEndpoints();
-        app.MapPermissionEndpoints();
-        app.MapLanguageDataEndpoints();
-        app.MapHistoryEndpoints();
-        app.MapSuperAdminEndpoints();
+        secured.MapSettingsEndpoints();
+        secured.MapPermissionEndpoints();
+        secured.MapLanguageDataEndpoints();
+        secured.MapHistoryEndpoints();
+        secured.MapSuperAdminEndpoints();
 
-        app.MapReceivingEndpoints();
-        app.MapReturnsEndpoints();
-        app.MapShippingEndpoints();
-        app.MapPickingEndpoints();
-        app.MapInventoryEndpoints();
-        app.MapStocktakingEndpoints();
-        app.MapStockScanEndpoints();
-        app.MapAlertEndpoints();
-        app.MapImportEndpoints();
-        app.MapHtEndpoints();
-        app.MapPrintEndpoints();
+        secured.MapReceivingEndpoints();
+        secured.MapReturnsEndpoints();
+        secured.MapShippingEndpoints();
+        secured.MapPickingEndpoints();
+        secured.MapInventoryEndpoints();
+        secured.MapStocktakingEndpoints();
+        secured.MapStockScanEndpoints();
+        secured.MapAlertEndpoints();
+        secured.MapImportEndpoints();
+        secured.MapHtEndpoints();
+        secured.MapPrintEndpoints();
+        secured.MapTraceabilityEndpoints();
         return app;
     }
 }
+

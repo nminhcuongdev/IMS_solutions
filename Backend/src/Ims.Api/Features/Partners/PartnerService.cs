@@ -1,3 +1,6 @@
+﻿using Ims.Domain.Returns;
+using Ims.Domain.Shipping;
+using Ims.Domain.Receiving;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
@@ -38,8 +41,8 @@ internal sealed class PartnerService(ImsDbContext db) : IPartnerService
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(p => EF.Functions.Like(p.PartnerCode, "%" + s + "%")
-                                  || EF.Functions.Like(p.PartnerName, "%" + s + "%"));
+            query = query.Where(p => EF.Functions.Like(p.PartnerCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(p.PartnerName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
@@ -72,7 +75,7 @@ internal sealed class PartnerService(ImsDbContext db) : IPartnerService
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.Partners.Add(p);
         await db.SaveChangesAsync(ct);
@@ -90,7 +93,7 @@ internal sealed class PartnerService(ImsDbContext db) : IPartnerService
         p.IsActive = body.IsActive;
         p.Remark1 = body.Remark1; p.Remark2 = body.Remark2; p.Remark3 = body.Remark3;
         p.Remark4 = body.Remark4; p.Remark5 = body.Remark5;
-        p.UpdatedAt = DateTime.UtcNow;
+        p.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<PartnerDto>(Map(p)));
     }
@@ -99,7 +102,11 @@ internal sealed class PartnerService(ImsDbContext db) : IPartnerService
     {
         var p = await db.Partners.FirstOrDefaultAsync(x => x.PartnerCode == code && !x.IsDeleted, ct);
         if (p is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Partner")));
-        p.IsDeleted = true; p.UpdatedAt = DateTime.UtcNow;
+        if (await db.ReceivingPlans.AnyAsync(x => x.PartnerCode == code && (x.Status == ReceivingStatus.NotArrived || x.Status == ReceivingStatus.Partial), ct)
+            || await db.ShippingPlans.AnyAsync(x => x.PartnerCode == code && (x.Status == ShippingStatus.Pending || x.Status == ShippingStatus.Partial), ct)
+            || await db.ReturnPlans.AnyAsync(x => x.PartnerCode == code && (x.Status == ReturnStatus.Pending || x.Status == ReturnStatus.Partial), ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        p.IsDeleted = true; p.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

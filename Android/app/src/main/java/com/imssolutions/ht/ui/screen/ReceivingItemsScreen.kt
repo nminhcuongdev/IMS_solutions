@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +25,7 @@ import com.imssolutions.ht.scan.ScanError
 import com.imssolutions.ht.scan.ScanLine
 import com.imssolutions.ht.scan.ScanMatch
 import com.imssolutions.ht.scan.matchScannedItem
+import com.imssolutions.ht.ui.distinctKeys
 import com.imssolutions.ht.ui.*
 import com.imssolutions.ht.ui.theme.statusColor
 import com.imssolutions.ht.ui.vm.ItemFilter
@@ -101,16 +103,17 @@ fun ReceivingItemsScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.visible.isEmpty() -> EmptyBox(t("htNoResults", "Không có mặt hàng nào khớp bộ lọc."))
+                state.visible.isEmpty() && state.error == null -> EmptyBox(t("htNoResults", "Không có mặt hàng nào khớp bộ lọc."))
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                    items(state.visible, key = { it.lineKey }) { line ->
+                    val keys = distinctKeys(state.visible.map { it.lineKey })
+                    itemsIndexed(state.visible, key = { i, _ -> keys[i] }) { _, line ->
                         ItemLineCard(line) { onOpen(line.poNo, line.serialNo, null, null) }
                     }
                 }
             }
         }
 
-        HtStatusBar(clock = nowClock(), right = t("htRowCountOf", "{0}/{1} dòng", state.visible.size, state.lines.size))
+        HtBottomInset()
     }
 
     scanError?.let { (err, raw) ->

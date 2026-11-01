@@ -16,6 +16,7 @@ public static class ImportEndpoints
         g.MapPost("/returns-schedule", ImportReturnsScheduleAsync).DisableAntiforgery();
         g.MapGet("/returns-schedule/template.xlsx", ReturnsTemplateAsync);
         g.MapPost("/picking-schedule", ImportPickingScheduleAsync).DisableAntiforgery();
+        g.MapPost("/production-order", ImportProductionOrderAsync).DisableAntiforgery();
         g.MapGet("/picking-schedule/template.xlsx", PickingTemplateAsync);
         return app;
     }
@@ -35,6 +36,10 @@ public static class ImportEndpoints
     private static async Task<IResult> ImportPickingScheduleAsync(
         [FromServices] IImportService service, IFormFile? file, ClaimsPrincipal user, CancellationToken ct) =>
         (await service.ImportPickingScheduleAsync(file: file, user: user, ct: ct)).ToHttpResult();
+
+    private static async Task<IResult> ImportProductionOrderAsync(
+        [FromServices] IImportService service, IFormFile? file, ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.ImportProductionOrderAsync(file, user, ct)).ToHttpResult();
 
     private static IResult ReceivingTemplateAsync([FromServices] IImportService service) =>
         service.ReceivingTemplateAsync().ToHttpResult();

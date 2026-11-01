@@ -9,7 +9,12 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.cipherlab.rfid.ClResult
 import com.cipherlab.rfid.GeneralString
+import com.cipherlab.rfid.QValue
+import com.cipherlab.rfid.RFIDMode
+import com.cipherlab.rfid.ScanMode
+import com.cipherlab.rfid.SwitchMode
 import com.cipherlab.rfidapi.RfidManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,24 +22,32 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 
 class CipherLabReader(context: Context) : TagReader {
 
     override val kind = ReaderKind.CipherLab
     override val powerRange = MIN_POWER..MAX_POWER
+    override val caps = ReaderCaps(
+        modes = listOf(ReadMode.Rfid, ReadMode.Barcode, ReadMode.Both),
+        barcodeBySoftTrigger = false,
+        barcodeByKeyboard = true,
+    )
 
     private val appContext = context.applicationContext
     private var manager: RfidManager? = null
     private var registered = false
     private val handler = Handler(Looper.getMainLooper())
     private var polls = 0
+    private val configurer = Executors.newSingleThreadExecutor()
 
     private val poll = object : Runnable {
         override fun run() {
             if (manager == null) return
             val attached = runCatching { manager?.GetConnectionStatus() == true }.getOrDefault(false)
             when {
-                attached -> _state.value = ReaderState.Ready
+                attached -> markReady()
                 ++polls < MAX_POLLS -> handler.postDelayed(this, POLL_MS)
                 else -> _state.value = ReaderState.Detached
             }
@@ -50,11 +63,13 @@ class CipherLabReader(context: Context) : TagReader {
     )
     override val reads: SharedFlow<TagRead> = _reads.asSharedFlow()
 
+    override val barcodes: SharedFlow<String> = MutableSharedFlow<String>().asSharedFlow()
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             when (intent?.action) {
                 GeneralString.Intent_RFIDSERVICE_CONNECTED -> refreshState()
-                GeneralString.Intent_GUN_Attached -> _state.value = ReaderState.Ready
+                GeneralString.Intent_GUN_Attached -> markReady()
                 GeneralString.Intent_GUN_Unattached -> _state.value = ReaderState.Detached
                 GeneralString.Intent_RFIDSERVICE_TAG_DATA -> onTag(intent)
             }
@@ -97,7 +112,26 @@ class CipherLabReader(context: Context) : TagReader {
 
     private fun refreshState() {
         val attached = runCatching { manager?.GetConnectionStatus() == true }.getOrDefault(false)
-        _state.value = if (attached) ReaderState.Ready else ReaderState.Detached
+        if (attached) markReady() else _state.value = ReaderState.Detached
+    }
+
+    private fun markReady() {
+        val m = manager ?: return
+        if (_state.value != ReaderState.Ready) configurer.execute { configure(m) }
+        _state.value = ReaderState.Ready
+    }
+
+    private fun configure(m: RfidManager) {
+        runCatching { m.SetRFIDMode(RFIDMode.Inventory) }
+        runCatching { m.SetScanMode(ScanMode.Continuous) }
+        runCatching {
+            val q = QValue()
+            q.Dynamic = true
+            q.value = START_Q
+            q.Min = MIN_Q
+            q.Max = MAX_Q
+            m.SetQValue(q)
+        }
     }
 
     private fun onTag(intent: Intent) {
@@ -111,7 +145,20 @@ class CipherLabReader(context: Context) : TagReader {
 
     fun power(): Int? = runCatching { manager?.GetTxPower() }.getOrNull()?.takeIf { it in MIN_POWER..MAX_POWER }
 
-    override fun setPower(value: Int): String? = result { it.SetTxPower(value.coerceIn(MIN_POWER, MAX_POWER)) }
+    override suspend fun setPower(value: Int): String? = withContext(Dispatchers.IO) {
+        val next = value.coerceIn(MIN_POWER, MAX_POWER)
+        result { it.SetTxPower(next) } ?: if (power() == next) null else APPLY_FAILED
+    }
+
+    override suspend fun setMode(mode: ReadMode): String? = withContext(Dispatchers.IO) {
+        val target = when (mode) {
+            ReadMode.Rfid -> SwitchMode.UHFRFIDReader
+            ReadMode.Barcode -> SwitchMode.BarcodeReader
+            ReadMode.Both -> SwitchMode.UHFRFIDBarcodeReader
+        }
+        result { it.SetSwitchMode(target) }
+            ?: if (runCatching { manager?.GetSwitchMode() }.getOrNull() == target) null else APPLY_FAILED
+    }
 
     override fun trigger(on: Boolean): String? = result { it.SoftScanTrigger(on) }
 
@@ -127,8 +174,12 @@ class CipherLabReader(context: Context) : TagReader {
         const val MIN_POWER = 5
         const val MAX_POWER = 30
         const val NOT_AVAILABLE = "RFID service not available"
+        const val APPLY_FAILED = "RS36 did not accept the setting"
         private const val RESPONSE_SUCCESS = 0
         private const val POLL_MS = 500L
         private const val MAX_POLLS = 20
+        private const val START_Q = 4
+        private const val MIN_Q = 0
+        private const val MAX_Q = 15
     }
 }

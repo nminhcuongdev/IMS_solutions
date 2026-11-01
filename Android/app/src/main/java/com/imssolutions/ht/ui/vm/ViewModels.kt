@@ -2,14 +2,17 @@ package com.imssolutions.ht.ui.vm
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.imssolutions.ht.update.UpdateRules
 import com.imssolutions.ht.ui.HtMsg
 import com.imssolutions.ht.data.ApiClient
 import com.imssolutions.ht.data.ApiException
+import com.imssolutions.ht.data.ServerAddress
 import com.imssolutions.ht.data.HtConfig
 import com.imssolutions.ht.data.LoginRequest
 import com.imssolutions.ht.data.Reason
@@ -27,8 +30,9 @@ private fun Throwable.toPair(): Pair<String, String> = when (this) {
 
 
 data class LoginState(
-    val userCode: String = "admin",
+    val userCode: String = "",
     val password: String = "",
+    val rememberMe: Boolean = true,
     val loading: Boolean = false,
     val error: Pair<String, String>? = null,
     val success: Boolean = false,
@@ -38,8 +42,16 @@ class LoginViewModel : ViewModel() {
     private val _state = MutableStateFlow(LoginState())
     val state: StateFlow<LoginState> = _state.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            val r = ApiClient.tokens.remembered.first()
+            _state.update { it.copy(rememberMe = r.enabled, userCode = it.userCode.ifEmpty { r.userCode }) }
+        }
+    }
+
     fun setUserCode(v: String) = _state.update { it.copy(userCode = v, error = null) }
     fun setPassword(v: String) = _state.update { it.copy(password = v, error = null) }
+    fun setRememberMe(v: Boolean) = _state.update { it.copy(rememberMe = v) }
 
     fun submit() {
         val s = _state.value
@@ -61,6 +73,7 @@ class LoginViewModel : ViewModel() {
                     _state.update { it.copy(loading = false, error = "ERR" to "Máy chủ trả về dữ liệu rỗng.") }
                 } else {
                     ApiClient.tokens.save(r.token, r.userCode, r.userName, r.defaultLanguage)
+                    ApiClient.tokens.saveRemembered(s.rememberMe, s.userCode.trim())
                     _state.update { it.copy(loading = false, success = true) }
                 }
             }.onFailure { e ->
@@ -209,7 +222,7 @@ data class ReceivingDetailState(
 
     val expected: Double get() = line?.expectedQty ?: 0.0
 
-    val packageCount: Double? get() = line?.packingQty?.takeIf { it > 0 }
+    val packageCount: Double? get() = line?.caseCount
 
     val diff: Double? get() = actualQty.trim().toDoubleOrNull()?.let { it - expected }
 
@@ -312,18 +325,7 @@ class ReceivingDetailViewModel : ViewModel() {
         if (locationMissing(s)) return
 
         _state.update { it.copy(busy = true, error = null) }
-        viewModelScope.launch {
-            runCatching { repo.confirmLine(line, qty, s.reasonCode, s.lotNo, s.locationCode) }
-                .onSuccess { row ->
-                    val msg = if (row.status == STATUS_ARRIVED) {
-                        HtMsg("htReceivedFull", "Đã chốt: nhận đủ {0}", fmt(row.qty))
-                    } else {
-                        HtMsg("htReceivedShort", "Đã ghi thiếu hàng: thực nhận {0}", fmt(row.qty))
-                    }
-                    _state.update { it.copy(busy = false, toast = msg, done = true) }
-                }
-                .onFailure { e -> _state.update { it.copy(busy = false, error = e.toPair()) } }
-        }
+        viewModelScope.launch { confirmNow(line, qty, s, printed = false) }
     }
 
     fun issueLabelAndConfirm(printerDeviceCode: String?) {
@@ -332,39 +334,44 @@ class ReceivingDetailViewModel : ViewModel() {
         if (s.busy) return
 
         val qty = s.actualQty.trim().toDoubleOrNull()
-        if (qty == null || qty <= 0) {
-            _state.update { it.copy(error = "QTY-001" to "Vui lòng nhập số lượng hợp lệ (từ 0 trở lên).") }
+        val step = labelConfirmStep(qty, s.labelIssued, printerDeviceCode)
+        if (step is LabelConfirmStep.Refuse) {
+            _state.update { it.copy(error = step.code to step.message) }
             return
         }
         if (locationMissing(s)) return
-        if (printerDeviceCode.isNullOrBlank()) {
-            _state.update { it.copy(error = "PRN-001" to "Chưa chọn máy in. Vào Settings để đặt.") }
-            return
-        }
+        val print = (step as LabelConfirmStep.Go).print
 
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.issueLabel(line, qty, printerDeviceCode) }
-                .onFailure { e -> _state.update { it.copy(busy = false, error = e.toPair()) } }
-                .onSuccess {
-                    _state.update { it.copy(line = it.line?.copy(labelIssued = true)) }
-                    runCatching { repo.confirmLine(line, qty, s.reasonCode, s.lotNo, s.locationCode) }
-                        .onSuccess { row ->
-                            _state.update {
-                                it.copy(
-                                    busy = false, done = true,
-                                    toast = HtMsg("htLabelAndConfirmed", "Đã in nhãn và chốt: thực nhận {0}", fmt(row.qty)),
-                                )
-                            }
-                        }
-                        .onFailure { e ->
-                            val (code, msg) = e.toPair()
-                            _state.update {
-                                it.copy(busy = false, error = code to "Đã in nhãn nhưng CHƯA chốt được dòng. $msg")
-                            }
-                        }
+            if (print) {
+                val issued = runCatching { repo.issueLabel(line, qty!!, printerDeviceCode) }
+                if (issued.isFailure) {
+                    _state.update { it.copy(busy = false, error = issued.exceptionOrNull()!!.toPair()) }
+                    return@launch
                 }
+                _state.update { it.copy(line = it.line?.copy(labelIssued = true)) }
+            }
+            confirmNow(line, qty!!, s, printed = print)
         }
+    }
+
+    private suspend fun confirmNow(line: ReceivingPlan, qty: Double, s: ReceivingDetailState, printed: Boolean) {
+        runCatching { repo.confirmLine(line, qty, s.reasonCode, s.lotNo, s.locationCode) }
+            .onSuccess { row ->
+                val msg = when {
+                    printed -> HtMsg("htLabelAndConfirmed", "Đã in nhãn và chốt: thực nhận {0}", fmt(row.qty))
+                    row.status == STATUS_ARRIVED -> HtMsg("htReceivedFull", "Đã chốt: nhận đủ {0}", fmt(row.qty))
+                    else -> HtMsg("htReceivedShort", "Đã ghi thiếu hàng: thực nhận {0}", fmt(row.qty))
+                }
+                _state.update { it.copy(busy = false, toast = msg, done = true) }
+            }
+            .onFailure { e ->
+                val (code, msg) = e.toPair()
+                _state.update {
+                    it.copy(busy = false, error = if (printed) code to "Đã in nhãn nhưng CHƯA chốt được dòng. $msg" else code to msg)
+                }
+            }
     }
 
     fun clearToast() = _state.update { it.copy(toast = null) }
@@ -376,11 +383,13 @@ class ReceivingDetailViewModel : ViewModel() {
 data class SettingsState(
     val loading: Boolean = true,
     val serverIp: String = "",
+    val serverUrl: String? = null,
     val printerDeviceCode: String = "",
     val zoneCode: String = "",
     val printers: List<Pair<String, String>> = emptyList(),
     val zones: List<Pair<String, String>> = emptyList(),
     val langDataAt: String? = null,
+    val deviceId: String = "",
     val downloading: Boolean = false,
     val error: Pair<String, String>? = null,
     val toast: HtMsg? = null,
@@ -393,14 +402,20 @@ class SettingsViewModel : ViewModel() {
 
     init { load() }
 
-    fun setServerIp(v: String) = _state.update { it.copy(serverIp = v, error = null) }
+    private val deviceIp = ServerAddress.deviceIpv4()
+
+    fun setServerIp(v: String) = _state.update {
+        it.copy(serverIp = v, serverUrl = ServerAddress.toBaseUrl(v, deviceIp), error = null)
+    }
     fun setPrinterDeviceCode(v: String) = _state.update { it.copy(printerDeviceCode = v) }
     fun setZone(v: String) = _state.update { it.copy(zoneCode = v) }
+    fun setDeviceId(v: String) = _state.update { it.copy(deviceId = v, error = null) }
 
     fun load() {
         viewModelScope.launch {
             val store = ApiClient.tokens
             val prefs = store.htSettingsBlocking()
+            val deviceId = ApiClient.updates.current().deviceId
             val printers = runCatching { repo.printers() }
             val zones = runCatching { repo.zones() }
             val p = printers.getOrDefault(emptyList())
@@ -408,7 +423,8 @@ class SettingsViewModel : ViewModel() {
             _state.update {
                 it.copy(
                     loading = false,
-                    serverIp = prefs.serverIp.ifBlank { store.baseUrlBlocking() },
+                    serverIp = ServerAddress.toDisplay(prefs.serverIp.ifBlank { store.baseUrlBlocking() }),
+                    serverUrl = prefs.serverIp.ifBlank { store.baseUrlBlocking() },
                     printerDeviceCode = when {
                         printers.isFailure -> prefs.printerDeviceCode
                         else -> prefs.printerDeviceCode.takeIf { c -> p.any { it.first == c } }
@@ -418,6 +434,7 @@ class SettingsViewModel : ViewModel() {
                     printers = p,
                     zones = z,
                     langDataAt = prefs.langDataAt,
+                    deviceId = deviceId,
                     error = (printers.exceptionOrNull() ?: zones.exceptionOrNull())?.toPair(),
                 )
             }
@@ -446,25 +463,34 @@ class SettingsViewModel : ViewModel() {
         }
     }
 
-    fun save() {
+    fun save(then: (() -> Unit)? = null) {
         val s = _state.value
-        val url = s.serverIp.trim()
-        if (!looksLikeServerAddress(url)) {
+        val url = ServerAddress.toBaseUrl(s.serverIp, deviceIp)
+        if (url == null) {
             _state.update { it.copy(error = "VAL-004" to "Địa chỉ máy chủ không hợp lệ.") }
+            return
+        }
+        val deviceId = if (s.deviceId.isBlank()) "" else UpdateRules.deviceIdOf(s.deviceId)
+        if (deviceId == null) {
+            _state.update { it.copy(error = "VAL-005" to "Mã thiết bị phải từ 1 đến 40 ký tự.") }
             return
         }
         viewModelScope.launch {
             ApiClient.tokens.saveBaseUrl(url)
             ApiClient.tokens.saveHtSettings(url, s.printerDeviceCode, s.zoneCode)
-            _state.update { it.copy(toast = HtMsg("htSettingsSaved", "Đã lưu")) }
+            ApiClient.updates.saveDeviceId(deviceId)
+            _state.update {
+                it.copy(
+                    serverIp = ServerAddress.toDisplay(url), serverUrl = url, deviceId = deviceId,
+                    toast = if (then == null) HtMsg("htSettingsSaved", "Đã lưu") else null,
+                )
+            }
+            then?.invoke()
         }
     }
 
     fun clearToast() = _state.update { it.copy(toast = null) }
 }
-
-fun looksLikeServerAddress(v: String): Boolean =
-    v.startsWith("http://") || v.startsWith("https://")
 
 private fun nowStamp(): String {
     val f = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)

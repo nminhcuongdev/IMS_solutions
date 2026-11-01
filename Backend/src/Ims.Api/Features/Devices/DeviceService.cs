@@ -7,9 +7,12 @@ using static Ims.Api.Contracts.FieldHelpers;
 
 namespace Ims.Api.Features.Devices;
 
-internal sealed class DeviceService(ImsDbContext db) : IDeviceService
+internal sealed class DeviceService(ImsDbContext db, IDeviceUpdateStatus? statusSource = null) : IDeviceService
 {
-    private static readonly SortMap<Device> Sort = new SortMap<Device>()
+    private SortMap<Device> Sort => _sort ??= new SortMap<Device>()
+        .Add("app_version", d => db.DistDeviceStates.Where(s => s.DeviceCode == d.DeviceCode).Select(s => s.VersionCode).FirstOrDefault())
+        .Add("last_update_at", d => db.DistDeviceStates.Where(s => s.DeviceCode == d.DeviceCode).Select(s => s.LastUpdateAt).FirstOrDefault())
+        .Add("last_check_at", d => db.DistDeviceStates.Where(s => s.DeviceCode == d.DeviceCode).Select(s => s.LastCheckAt).FirstOrDefault())
         .Add("device_code", d => d.DeviceCode)
         .Add("device_name", d => d.DeviceName)
         .Add("device_type", d => d.DeviceType)
@@ -29,19 +32,26 @@ internal sealed class DeviceService(ImsDbContext db) : IDeviceService
         .Default("device_code")
         .ThenAlwaysBy(d => d.DeviceCode);
 
+    private SortMap<Device>? _sort;
+
     public async Task<ServiceResult> ListAsync(
         CancellationToken ct, int? page = null, int? pageSize = null, string? q = null, string? sort = null,
-        bool? isActive = null, string? deviceType = null)
+        bool? isActive = null, string? deviceType = null, string? updateStatus = null)
     {
         var query = db.Devices.AsNoTracking().Where(d => !d.IsDeleted);
         if (isActive ?? true) query = query.Where(d => d.IsActive);
+        if (!string.IsNullOrWhiteSpace(updateStatus) && updateStatus != "all" && statusSource is not null)
+        {
+            var codes = (await statusSource.DeviceCodesWithStatusAsync(updateStatus.Trim(), ct)).ToList();
+            query = query.Where(d => codes.Contains(d.DeviceCode));
+        }
         if (!string.IsNullOrWhiteSpace(deviceType) && Enum.TryParse<DeviceType>(deviceType, true, out var dt))
             query = query.Where(d => d.DeviceType == dt);
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(d => EF.Functions.Like(d.DeviceCode, "%" + s + "%")
-                                  || EF.Functions.Like(d.DeviceName, "%" + s + "%"));
+            query = query.Where(d => EF.Functions.Like(d.DeviceCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(d.DeviceName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
 
@@ -88,7 +98,7 @@ internal sealed class DeviceService(ImsDbContext db) : IDeviceService
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.Devices.Add(d);
         await db.SaveChangesAsync(ct);
@@ -119,7 +129,7 @@ internal sealed class DeviceService(ImsDbContext db) : IDeviceService
         d.IsActive = body.IsActive;
         d.Remark1 = body.Remark1; d.Remark2 = body.Remark2; d.Remark3 = body.Remark3;
         d.Remark4 = body.Remark4; d.Remark5 = body.Remark5;
-        d.UpdatedAt = DateTime.UtcNow;
+        d.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<DeviceDto>(Map(d)));
     }
@@ -128,7 +138,7 @@ internal sealed class DeviceService(ImsDbContext db) : IDeviceService
     {
         var d = await db.Devices.FirstOrDefaultAsync(x => x.DeviceCode == code && !x.IsDeleted, ct);
         if (d is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Device")));
-        d.IsDeleted = true; d.UpdatedAt = DateTime.UtcNow;
+        d.IsDeleted = true; d.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }

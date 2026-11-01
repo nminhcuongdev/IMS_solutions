@@ -11,7 +11,7 @@ import { PAGE_SIZES } from "@/lib/Pager";
 import { Field, ModalShell } from "@/lib/ModalShell";
 import { SortTh, useSort } from "@/lib/SortableTh";
 import { codeName, RefSelect } from "@/lib/RefSelect";
-import { useT } from "@/i18n/LanguageContext";
+import { useLang, useT } from "@/i18n/LanguageContext";
 import { useToast } from "@/lib/Toast";
 import { useConfirm } from "@/lib/Confirm";
 import { useUrlNumber, useUrlSearch, useUrlPatch } from "@/lib/useUrlState";
@@ -19,6 +19,7 @@ import { TableSkeleton, useRowFlash } from "@/lib/TableSkeleton";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav } from "@/lib/useShortcuts";
 import { useRowSelect } from "@/lib/rowSelect";
+import { errorText } from "@/lib/errorText";
 
 type ModalMode = "new" | "edit" | "copy" | null;
 
@@ -32,7 +33,6 @@ const LANG_LABEL: Record<string, string> = { en: "langEn", ja: "langJa", vi: "la
 const authBadge = roleBadge;
 
 const ROLES = ["Admin", "General", "Worker"] as const;
-const LANGS = [{ code: "en", name: "English" }, { code: "ja", name: "日本語" }, { code: "vi", name: "Tiếng Việt" }];
 
 export function UserPage() {
   const t = useT();
@@ -88,12 +88,12 @@ export function UserPage() {
       for (const c of selected) await deleteUser(c);
       setSelected(new Set()); await load();
       toast.ok(`${t("toastDeleted", "Deleted")}: ${n}`);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         onExport={async () => {
           try { const { blob, filename } = await exportUsersCsv();
             const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; a.click(); URL.revokeObjectURL(u);
-          } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+          } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         disableEdit={!selectedRow} disableCopy={!selectedRow} disableDelete={selected.size === 0}
         extraKeys={rowNav} />
@@ -157,7 +157,7 @@ function UserModal({ mode, source, onClose, onSaved }: {
   mode: "new" | "edit" | "copy"; source: AppUser | null;
   onClose: () => void; onSaved: (savedCode: string) => void;
 }) {
-  const t = useT();
+  const { t, languages } = useLang();
   const isEdit = mode === "edit";
   const [form, setForm] = useState<UserWrite>({
     userCode: isEdit ? source!.userCode : "",
@@ -186,7 +186,7 @@ function UserModal({ mode, source, onClose, onSaved }: {
           if (isEdit) await updateUser(source!.userCode, body);
           else await createUser(body);
           onSaved(form.userCode);
-        } catch (ex: any) { setErr(ex?.message ?? String(ex)); } finally { setSaving(false); }
+        } catch (ex: any) { setErr(errorText(t, ex)); } finally { setSaving(false); }
       }}>
       <Field label={t("thUserCode", "User Code")}>
         <input maxLength={20} required value={form.userCode} readOnly={isEdit}
@@ -218,7 +218,7 @@ function UserModal({ mode, source, onClose, onSaved }: {
         <select value={form.defaultLanguage ?? ""}
           onChange={e => setForm(f => ({ ...f, defaultLanguage: e.target.value || null }))}>
           <option value="">—</option>
-          {LANGS.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+          {languages.map(l => <option key={l.languageCode} value={l.languageCode}>{l.languageName}</option>)}
         </select>
       </Field>
       <Field label={t("thStatus", "Status")}>

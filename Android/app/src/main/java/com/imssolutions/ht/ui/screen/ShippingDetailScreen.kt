@@ -224,7 +224,7 @@ fun ShippingDetailScreen(
         }
 
         SnackbarHost(snackbar)
-        HtStatusBar(clock = nowClock(), right = slipNo)
+        HtBottomInset()
     }
 
     state.error?.let { (code, message) ->

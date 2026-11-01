@@ -8,7 +8,7 @@ export function CommonToolbar({
   searchDraft, onSearchDraftChange, onSearch,
   onNew, onEdit, onCopy, onDelete, onExport,
   disableEdit, disableCopy, disableDelete,
-  extra, extraKeys, labelButton,
+  extra, extraKeys, labelButton, hideImport,
 }: {
   searchDraft: string;
   onSearchDraftChange: (v: string) => void;
@@ -24,6 +24,7 @@ export function CommonToolbar({
   extra?: ReactNode;
   extraKeys?: ShortcutMap;
   labelButton?: ReactNode;
+  hideImport?: boolean;
 }) {
   const t = useT();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -75,9 +76,9 @@ export function CommonToolbar({
           <TrashIcon /> <span>{t("btnDelete", "Delete")}</span>
         </button>
         {labelButton}
-        <button className="btn btn-outline" disabled title={t("importDisabled", "CSV import is not available in this version.")}>
+        {!hideImport && <button className="btn btn-outline" disabled title={t("importDisabled", "CSV import is not available in this version.")}>
           <img className="icn-img" src={BTN_ICON.upload} alt="" /> <span>{t("btnImport", "Import")}</span>
-        </button>
+        </button>}
         <button className="btn btn-outline" onClick={onExport}>
           <ExportIcon /> <span>{t("btnExport", "Export")}</span>
         </button>

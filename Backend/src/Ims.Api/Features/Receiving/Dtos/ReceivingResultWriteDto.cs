@@ -10,4 +10,5 @@ public sealed record ReceivingResultWriteDto(
     DateOnly? ExpiryDate = null,
     string? ReasonCode = null,
     string? InvoiceNo = null,
-    bool IsOnHold = false);
+    bool IsOnHold = false,
+    string? RequestId = null);

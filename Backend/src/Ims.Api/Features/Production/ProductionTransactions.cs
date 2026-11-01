@@ -1,0 +1,181 @@
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using Ims.Api.Contracts;
+using Ims.Api.Features.Inventory;
+using Ims.Domain.Inventory;
+using Ims.Domain.Production;
+
+namespace Ims.Api.Features.Production;
+
+internal sealed partial class ProductionService
+{
+    public async Task<ServiceResult> ReceiptAsync(string orderNo, ReceiptWriteDto body, ClaimsPrincipal user, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.RequestId)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001()));
+        var old = await db.ProductionReceipts.FirstOrDefaultAsync(x => x.RequestId == body.RequestId, ct);
+        if (old is not null) return Outcome.Ok(new ApiSuccess<ProductionReceipt>(old));
+        var order = await OrderAsync(orderNo, ct);
+        if (order is null) return MissingOrder();
+        if (order.StatusCode >= 2) return Outcome.Conflict(new ApiError(ErrorCatalog.Sts004()));
+        var receipt = new ProductionReceipt { RequestId = body.RequestId, ProductionOrderNo = orderNo,
+            CreatedBy = Worker(user), CreatedAt = DateTime.Now };
+        db.ProductionReceipts.Add(receipt);
+        await db.SaveChangesAsync(ct);
+        return Outcome.Created($"/production-order/{orderNo}/receipt", new ApiSuccess<ProductionReceipt>(receipt));
+    }
+
+    public async Task<ServiceResult> ConsumptionAsync(string orderNo, ConsumptionWriteDto body, ClaimsPrincipal user, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.RequestId)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001()));
+        if (body.Qty <= 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty003()));
+        var old = await db.ProductionConsumptions.Where(x => x.RequestId == body.RequestId && x.ReversesNo == null).ToListAsync(ct);
+        if (old.Count > 0) return Outcome.Ok(new ApiSuccess<IReadOnlyList<ProductionConsumption>>(old));
+        var order = await OrderAsync(orderNo, ct);
+        if (order is null) return MissingOrder();
+        if (order.StatusCode >= 2) return Outcome.Conflict(new ApiError(ErrorCatalog.Sts004()));
+        var lines = await db.ProductionOrderLines.Where(x => x.ProductionOrderNo == orderNo && x.ProcessCode == body.ProcessCode && x.ItemCode == body.ItemCode).OrderBy(x => x.LineNo).ToListAsync(ct);
+        if (body.LineNo is { } lineNo) lines = lines.Where(x => x.LineNo == lineNo).ToList();
+        if (lines.Count == 0) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Production line")));
+        if (!await db.Items.AnyAsync(x => x.ItemCode == body.ItemCode && x.HtScanRequired && x.IsActive && !x.IsDeleted, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Scn010()));
+        var line = lines[0];
+        if (body.LineNo is null && lines.Count > 1)
+        {
+            var used = await db.ProductionConsumptions.Where(x => x.ProductionOrderNo == orderNo && x.ItemCode == body.ItemCode && x.ReversesNo == null)
+                .GroupBy(x => x.LineNo).Select(x => new { LineNo = x.Key, Qty = x.Sum(y => y.Qty) }).ToListAsync(ct);
+            var returns = await db.ProductionReturns.Where(x => x.ProductionOrderNo == orderNo && x.ItemCode == body.ItemCode && x.ReversesNo == null)
+                .GroupBy(x => x.LineNo).Select(x => new { LineNo = x.Key, Qty = x.Sum(y => y.Qty) }).ToListAsync(ct);
+            line = lines.FirstOrDefault(x => used.Where(u => u.LineNo == x.LineNo).Select(u => u.Qty).FirstOrDefault()
+                - returns.Where(r => r.LineNo == x.LineNo).Select(r => r.Qty).FirstOrDefault() < x.PlannedQty) ?? lines[0];
+        }
+        if (!await db.Processes.AnyAsync(x => x.ProcessCode == line.ProcessCode && x.IsActive && !x.IsDeleted, ct))
+            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Process")));
+        var worker = Worker(user);
+        var allocations = new List<StockAllocation>();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var takeError = await StockMovement.TakeAsync(db, body.ItemCode, body.LotNo, null, body.Qty,
+            InventoryAction.Consume, null, worker, ErrorCatalog.Inv009(), ct,
+            allocations: allocations, shortageError: ErrorCatalog.Inv009(), refuseExpired: true,
+            factoryCode: order.FactoryCode);
+        if (takeError is not null)
+        {
+            var code = (takeError.Body as ApiError)?.Error.Code;
+            return takeError.StatusCode == 404 || code == "SCN-006"
+                ? Outcome.Conflict(new ApiError(ErrorCatalog.Inv009())) : takeError;
+        }
+        var rows = allocations.Select(x => new ProductionConsumption
+        {
+            RequestId = body.RequestId, ProductionOrderNo = orderNo, LineNo = line.LineNo,
+            ItemCode = body.ItemCode, LotNo = x.LotNo, SerialNo = x.SerialNo, Qty = x.Qty,
+            LocationCode = x.LocationCode!, FactoryCode = x.FactoryCode, ExpiryDate = x.ExpiryDate,
+            CreatedAt = DateTime.Now, CreatedBy = worker
+        }).ToList();
+        db.ProductionConsumptions.AddRange(rows);
+        order.StatusCode = 1;
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Outcome.Created($"/production-order/{orderNo}/consumption", new ApiSuccess<IReadOnlyList<ProductionConsumption>>(rows));
+    }
+
+    public async Task<ServiceResult> OutputAsync(string orderNo, OutputWriteDto body, ClaimsPrincipal user, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.RequestId)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001()));
+        if (body.Qty <= 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty003()));
+        var old = await db.ProductionOutputs.Where(x => x.RequestId == body.RequestId && x.ReversesNo == null).OrderBy(x => x.No).ToListAsync(ct);
+        if (old.Count > 0) return Outcome.Ok(new ApiSuccess<ProductionOutputResultDto>(await OutputResultAsync(old, ct)));
+        var order = await OrderAsync(orderNo, ct);
+        if (order is null) return MissingOrder();
+        if (order.StatusCode >= 2) return Outcome.Conflict(new ApiError(ErrorCatalog.Sts004()));
+        var item = await db.Items.FirstOrDefaultAsync(x => x.ItemCode == order.OutputItemCode && !x.IsDeleted && x.IsActive, ct);
+        if (item is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
+        var lot = order.OutputLotNo ?? body.LotNo?.Trim();
+        if (string.IsNullOrWhiteSpace(lot))
+        {
+            var prefix = DateTime.Today.ToString("yyMMdd");
+            var existing = await db.ProductionOrders.Where(x => x.OutputItemCode == order.OutputItemCode && x.OutputLotNo != null && x.OutputLotNo.StartsWith(prefix)).Select(x => x.OutputLotNo).ToListAsync(ct);
+            var seq = Enumerable.Range(1, 999).First(x => !existing.Contains($"{prefix}-{x:000}"));
+            lot = $"{prefix}-{seq:000}";
+        }
+        if (FieldHelpers.ValidateCode(lot, 20) is { } lotError) return lotError;
+        if (order.OutputLotNo is null && (await db.Stocks.AnyAsync(x => x.ItemCode == item.ItemCode && x.LotNo == lot, ct)
+            || await db.ProductionOrders.AnyAsync(x => x.OutputItemCode == item.ItemCode && x.OutputLotNo == lot && x.ProductionOrderNo != orderNo, ct)))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup003()));
+        var pack = item.PackageQty;
+        var qtys = new List<decimal>();
+        if (pack <= 1) qtys.Add(body.Qty);
+        else
+        {
+            var remainder = body.Qty;
+            while (remainder > 0)
+            {
+                var n = Math.Min(pack, remainder);
+                qtys.Add(n);
+                remainder -= n;
+            }
+        }
+        var worker = Worker(user);
+        var expiry = body.ExpiryDate ?? (item.ExpirationPeriod is { } days ? DateOnly.FromDateTime(DateTime.Today.AddDays(days)) : null);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        order.OutputLotNo = lot;
+        var rows = qtys.Select(q => new ProductionOutput
+        {
+            RequestId = body.RequestId, ProductionOrderNo = orderNo, ItemCode = order.OutputItemCode,
+            LotNo = lot, SerialNo = Guid.NewGuid().ToString("N")[..30], Qty = q,
+            LocationCode = order.StorageLocationCode, ExpiryDate = expiry, CreatedAt = DateTime.Now,
+            CreatedBy = worker
+        }).ToList();
+        db.ProductionOutputs.AddRange(rows);
+        await db.SaveChangesAsync(ct);
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            row.SerialNo = $"PRD-{rows[0].No}-{i + 1}";
+            db.Stocks.Add(new Stock { ItemCode = row.ItemCode, SerialNo = row.SerialNo,
+                FactoryCode = order.FactoryCode, LocationCode = row.LocationCode, LotNo = lot,
+                StockQty = row.Qty, AvailableQty = row.Qty, ExpiryDate = expiry, UpdatedAt = DateTime.Now, UpdatedBy = worker });
+            db.InventoryHistories.Add(new InventoryHistory { ItemCode = row.ItemCode, SerialNo = row.SerialNo,
+                FactoryCode = order.FactoryCode, LocationCode = row.LocationCode, LotNo = lot,
+                Qty = row.Qty, ActionType = InventoryAction.Produce, CreatedAt = DateTime.Now, CreatedBy = worker });
+        }
+        order.StatusCode = body.Complete ? 2 : 1;
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Outcome.Created($"/production-order/{orderNo}/output", new ApiSuccess<ProductionOutputResultDto>(await OutputResultAsync(rows, ct)));
+    }
+
+    private async Task<ProductionOutputResultDto> OutputResultAsync(List<ProductionOutput> rows, CancellationToken ct)
+    {
+        var first = rows[0];
+        var qty = rows.Sum(x => x.Qty);
+        var order = await db.ProductionOrders.FirstAsync(x => x.ProductionOrderNo == first.ProductionOrderNo, ct);
+        var std = await db.Items.Where(x => x.ItemCode == first.ItemCode).Select(x => x.PackageQty).FirstAsync(ct);
+        var total = await db.ProductionOutputs.Where(x => x.ProductionOrderNo == first.ProductionOrderNo && x.ReversesNo == null && !db.ProductionOutputs.Any(r => r.ReversesNo == x.No)).SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
+        return new ProductionOutputResultDto(first.ProductionOrderNo, first.ItemCode, first.LotNo, qty,
+            rows.Select(x => x.SerialNo).ToList(), total > order.PlannedQty, rows.Count,
+            std > 0 ? std : 1, std <= 1 ? qty : qty % std);
+    }
+
+    public async Task<ServiceResult> LabelAsync(string orderNo, LabelWriteDto body, ClaimsPrincipal user, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(body.RequestId) || string.IsNullOrWhiteSpace(body.OutputRequestId))
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001()));
+        var old = await db.ProductionLabels.FirstOrDefaultAsync(x => x.RequestId == body.RequestId, ct);
+        if (old is not null) return Outcome.Ok(new ApiSuccess<ProductionLabel>(old));
+        if (await db.ProductionLabels.AnyAsync(x => x.OutputRequestId == body.OutputRequestId, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Dup002()));
+        var outputs = await db.ProductionOutputs.Where(x => x.RequestId == body.OutputRequestId && x.ProductionOrderNo == orderNo && x.ReversesNo == null).ToListAsync(ct);
+        if (outputs.Count == 0) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Production output")));
+        var outputNos = outputs.Select(x => x.No).ToArray();
+        if (await db.ProductionOutputs.AnyAsync(x => outputNos.Contains(x.ReversesNo ?? 0), ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Inv005()));
+        var std = await db.Items.Where(x => x.ItemCode == outputs[0].ItemCode).Select(x => x.PackageQty).FirstAsync(ct);
+        var qty = outputs.Sum(x => x.Qty);
+        var label = new ProductionLabel { RequestId = body.RequestId, OutputRequestId = body.OutputRequestId,
+            ProductionOrderNo = orderNo, ItemCode = outputs[0].ItemCode, LotNo = outputs[0].LotNo,
+            TotalQty = qty, StdQty = std > 0 ? std : 1, LabelCount = outputs.Count,
+            RemainderQty = std <= 1 ? qty : qty % std, CreatedAt = DateTime.Now, CreatedBy = Worker(user) };
+        db.ProductionLabels.Add(label);
+        await db.SaveChangesAsync(ct);
+        return Outcome.Created($"/production-order/{orderNo}/label", new ApiSuccess<ProductionLabel>(label));
+    }
+}

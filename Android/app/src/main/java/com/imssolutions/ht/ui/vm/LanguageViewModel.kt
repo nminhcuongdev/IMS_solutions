@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.imssolutions.ht.data.ApiClient
+import com.imssolutions.ht.data.BuiltinMessages
 import com.imssolutions.ht.data.LabelStore
 import com.imssolutions.ht.data.LanguageRepository
 import com.imssolutions.ht.data.resolveLanguage
@@ -29,21 +30,37 @@ class LanguageViewModel(app: Application) : AndroidViewModel(app) {
     private val _missing = MutableStateFlow(false)
     val missing: StateFlow<Boolean> = _missing.asStateFlow()
 
+    private val known = MutableStateFlow(HtLang.BUILT_IN)
+
     init {
         viewModelScope.launch {
-            combine(store.languageOverride, ApiClient.tokens.session) { override, session ->
-                resolveLanguage(override, session?.userCode.orEmpty(), session?.defaultLanguage)
+            known.value = repo.languages()
+            combine(store.languageOverride, ApiClient.tokens.session, known) { override, session, list ->
+                resolveLanguage(
+                    override, session?.userCode.orEmpty(), session?.defaultLanguage,
+                    list.map { it.code }.toSet(),
+                )
             }.distinctUntilChanged().collect { apply(it) }
         }
         viewModelScope.launch {
-            if (runCatching { repo.downloadAll() }.getOrDefault(0) > 0) apply(_state.value.lang.code)
+            if (runCatching { repo.downloadAll() }.getOrDefault(0) > 0) refresh()
         }
     }
 
+    private suspend fun refresh() {
+        known.value = repo.languages()
+        apply(_state.value.lang.code)
+    }
+
     private suspend fun apply(code: String) {
-        val labels = repo.labels(code)
+        val list = known.value
+        val lang = HtLang.of(code, list)
+        val labels = repo.labels(lang.code)
         _missing.value = labels.isEmpty()
-        _state.value = HtStrings(lang = HtLang.of(code), labels = labels)
+        _state.value = HtStrings(
+            lang = lang, labels = labels, languages = list,
+            builtin = BuiltinMessages.of(getApplication(), lang.code),
+        )
     }
 
     fun pick(lang: HtLang) {
@@ -55,12 +72,12 @@ class LanguageViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun download(): Int {
         val n = repo.downloadAll()
-        apply(_state.value.lang.code)
+        refresh()
         return n
     }
 
     suspend fun clear() {
         repo.clear()
-        apply(_state.value.lang.code)
+        refresh()
     }
 }

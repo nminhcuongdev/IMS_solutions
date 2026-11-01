@@ -16,6 +16,7 @@ import { TableSkeleton, useRowFlash } from "@/lib/TableSkeleton";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav } from "@/lib/useShortcuts";
 import { useRowSelect } from "@/lib/rowSelect";
+import { errorText } from "@/lib/errorText";
 
 type ModalMode = "new" | "edit" | "copy" | null;
 
@@ -77,12 +78,12 @@ export function ReasonPage() {
       for (const c of selected) await deleteReason(c);
       setSelected(new Set()); await load();
       toast.ok(`${t("toastDeleted", "Deleted")}: ${n}`);
-    } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+    } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         onExport={async () => {
           try { const { blob, filename } = await exportReasonsCsv();
             const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = filename; a.click(); URL.revokeObjectURL(u);
-          } catch (ex: any) { toast.err(ex?.message ?? String(ex)); }
+          } catch (ex: any) { toast.err(errorText(t, ex)); }
         }}
         disableEdit={!selectedRow} disableCopy={!selectedRow} disableDelete={selected.size === 0}
         extraKeys={rowNav} />
@@ -164,7 +165,7 @@ function ReasonModal({ mode, source, onClose, onSaved }: {
           if (isEdit) await updateReason(source!.reasonCode, form); else await createReason(form);
           onSaved(form.reasonCode);
         }
-        catch (ex: any) { setErr(ex?.message ?? String(ex)); } finally { setSaving(false); }
+        catch (ex: any) { setErr(errorText(t, ex)); } finally { setSaving(false); }
       }}>
       <Field label={t("thShortageCode", "Reason Code")}>
         <input maxLength={20} required value={form.reasonCode} readOnly={isEdit}

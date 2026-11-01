@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -18,7 +19,10 @@ class LabelStore(private val context: Context) {
 
     private fun key(lang: String) = stringPreferencesKey("labels_$lang")
 
+    private val languageSerializer = ListSerializer(LanguageOption.serializer())
+
     private object Keys {
+        val LANGUAGES = stringPreferencesKey("languages")
         val LANG = stringPreferencesKey("ui_lang")
         val LANG_OWNER = stringPreferencesKey("ui_lang_owner")
     }
@@ -32,9 +36,18 @@ class LabelStore(private val context: Context) {
             ?.let { runCatching { json.decodeFromString(mapSerializer, it) }.getOrNull() }
             ?: emptyMap()
 
-    suspend fun clear() {
+    suspend fun saveLanguages(list: List<LanguageOption>) {
+        context.dataStore.edit { it[Keys.LANGUAGES] = json.encodeToString(languageSerializer, list) }
+    }
+
+    suspend fun loadLanguages(): List<LanguageOption> =
+        context.dataStore.data.first()[Keys.LANGUAGES]
+            ?.let { runCatching { json.decodeFromString(languageSerializer, it) }.getOrNull() }
+            ?: emptyList()
+
+    suspend fun clear(codes: Collection<String>) {
         context.dataStore.edit { p ->
-            listOf("en", "ja", "vi").forEach { p.remove(key(it)) }
+            (codes + listOf("en", "ja", "vi")).distinct().forEach { p.remove(key(it)) }
         }
     }
 

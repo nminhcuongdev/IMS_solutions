@@ -12,6 +12,7 @@ import { useToast } from "@/lib/Toast";
 import { TableSkeleton } from "@/lib/TableSkeleton";
 import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useUrlNumber, useUrlSearch, useUrlString, useUrlPatch } from "@/lib/useUrlState";
+import { errorText } from "@/lib/errorText";
 
 type LangCol = "en" | "ja" | "vi";
 const LANG_COLS: { key: LangCol; labelKey: string; label: string }[] = [
@@ -69,7 +70,7 @@ export function LanguageDataPage() {
       setEdits({});
       await load();
       toast.ok(t("toastSavedCount", "Saved {0} cell(s)").replace("{0}", String(items.length)));
-    } catch (e: any) { setSaveErr(e?.message ?? String(e)); toast.err(e?.message ?? String(e)); }
+    } catch (e: any) { setSaveErr(errorText(t, e)); toast.err(errorText(t, e)); }
     finally { setSaving(false); }
   };
 
@@ -79,7 +80,7 @@ export function LanguageDataPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) { setSaveErr(e?.message ?? String(e)); }
+    } catch (e: any) { setSaveErr(errorText(t, e)); }
   };
 
   const editCount = Object.keys(edits).length;

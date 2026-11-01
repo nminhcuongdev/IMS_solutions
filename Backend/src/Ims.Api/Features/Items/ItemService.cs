@@ -1,3 +1,7 @@
+﻿using Ims.Domain.Picking;
+using Ims.Domain.Returns;
+using Ims.Domain.Shipping;
+using Ims.Domain.Receiving;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
@@ -18,6 +22,7 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         .Add("packing_type_code", i => i.PackingTypeCode)
         .Add("package_qty", i => i.PackageQty)
         .Add("is_lot_managed", i => i.IsLotManaged)
+        .Add("ht_scan_required", i => i.HtScanRequired)
         .Add("is_serial_managed", i => i.IsSerialManaged)
         .Add("barcode", i => i.Barcode)
         .Add("expiration_period", i => i.ExpirationPeriod)
@@ -47,8 +52,8 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         if (!string.IsNullOrWhiteSpace(q))
         {
             var s = q.Trim();
-            query = query.Where(i => EF.Functions.Like(i.ItemCode, "%" + s + "%")
-                                  || EF.Functions.Like(i.ItemName, "%" + s + "%"));
+            query = query.Where(i => EF.Functions.Like(i.ItemCode, LikeContains(s), LikeEscape)
+                                  || EF.Functions.Like(i.ItemName, LikeContains(s), LikeEscape));
         }
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
@@ -69,6 +74,7 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
     {
         if (ValidateCode(body.ItemCode) is { } e1) return e1;
         if (ValidateName(body.ItemName) is { } e2) return e2;
+        if (HasNegative(body)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
         var code = body.ItemCode.Trim();
         if (await db.Items.AnyAsync(i => i.ItemCode == code, ct))
             return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
@@ -90,6 +96,8 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
             UomCode = body.UomCode?.Trim(),
             PackingTypeCode = NullIfBlank(body.PackingTypeCode),
             PackageQty = body.PackageQty,
+            IsLotManaged = body.IsLotManaged,
+            HtScanRequired = body.HtScanRequired,
             ExpirationPeriod = body.ExpirationPeriod,
             Barcode = body.Barcode,
             SurplusPoint = body.SurplusPoint,
@@ -99,7 +107,7 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
             IsActive = body.IsActive,
             Remark1 = body.Remark1, Remark2 = body.Remark2, Remark3 = body.Remark3,
             Remark4 = body.Remark4, Remark5 = body.Remark5,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
         };
         db.Items.Add(i);
         await db.SaveChangesAsync(ct);
@@ -111,6 +119,7 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         var i = await db.Items.FirstOrDefaultAsync(x => x.ItemCode == code && !x.IsDeleted, ct);
         if (i is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
         if (ValidateName(body.ItemName) is { } e) return e;
+        if (HasNegative(body)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
         var groupCode = body.ItemGroupCode.Trim();
         if (!await db.ItemGroups.AnyAsync(g => g.ItemGroupCode == groupCode && !g.IsDeleted, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("ItemGroup")));
@@ -126,6 +135,8 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         i.UomCode = body.UomCode?.Trim();
         i.PackingTypeCode = NullIfBlank(body.PackingTypeCode);
         i.PackageQty = body.PackageQty;
+        i.IsLotManaged = body.IsLotManaged;
+        i.HtScanRequired = body.HtScanRequired;
         i.ExpirationPeriod = body.ExpirationPeriod;
         i.Barcode = body.Barcode;
         i.SurplusPoint = body.SurplusPoint;
@@ -135,7 +146,7 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         i.IsActive = body.IsActive;
         i.Remark1 = body.Remark1; i.Remark2 = body.Remark2; i.Remark3 = body.Remark3;
         i.Remark4 = body.Remark4; i.Remark5 = body.Remark5;
-        i.UpdatedAt = DateTime.UtcNow;
+        i.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.Ok(new ApiSuccess<ItemDto>(Map(i)));
     }
@@ -144,7 +155,19 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
     {
         var i = await db.Items.FirstOrDefaultAsync(x => x.ItemCode == code && !x.IsDeleted, ct);
         if (i is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
-        i.IsDeleted = true; i.UpdatedAt = DateTime.UtcNow;
+        if (await db.Stocks.AnyAsync(x => x.ItemCode == code && x.StockQty > 0, ct)
+            || await db.ReceivingPlans.AnyAsync(x => x.ItemCode == code && (x.Status == ReceivingStatus.NotArrived || x.Status == ReceivingStatus.Partial), ct)
+            || await db.ShippingPlans.AnyAsync(x => x.ItemCode == code && (x.Status == ShippingStatus.Pending || x.Status == ShippingStatus.Partial), ct)
+            || await db.ReturnPlans.AnyAsync(x => x.ItemCode == code && (x.Status == ReturnStatus.Pending || x.Status == ReturnStatus.Partial), ct)
+            || await db.PickingPlans.AnyAsync(x => x.ItemCode == code && x.Status == PickingStatus.NotPicked, ct)
+            || await db.ProductionOrders.AnyAsync(x => x.OutputItemCode == code, ct)
+            || await db.ProductionOrderLines.AnyAsync(x => x.ItemCode == code, ct)
+            || await db.ProductionConsumptions.AnyAsync(x => x.ItemCode == code, ct)
+            || await db.ProductionOutputs.AnyAsync(x => x.ItemCode == code, ct)
+            || await db.ProductionReturns.AnyAsync(x => x.ItemCode == code, ct)
+            || await db.ProductionLabels.AnyAsync(x => x.ItemCode == code, ct))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
+        i.IsDeleted = true; i.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);
         return Outcome.NoContent();
     }
@@ -153,7 +176,7 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
     {
         var rows = await db.Items.AsNoTracking().Where(i => !i.IsDeleted).OrderBy(i => i.ItemCode).ToListAsync(ct);
         var sb = new StringBuilder();
-        sb.AppendLine("item_code,item_name,item_group_code,uom_code,packing_type_code,package_qty,expiration_period,barcode,surplus_point,reorder_level_1,reorder_level_2,default_location_code,is_active,remark_1,remark_2,remark_3,remark_4,remark_5");
+        sb.AppendLine("item_code,item_name,item_group_code,uom_code,packing_type_code,package_qty,expiration_period,barcode,surplus_point,reorder_level_1,reorder_level_2,default_location_code,is_active,remark_1,remark_2,remark_3,remark_4,remark_5,is_lot_managed,ht_scan_required");
         foreach (var i in rows)
             sb.Append(Csv(i.ItemCode)).Append(',').Append(Csv(i.ItemName)).Append(',')
               .Append(Csv(i.ItemGroupCode)).Append(',').Append(Csv(i.UomCode)).Append(',')
@@ -163,7 +186,8 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
               .Append(Csv(i.DefaultLocationCode)).Append(',').Append(i.IsActive ? "1" : "0").Append(',')
               .Append(Csv(i.Remark1)).Append(',').Append(Csv(i.Remark2)).Append(',')
               .Append(Csv(i.Remark3)).Append(',').Append(Csv(i.Remark4)).Append(',')
-              .Append(Csv(i.Remark5)).AppendLine();
+              .Append(Csv(i.Remark5)).Append(',').Append(i.IsLotManaged ? "1" : "0").Append(',')
+              .Append(i.HtScanRequired ? "1" : "0").AppendLine();
         return CsvFile(sb, "items.csv");
     }
 
@@ -173,5 +197,8 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         i.SurplusPoint, i.ReorderLevel1, i.ReorderLevel2,
         i.DefaultLocationCode, i.IsActive,
         i.Remark1, i.Remark2, i.Remark3, i.Remark4, i.Remark5,
-        i.CreatedAt, i.UpdatedAt);
+        i.CreatedAt, i.UpdatedAt, i.IsLotManaged, i.HtScanRequired);
+
+    private static bool HasNegative(ItemWriteDto b) =>
+        b.PackageQty < 0 || b.ExpirationPeriod < 0 || b.SurplusPoint < 0 || b.ReorderLevel1 < 0 || b.ReorderLevel2 < 0;
 }
