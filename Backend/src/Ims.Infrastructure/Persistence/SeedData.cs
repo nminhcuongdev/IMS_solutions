@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Ims.Domain.Masters;
 using Ims.Domain.History;
 using Ims.Domain.System;
+using Ims.Infrastructure.Persistence.Catalog;
 
 namespace Ims.Infrastructure.Persistence;
 
@@ -15,22 +16,14 @@ public static class SeedData
         await SeedLanguageData(db, ct);
         await SeedExtraLabels(db, ct);
         await SeedDefaultValue(db, ct);
-        await SeedFunctionLarge(db, ct);
-        await SeedAppFunction(db, ct);
-        await SeedPermission(db, ct);
-        await SeedRole(db, ct);
-        await SeedRolePermission(db, ct);
         await db.SaveChangesAsync(ct);
-        await SeedProductionPermissions(db, ct);
-        await SeedDistributionPermissions(db, ct);
+        await SeedPermissionCatalog(db, ct);
         await SeedMasters.RunAsync(db, ct);
         await SeedUsers(db, ct);
         await SeedHistory(db, ct);
         await SeedGeneral(db, ct);
         await SeedAlertConfig(db, ct);
         await SeedStockScan(db, ct);
-        await db.SaveChangesAsync(ct);
-        await SeedFunctionVisibility(db, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -41,13 +34,13 @@ public static class SeedData
         var admin = new AppUser
         {
             UserCode = "admin", UserName = "Administrator",
-            RoleCode = "Admin", IsActive = true, CreatedAt = DateTime.Now,
+            RoleCode = MenuCatalog.AdminRole, IsActive = true, CreatedAt = DateTime.Now,
         };
         admin.PasswordHash = hasher.HashPassword(admin, "password");
         var superAdmin = new AppUser
         {
             UserCode = "superadmin", UserName = "Super Administrator",
-            RoleCode = "Admin", IsActive = true, CreatedAt = DateTime.Now,
+            RoleCode = MenuCatalog.AdminRole, IsActive = true, CreatedAt = DateTime.Now,
         };
         superAdmin.PasswordHash = hasher.HashPassword(superAdmin, "superadmin");
         foreach (var u in new[] { admin, superAdmin })
@@ -58,7 +51,7 @@ public static class SeedData
             var u = new AppUser
             {
                 UserCode = r.UserCode, UserName = r.UserName,
-                RoleCode = r.RoleCode, FactoryCode = null,
+                RoleCode = r.RoleCode.ToUpperInvariant(), FactoryCode = null,
                 DefaultLanguage = r.DefaultLanguage, IsActive = r.IsActive,
                 Remark1 = r.Remark1, Remark2 = r.Remark2, Remark3 = r.Remark3,
                 Remark4 = r.Remark4, Remark5 = r.Remark5,
@@ -320,10 +313,12 @@ public static class SeedData
             ("thReturnDate",     "Return Date",         "返品日",                "Ngày trả hàng"),
         };
 
-        var have = await db.LanguageData
+        var have = (await db.LanguageData
             .Where(d => d.DeviceScope == "PC")
             .Select(d => d.LabelKey + "|" + d.LanguageCode)
-            .ToListAsync(ct);
+            .ToListAsync(ct))
+            .Concat(db.LanguageData.Local.Where(d => d.DeviceScope == "PC").Select(d => d.LabelKey + "|" + d.LanguageCode))
+            .ToHashSet();
 
         foreach (var r in rows)
             foreach (var (code, text) in new[] { ("en", r.en), ("ja", r.ja), ("vi", r.vi) })
@@ -396,6 +391,7 @@ public static class SeedData
             ("layout_file_m_partner",  "BusinessPartner.mllayx",          "Layout"),
             ("layout_file_m_process",  "Layout_IMS/Process.mllayx",        "Layout"),
         };
+        rows = [.. rows, .. MenuCatalog.Modules.Select(m => (MenuCatalog.ModulePrefix + m, (string?)"1", "Module"))];
         foreach (var r in rows.Where(r => !have.Contains(r.code)))
             db.GeneralSettings.Add(new GeneralSetting
             {
@@ -418,316 +414,61 @@ public static class SeedData
         if (rows is not null) db.StockScans.AddRange(rows);
     }
 
-    private static async Task SeedFunctionVisibility(ImsDbContext db, CancellationToken ct)
+    private static async Task SeedPermissionCatalog(ImsDbContext db, CancellationToken ct)
     {
-        if (await db.FunctionVisibilities.AnyAsync(ct)) return;
-        var funcs = await db.AppFunctions.Where(f => !f.IsDeleted)
-                            .Select(f => f.FunctionCode).ToListAsync(ct);
-        foreach (var f in funcs)
-            foreach (var device in new[] { "PC", "HT" })
-                db.FunctionVisibilities.Add(new FunctionVisibility
-                {
-                    TargetType = device, TargetCode = f, IsVisible = true,
-                });
-    }
-
-    private static async Task SeedFunctionLarge(ImsDbContext db, CancellationToken ct)
-    {
-        if (await db.FunctionLarges.AnyAsync(ct)) return;
-        var rows = new (string code, string name, int order)[]
-        {
-            ("menu",             "Menu",             1),
-            ("inventoryMgmt",    "Inventory",        2),
-            ("alertCenter",      "Alert Center",     3),
-            ("receivingMgmt",    "Receiving",        4),
-            ("shippingMgmt",     "Shipping",         5),
-            ("stocktakeMgmt",    "Stocktaking",      8),
-            ("printHistory",     "Print History",    9),
-            ("rfidHistory",      "RFID History",     10),
-            ("masterMgmt",       "Master Data",      11),
-            ("otherMgmt",        "Other",            12),
-        };
-        foreach (var r in rows)
-        {
+        var now = DateTime.Now;
+        var knownGroups = await db.FunctionLarges.Select(x => x.LargeCode).ToListAsync(ct);
+        foreach (var g in MenuCatalog.Groups.Where(g => !knownGroups.Contains(g.Code)))
             db.FunctionLarges.Add(new FunctionLarge
             {
-                LargeCode = r.code,
-                LargeName = r.name,
-                DisplayOrder = r.order,
-                IsActive = true,
-                CreatedAt = DateTime.Now,
+                LargeCode = g.Code, LargeName = g.Name, DisplayOrder = g.Order,
+                IsActive = true, IsVisible = true, CreatedAt = now,
             });
-        }
-    }
 
-    private static async Task SeedAppFunction(ImsDbContext db, CancellationToken ct)
-    {
-        if (await db.AppFunctions.AnyAsync(ct)) return;
-        var rows = new (string code, string name, string large, int order)[]
+        var knownRoles = await db.Roles.Select(x => x.RoleCode).ToListAsync(ct);
+        var roles = new[]
         {
-            ("dashboard",         "Menu",                       "menu",          1),
-            ("m_factory",         "Factory Master",             "masterMgmt",    1),
-            ("m_zone",            "Zone Master",                "masterMgmt",    2),
-            ("m_location",        "Location Master",            "masterMgmt",    3),
-            ("m_itemgroup",       "Item Group Master",          "masterMgmt",    4),
-            ("m_item",            "Item Master",                "masterMgmt",    5),
-            ("m_partner",         "Business Partner Master",    "masterMgmt",    6),
-            ("m_device",          "Device Master",              "masterMgmt",    7),
-            ("m_user",            "User Master",                "masterMgmt",    8),
-            ("m_reason",          "Reason Master",              "masterMgmt",    9),
-            ("m_location_3d",     "Location 3D",                "masterMgmt",    11),
-            ("inv",              "Stock Inquiry",              "inventoryMgmt", 1),
-            ("inv_history",      "Work History",               "inventoryMgmt", 2),
-            ("inv_hold",         "Hold Item",                  "inventoryMgmt", 3),
-            ("rcv_import",        "Import Receiving Schedule",  "receivingMgmt", 1),
-            ("rcv_result",        "Receiving/Returns Result",   "receivingMgmt", 3),
-            ("returns",           "Returns",                    "receivingMgmt", 2),
-            ("pick_import",       "Import Picking Schedule",    "shippingMgmt",  1),
-            ("pick_result",       "Picking Result",             "shippingMgmt",  2),
-            ("shp_import",        "Import Shipping Schedule",   "shippingMgmt",  3),
-            ("shp_result",        "Shipping Result",            "shippingMgmt",  4),
-            ("st_label",          "Item Stocktaking",           "stocktakeMgmt", 1),
-            ("st_ref",            "Stocktaking History",        "stocktakeMgmt", 2),
-            ("st_rfid_demo",      "RFID Stock Count",           "stocktakeMgmt", 3),
-            ("alert_center",      "Alert Center",               "alertCenter",   1),
-            ("print_history",     "Print History",              "printHistory",  1),
-            ("rfid_gate_history", "RFID Gate History",          "rfidHistory",   1),
-            ("m_permission",      "User Permission",            "otherMgmt",     1),
-            ("settings",          "Settings",                   "otherMgmt",     2),
-            ("lang_data",         "Language Data",              "otherMgmt",     3),
-            ("super_admin",       "Super Admin",                "otherMgmt",     4),
+            (Code: MenuCatalog.AdminRole, Name: "Admin", Builtin: true),
+            (Code: MenuCatalog.GeneralRole, Name: "General", Builtin: false),
+            (Code: MenuCatalog.WorkerRole, Name: "Worker", Builtin: false),
         };
-        foreach (var r in rows)
-        {
+        foreach (var r in roles.Where(r => !knownRoles.Contains(r.Code, StringComparer.OrdinalIgnoreCase)))
+            db.Roles.Add(new Role
+            {
+                RoleCode = r.Code, RoleName = r.Name, IsBuiltin = r.Builtin, IsActive = true, CreatedAt = now,
+            });
+        await db.SaveChangesAsync(ct);
+
+        var knownFunctions = await db.AppFunctions.Select(x => x.FunctionCode).ToListAsync(ct);
+        foreach (var f in MenuCatalog.Functions.Where(f => !knownFunctions.Contains(f.Code)))
             db.AppFunctions.Add(new AppFunction
             {
-                FunctionCode = r.code,
-                FunctionName = r.name,
-                LargeCode = r.large,
-                DisplayOrder = r.order,
-                IsActive = true,
-                CreatedAt = DateTime.Now,
+                FunctionCode = f.Code, FunctionName = f.Name, LargeCode = f.Group,
+                DisplayOrder = f.Order, IsActive = true, IsVisible = true, CreatedAt = now,
             });
-        }
-    }
+        await db.SaveChangesAsync(ct);
 
-    private static async Task SeedPermission(ImsDbContext db, CancellationToken ct)
-    {
-        if (await db.Permissions.AnyAsync(ct)) return;
-        var masterScreens = new[] { "m_factory","m_zone","m_location","m_itemgroup","m_item","m_partner","m_user","m_reason" };
-        var masterActions = new[] { "view","new","edit","delete","import","export" };
-        foreach (var f in masterScreens)
-            foreach (var a in masterActions)
-                db.Permissions.Add(new Permission
+        var knownPermissions = (await db.Permissions.Select(x => x.PermissionCode).ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var grantRoles = await db.Roles
+            .Where(r => !r.IsDeleted && (r.RoleCode == MenuCatalog.GeneralRole || r.RoleCode == MenuCatalog.WorkerRole))
+            .Select(r => r.RoleCode).ToListAsync(ct);
+        foreach (var f in MenuCatalog.Functions)
+        foreach (var action in f.Actions)
+        {
+            var code = MenuCatalog.PermissionCode(f.Code, action);
+            if (knownPermissions.Contains(code)) continue;
+            db.Permissions.Add(new Permission
+            {
+                PermissionCode = code, FunctionCode = f.Code, ActionType = action, IsActive = true, CreatedAt = now,
+            });
+            foreach (var role in grantRoles)
+                db.RolePermissions.Add(new RolePermission
                 {
-                    PermissionCode = $"{f}.{a}",
-                    FunctionCode = f,
-                    Action = a,
-                    IsActive = true,
-                    CreatedAt = DateTime.Now,
+                    RoleCode = role, PermissionCode = code,
+                    IsAllowed = MenuCatalog.DefaultAllowed(role, f, action), CreatedAt = now,
                 });
-        foreach (var f in new[] { "m_location", "m_user", "m_partner" })
-            db.Permissions.Add(new Permission
-            {
-                PermissionCode = $"{f}.label",
-                FunctionCode = f,
-                Action = "label",
-                IsActive = true,
-                CreatedAt = DateTime.Now,
-            });
-
-        var otherScreens = new[] { "dashboard","m_permission","settings","lang_data","print_history","rfid_gate_history","super_admin","rcv_result","shp_result","pick_result","m_location_3d","alert_center","m_device" };
-        foreach (var f in otherScreens)
-            db.Permissions.Add(new Permission
-            {
-                PermissionCode = $"{f}.view",
-                FunctionCode = f,
-                Action = "view",
-                IsActive = true,
-                CreatedAt = DateTime.Now,
-            });
-
-        foreach (var f in new[] { "rcv_import", "returns", "shp_import" })
-        foreach (var a in new[] { "view", "new", "status", "shortage", "import", "export" })
-            db.Permissions.Add(new Permission
-            {
-                PermissionCode = $"{f}.{a}",
-                FunctionCode = f,
-                Action = a,
-                IsActive = true,
-                CreatedAt = DateTime.Now,
-            });
-        foreach (var a in new[] { "view", "new", "status", "import", "export" })
-            db.Permissions.Add(new Permission
-            {
-                PermissionCode = $"pick_import.{a}",
-                FunctionCode = "pick_import",
-                Action = a,
-                IsActive = true,
-                CreatedAt = DateTime.Now,
-            });
-        foreach (var (f, actions) in new[]
-        {
-            ("inv", new[] { "view", "adjust", "disposal", "export" }),
-            ("inv_history", new[] { "view", "restore", "export" }),
-            ("inv_hold", new[] { "view", "hold", "release", "export" }),
-        })
-        foreach (var a in actions)
-            db.Permissions.Add(new Permission
-            {
-                PermissionCode = $"{f}.{a}",
-                FunctionCode = f,
-                Action = a,
-                IsActive = true,
-                CreatedAt = DateTime.Now,
-            });
-
-        foreach (var (f, actions) in new[]
-        {
-            ("st_label", new[] { "view", "start", "complete", "finalize", "export" }),
-            ("st_ref", new[] { "view", "export" }),
-            ("st_rfid_demo", new[] { "view", "reset" }),
-        })
-        foreach (var a in actions)
-            db.Permissions.Add(new Permission
-            {
-                PermissionCode = $"{f}.{a}",
-                FunctionCode = f,
-                Action = a,
-                IsActive = true,
-                CreatedAt = DateTime.Now,
-            });
-
-        foreach (var f in new[] { "rcv_result", "shp_result", "pick_result" })
-            db.Permissions.Add(new Permission
-            {
-                PermissionCode = $"{f}.export",
-                FunctionCode = f,
-                Action = "export",
-                IsActive = true,
-                CreatedAt = DateTime.Now,
-            });
-    }
-
-    private static async Task SeedRole(ImsDbContext db, CancellationToken ct)
-    {
-        if (await db.Roles.AnyAsync(ct)) return;
-        db.Roles.AddRange(
-            new Role { RoleCode = "Admin",   RoleName = "Administrator", IsActive = true, CreatedAt = DateTime.Now },
-            new Role { RoleCode = "General", RoleName = "General User",  IsActive = true, CreatedAt = DateTime.Now },
-            new Role { RoleCode = "Worker",  RoleName = "Worker",        IsActive = true, CreatedAt = DateTime.Now }
-        );
-    }
-
-    private static async Task SeedRolePermission(ImsDbContext db, CancellationToken ct)
-    {
-        if (await db.RolePermissions.AnyAsync(ct)) return;
-        var permCodes = db.ChangeTracker.Entries<Permission>()
-                          .Select(e => (e.Entity.PermissionCode, e.Entity.Action))
-                          .ToList();
-        foreach (var (code, action) in permCodes)
-        {
-            db.RolePermissions.Add(new RolePermission
-            {
-                RoleCode = "Admin", PermissionCode = code, IsAllowed = true,
-                CreatedAt = DateTime.Now,
-            });
-            db.RolePermissions.Add(new RolePermission
-            {
-                RoleCode = "General", PermissionCode = code,
-                IsAllowed = action is "view" or "export" or "import" or "new" or "edit" or "label",
-                CreatedAt = DateTime.Now,
-            });
-            db.RolePermissions.Add(new RolePermission
-            {
-                RoleCode = "Worker", PermissionCode = code,
-                IsAllowed = action is "view" or "label",
-                CreatedAt = DateTime.Now,
-            });
         }
-    }
-
-    private static async Task SeedProductionPermissions(ImsDbContext db, CancellationToken ct)
-    {
-        var groups = new[]
-        {
-            (Code: "productionMgmt", Name: "Production", Order: 6),
-            (Code: "traceMgmt", Name: "Traceability", Order: 7),
-            (Code: "ht_production", Name: "Production", Order: 13),
-        };
-        var knownGroups = await db.FunctionLarges.Select(x => x.LargeCode).ToListAsync(ct);
-        foreach (var g in groups.Where(g => !knownGroups.Contains(g.Code)))
-            db.FunctionLarges.Add(new FunctionLarge { LargeCode = g.Code, LargeName = g.Name,
-                DisplayOrder = g.Order, IsActive = true, CreatedAt = DateTime.Now });
-        var definitions = new[]
-        {
-            (Code: "prd_import", Name: "Production Order", Group: "productionMgmt", Order: 1, Actions: new[] { "view", "status_change", "material_picking", "import", "export" }),
-            (Code: "prd_result", Name: "Production Result", Group: "productionMgmt", Order: 2, Actions: new[] { "view", "reverse", "export" }),
-            (Code: "trace_back", Name: "Trace Back", Group: "traceMgmt", Order: 1, Actions: new[] { "view", "export" }),
-            (Code: "trace_fwd", Name: "Trace Forward", Group: "traceMgmt", Order: 2, Actions: new[] { "view", "export" }),
-            (Code: "m_process", Name: "Process Master", Group: "masterMgmt", Order: 10, Actions: new[] { "view", "new", "edit", "copy", "delete", "label", "export" }),
-            (Code: "ht_prd_receipt", Name: "Material Receipt", Group: "ht_production", Order: 1, Actions: new[] { "view" }),
-            (Code: "ht_prd_input", Name: "Production Input", Group: "ht_production", Order: 2, Actions: new[] { "view" }),
-            (Code: "ht_prd_return", Name: "Material Return", Group: "ht_production", Order: 3, Actions: new[] { "view" }),
-            (Code: "ht_prd_output", Name: "Production Output", Group: "ht_production", Order: 4, Actions: new[] { "view" }),
-        };
-        var knownFunctions = await db.AppFunctions.Select(x => x.FunctionCode).ToListAsync(ct);
-        var knownPermissions = await db.Permissions.Select(x => x.PermissionCode).ToListAsync(ct);
-        var knownGrants = await db.RolePermissions.Select(x => x.RoleCode + "|" + x.PermissionCode).ToListAsync(ct);
-        var knownVisibility = await db.FunctionVisibilities.Select(x => x.TargetType + "|" + x.TargetCode).ToListAsync(ct);
-        foreach (var g in groups.Where(g => !knownVisibility.Contains("Group|" + g.Code)))
-            db.FunctionVisibilities.Add(new FunctionVisibility { TargetType = "Group",
-                TargetCode = g.Code, IsVisible = true });
-        foreach (var f in definitions)
-        {
-            if (!knownFunctions.Contains(f.Code))
-                db.AppFunctions.Add(new AppFunction { FunctionCode = f.Code, FunctionName = f.Name,
-                    LargeCode = f.Group, DisplayOrder = f.Order, IsActive = true, CreatedAt = DateTime.Now });
-            foreach (var action in f.Actions)
-            {
-                var code = f.Code + "." + action;
-                if (!knownPermissions.Contains(code))
-                    db.Permissions.Add(new Permission { PermissionCode = code, FunctionCode = f.Code,
-                        Action = action, IsActive = true, CreatedAt = DateTime.Now });
-                foreach (var role in new[] { "Admin", "General", "Worker" })
-                {
-                    if (knownGrants.Contains(role + "|" + code)) continue;
-                    var allowed = role == "Admin" || role == "General" && action != "reverse"
-                        || role == "Worker" && f.Group == "ht_production";
-                    db.RolePermissions.Add(new RolePermission { RoleCode = role, PermissionCode = code,
-                        IsAllowed = allowed, CreatedAt = DateTime.Now });
-                }
-            }
-            var device = f.Group == "ht_production" ? "HT" : "PC";
-            if (!knownVisibility.Contains(device + "|" + f.Code))
-                db.FunctionVisibilities.Add(new FunctionVisibility { TargetType = device,
-                    TargetCode = f.Code, IsVisible = true });
-        }
-    }
-
-    private static async Task SeedDistributionPermissions(ImsDbContext db, CancellationToken ct)
-    {
-        const string code = "dist_status";
-        if (!await db.AppFunctions.AnyAsync(f => f.FunctionCode == code, ct))
-            db.AppFunctions.Add(new AppFunction { FunctionCode = code, FunctionName = "Data Distribution",
-                LargeCode = "masterMgmt", DisplayOrder = 12, IsActive = true, CreatedAt = DateTime.Now });
-        var knownPermissions = await db.Permissions.Select(x => x.PermissionCode).ToListAsync(ct);
-        var knownGrants = await db.RolePermissions.Select(x => x.RoleCode + "|" + x.PermissionCode).ToListAsync(ct);
-        foreach (var action in new[] { "view", "distribute" })
-        {
-            var permission = code + "." + action;
-            if (!knownPermissions.Contains(permission))
-                db.Permissions.Add(new Permission { PermissionCode = permission, FunctionCode = code, Action = action,
-                    IsActive = true, CreatedAt = DateTime.Now });
-            foreach (var role in new[] { "Admin", "General", "Worker" })
-            {
-                if (knownGrants.Contains(role + "|" + permission)) continue;
-                var allowed = role == "Admin" || role == "General" && action == "view";
-                db.RolePermissions.Add(new RolePermission { RoleCode = role, PermissionCode = permission,
-                    IsAllowed = allowed, CreatedAt = DateTime.Now });
-            }
-        }
-        if (!await db.FunctionVisibilities.AnyAsync(v => v.TargetType == "PC" && v.TargetCode == code, ct))
-            db.FunctionVisibilities.Add(new FunctionVisibility { TargetType = "PC", TargetCode = code, IsVisible = true });
+        await db.SaveChangesAsync(ct);
     }
 }

@@ -135,7 +135,7 @@ function qsOf(q: Record<string, unknown>): string {
 }
 
 export const exportStockCsv = (q: StockQuery = {}) =>
-  apiDownload("/stock/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/stock" + qsOf({ ...q, page: undefined, pageSize: undefined }));
 
 export const exportInventoryHistoryCsv = (q: HistoryQuery = {}) =>
-  apiDownload("/inventory-history/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/inventory-history" + qsOf({ ...q, page: undefined, pageSize: undefined }));

@@ -4,4 +4,6 @@ public sealed record ApiErrorBody(
     string Code,
     int HttpStatus,
     string Severity,
-    string Message);
+    string Message,
+    IReadOnlyList<string>? Args = null,
+    string? MessageKey = null);

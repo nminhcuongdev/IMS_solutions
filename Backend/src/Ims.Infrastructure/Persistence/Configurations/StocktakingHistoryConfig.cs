@@ -9,7 +9,8 @@ public class StocktakingHistoryConfig : IEntityTypeConfiguration<StocktakingHist
     public void Configure(EntityTypeBuilder<StocktakingHistory> b)
     {
         b.ToTable("stocktaking_history");
-        b.HasKey(x => new { x.ItemCode, x.LotNo });
+        b.HasKey(x => new { x.StocktakingSessionNo, x.ItemCode, x.LotNo });
+        b.Property(x => x.StocktakingSessionNo).HasColumnName("stocktaking_session_no").HasDefaultValue(0L);
 
         b.Property(x => x.ItemCode).HasColumnName("item_code").Code(20);
         b.Property(x => x.LotNo).HasColumnName("lot_no").Code(20);

@@ -15,6 +15,7 @@ public class ReceivingStatusChangeTests
     {
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-01", ItemName = "Printer", ItemGroupCode = "IG-01", UomCode = "pcs",
             PackingTypeCode = "BOX", PackageQty = 0, DefaultLocationCode = defaultLocation,
             IsActive = true, CreatedAt = DateTime.UtcNow,
@@ -84,7 +85,7 @@ public class ReceivingStatusChangeTests
         var result = await Service(t).ChangeStatusAsync(
             new ReceivingStatusChangeDto(new[] { "PO-A" }, "done"), default);
 
-        ResultAssert.BadRequest(result, "LOT-001");
+        ResultAssert.BadRequest(result, "VAL-001");
         Assert.Empty(await t.Db.ReceivingResults.ToListAsync());
     }
 
@@ -165,7 +166,7 @@ public class ReceivingStatusChangeTests
         var stock = await t.Db.Stocks.SingleAsync();
         Assert.Equal((0m, 0m), (stock.StockQty, stock.AvailableQty));
         var history = await t.Db.InventoryHistories.OrderBy(h => h.No).ToListAsync();
-        Assert.Equal(new (string, decimal?)[] { (InventoryAction.Receiving, 6m), (InventoryAction.Adjust, -6m) },
+        Assert.Equal(new (string, decimal?)[] { (InventoryAction.Receiving, 6m), (InventoryAction.Receiving, -6m) },
             history.Select(h => (h.ActionType, h.Qty)).ToArray());
     }
 

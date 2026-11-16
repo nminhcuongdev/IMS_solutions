@@ -1,4 +1,4 @@
-import { apiCall, apiDownload, apiList, clearToken, getToken } from "./client";
+import { API_BASE, apiCall, apiDownload, apiList, clearToken, getToken } from "./client";
 import { ApiCallError, type ApiError, type ApiListSuccess, type ApiSuccess } from "./types";
 import type { ImportResult } from "./imports";
 import type { ProductionOrderRow } from "./productionTypes/ProductionOrderRow";
@@ -14,25 +14,25 @@ export type { ProductionOrderRow, ProductionLineRow, ProductionWork, ProductionF
 export const listProductionOrders = (q: ProductionQuery) =>
   apiList<ProductionOrderRow | ProductionLineRow>("/production-order", { query: q as Record<string, string | number | boolean | undefined> });
 export const getProductionOrder = (no: string) => apiCall<ProductionDetail>(`/production-order/${encodeURIComponent(no)}`);
-export const getProductionLines = (no: string) => apiCall<ProductionLineRow[]>(`/production-order/${encodeURIComponent(no)}/lines`);
-export const getProductionWorks = (no: string) => apiCall<ProductionWorks>(`/production-order/${encodeURIComponent(no)}/works`);
+export const getProductionLines = (no: string) => getProductionOrder(no).then(d => d.lines);
+export const getProductionWorks = (no: string): Promise<ProductionWorks> => getProductionOrder(no).then(d => ({
+  receipts: [], consumptions: [], outputs: [], labels: [], returns: [], timeline: d.works ?? [],
+}));
 export const setProductionStatus = (orderNos: string[], status: string) =>
   apiCall<unknown>("/production-order/status", { method: "PUT", body: { orderNos, status } });
 export const setProductionPicking = (items: { orderNo: string; lineNo?: number }[], picked: boolean) =>
   apiCall<unknown>("/production-order/picking", { method: "PUT", body: { items, picked } });
 export const listProductionResults = (q: ProductionQuery): Promise<ApiListSuccess<ProductionFg | ProductionWork>> =>
   apiList<ProductionFg | ProductionWork>("/production-result", { query: q as Record<string, string | number | boolean | undefined> });
-export const reverseProduction = (kind: "consumption" | "output" | "return", no: number, reasonCode: string) =>
-  apiCall<unknown>(`/production-${kind}/${no}/reverse`, { method: "POST", body: { reasonCode } });
+export const reverseProduction = (_kind: "consumption" | "output" | "return", no: number, reasonCode: string) =>
+  apiCall<unknown>(`/production-result/${no}/reverse`, { method: "POST", body: { reasonCode } });
 export const exportProductionOrders = () => apiDownload("/export/production-order");
 export const exportProductionResults = () => apiDownload("/export/production-result");
 
 export async function importProductionOrders(file: File): Promise<ImportResult & { lineCount?: number }> {
-  const explicit = (import.meta.env.VITE_API_BASE as string | undefined)?.trim();
-  const base = explicit?.replace(/\/+$/, "") ?? `${window.location.protocol}//${window.location.hostname}:${(import.meta.env.VITE_API_PORT as string | undefined)?.trim() || "8091"}`;
   const body = new FormData(); body.append("file", file);
   const token = getToken();
-  const res = await fetch(`${base}/import/production-order`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body });
+  const res = await fetch(`${API_BASE}/import/production-order`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body });
   if (res.status === 401) clearToken();
   const raw = await res.text();
   const json = raw ? JSON.parse(raw) : {};

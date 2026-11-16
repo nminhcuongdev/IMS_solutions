@@ -2,6 +2,8 @@ namespace Ims.Domain.Stocktaking;
 
 public class StocktakingHistory
 {
+    public long StocktakingSessionNo { get; set; }
+
     public string ItemCode { get; set; } = null!;
 
     public string LotNo { get; set; } = "";

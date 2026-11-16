@@ -27,7 +27,7 @@ public sealed class SortMap<T>
     public SortMap<T> Default(string key)
     {
         if (!_primary.ContainsKey(key))
-            throw new InvalidOperationException($"SortMap<{typeof(T).Name}>: cột mặc định '{key}' chưa được Add.");
+            throw new InvalidOperationException($"SortMap<{typeof(T).Name}>: default column '{key}' has not been added.");
         _defaultKey = key;
         return this;
     }

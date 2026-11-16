@@ -4,4 +4,5 @@ public sealed record StocktakingResultDto(
     string? LocationCode,
     string? ItemCode,
     string? LotNo,
-    int CountedLabels);
+    int CountedLabels,
+    string? RequestId = null);

@@ -61,15 +61,16 @@ public class InventoryServiceTests
             ProductionOrderNo = "MO-H", LineNo = 1, ProcessCode = "P1", ItemCode = "IT-02",
             UomCode = "rolls", PlannedQty = 7, PickedAt = Now, PickedBy = "admin", CreatedBy = "admin"
         });
-        t.Db.ProductionReceipts.Add(new ProductionReceipt
-        {
-            ProductionOrderNo = "MO-H", RequestId = "R-H", CreatedAt = Now.AddMinutes(1), CreatedBy = "admin"
-        });
-        t.Db.ProductionLabels.Add(new ProductionLabel
-        {
-            ProductionOrderNo = "MO-H", RequestId = "L-H", OutputRequestId = "O-H",
-            ItemCode = "IT-01", LotNo = "FG-H", LabelCount = 2, CreatedAt = Now.AddMinutes(2), CreatedBy = "admin"
-        });
+        var orderH = t.Db.ProductionOrders.Local.Single(o => o.ProductionOrderNo == "MO-H");
+        orderH.ReceivedAt = Now.AddMinutes(1);
+        orderH.ReceivedBy = "admin";
+        foreach (var n in new[] { 1, 2 })
+            t.Db.ProductionResults.Add(new ProductionResult
+            {
+                ResultType = ProductionResultType.Output, ProductionOrderNo = "MO-H", RequestId = "O-H", SerialNo = $"PRD-H-{n}",
+                ItemCode = "IT-01", LotNo = "FG-H", Qty = 1, LocationCode = "W1_ZA", FactoryCode = "FAC-01",
+                LabelIssuedAt = Now.AddMinutes(2), LabelIssuedBy = "admin", CreatedAt = Now.AddMinutes(2), CreatedBy = "admin"
+            });
         await t.Db.SaveChangesAsync();
         var service = new InventoryService(t.Db);
         var page = ResultAssert.Ok<ApiListSuccess<InventoryHistoryDto>>(
@@ -390,7 +391,7 @@ public class InventoryServiceTests
 
         var r = await new InventoryService(t.Db).HoldStockAsync(new StockHoldDto([], "RS-QC"), User(), default);
 
-        ResultAssert.BadRequest(r, "SEL-002");
+        ResultAssert.BadRequest(r, "SEL-004");
     }
 
     [Fact]
@@ -469,7 +470,7 @@ public class InventoryServiceTests
 
         var r = await new InventoryService(t.Db).DisposeStockAsync(new StockDisposalDto("IT-01", "0000000001", "RS-QC"), User(), default);
 
-        ResultAssert.BadRequest(r, "QTY-001");
+        ResultAssert.Error(r, 409, "INV-009");
     }
 
     [Fact]
@@ -505,7 +506,7 @@ public class InventoryServiceTests
 
         var r = await new InventoryService(t.Db).DisposeStockAsync(new StockDisposalDto("IT-01", "0000000001", "RS-QC", Qty: 6), User(), default);
 
-        ResultAssert.BadRequest(r, "QTY-001");
+        ResultAssert.Error(r, 409, "INV-009");
         Assert.Equal(5m, (await t.Db.Stocks.SingleAsync()).StockQty);
     }
 
@@ -516,8 +517,30 @@ public class InventoryServiceTests
 
         var r = await new InventoryService(t.Db).DisposeStockAsync(new StockDisposalDto("IT-01", "0000000001", "RS-QC", Qty: 0), User(), default);
 
-        ResultAssert.BadRequest(r, "QTY-001");
+        ResultAssert.BadRequest(r, "QTY-003");
         Assert.Empty(t.Db.InventoryHistories);
+    }
+
+    [Fact]
+    public async Task Disposal_of_held_stock_is_HLD_001()
+    {
+        using var t = await WithRowsAsync(Row(qty: 38, hold: true, reason: "RS-QC"));
+
+        var r = await new InventoryService(t.Db).DisposeStockAsync(new StockDisposalDto("IT-01", "0000000001", "RS-QC", Qty: 1), User(), default);
+
+        ResultAssert.Error(r, 409, "HLD-001");
+        Assert.Empty(t.Db.InventoryHistories);
+    }
+
+    [Fact]
+    public async Task Disposal_above_the_available_quantity_is_INV_009()
+    {
+        using var t = await WithRowsAsync(Row(qty: 38, reserved: 30));
+
+        var r = await new InventoryService(t.Db).DisposeStockAsync(new StockDisposalDto("IT-01", "0000000001", "RS-QC", Qty: 9), User(), default);
+
+        ResultAssert.Error(r, 409, "INV-009");
+        Assert.Equal(38m, (await t.Db.Stocks.SingleAsync()).StockQty);
     }
 
     [Fact]
@@ -590,7 +613,7 @@ public class InventoryServiceTests
 
 
     [Fact]
-    public async Task Restoring_a_disposal_adds_a_NEW_Adjust_row_and_leaves_the_disposal_intact()
+    public async Task Restoring_a_disposal_adds_a_NEW_RestoreDisposal_row_and_leaves_the_disposal_intact()
     {
         using var t = await WithRowsAsync(Row(qty: 0));
         t.Db.InventoryHistories.Add(Hist(InventoryAction.Disposal, -8, reason: "RS-QC"));
@@ -609,7 +632,7 @@ public class InventoryServiceTests
         var rows = await t.Db.InventoryHistories.OrderBy(x => x.No).ToListAsync();
         Assert.Equal(2, rows.Count);
         Assert.Equal(InventoryAction.Disposal, rows[0].ActionType);
-        Assert.Equal(InventoryAction.Adjust, rows[1].ActionType);
+        Assert.Equal(InventoryAction.RestoreDisposal, rows[1].ActionType);
         Assert.Equal(8m, rows[1].Qty);
     }
 

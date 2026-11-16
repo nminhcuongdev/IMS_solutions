@@ -18,6 +18,7 @@ public class ReceivingServiceTests
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-01", ItemName = "Industrial Printer 4in", ItemGroupCode = "IG-01",
             UomCode = "pcs", PackingTypeCode = "BOX", PackageQty = 10,
             IsActive = true, CreatedAt = now,
@@ -140,6 +141,7 @@ public class ReceivingServiceTests
         await SeedRefsAsync(t);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-02", ItemName = "Thermal label", ItemGroupCode = "IG-01",
             PackageQty = 1, IsActive = true, CreatedAt = DateTime.UtcNow,
         });
@@ -520,8 +522,8 @@ public class ReceivingServiceTests
         var empty = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(Array.Empty<string>(), "done"), default);
         var missing = await new ReceivingService(t.Db).ChangeStatusAsync(new ReceivingStatusChangeDto(null, "done"), default);
 
-        ResultAssert.BadRequest(empty, "SEL-002");
-        ResultAssert.BadRequest(missing, "SEL-002");
+        ResultAssert.BadRequest(empty, "SEL-004");
+        ResultAssert.BadRequest(missing, "SEL-004");
     }
 
     [Fact]
@@ -544,7 +546,7 @@ public class ReceivingServiceTests
 
 
     [Fact]
-    public async Task Shortage_subtracts_from_the_planned_qty_and_moves_the_row_to_partial()
+    public async Task Shortage_subtracts_from_the_planned_qty_and_closes_the_line_with_the_reason()
     {
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
@@ -556,7 +558,7 @@ public class ReceivingServiceTests
 
         var dto = ResultAssert.Ok<ApiSuccess<ReceivingPlanDto>>(res).Data!;
         Assert.Equal(11m, dto.ActualQty);
-        Assert.Equal("statusPartial", dto.Status);
+        Assert.Equal("statusArrived", dto.Status);
         Assert.Equal("RS-SHORT", dto.ShortageReason);
         var row = await t.Db.ReceivingPlans.FirstAsync(p => p.PoNo == "PO-A");
         Assert.Equal(15m, row.Qty);
@@ -741,7 +743,7 @@ public class ReceivingServiceTests
         await SeedRefsAsync(t);
         t.Db.AppUsers.Add(new AppUser
         {
-            UserCode = "U001", UserName = "Nguyễn Văn An", RoleCode = "Admin",
+            UserCode = "U001", UserName = "Nguyễn Văn An", RoleCode = "ADMIN",
             PasswordHash = "x", IsActive = true, CreatedAt = DateTime.UtcNow,
         });
         t.Db.ReceivingResults.Add(new ReceivingResult
@@ -767,7 +769,7 @@ public class ReceivingServiceTests
         await SeedRefsAsync(t);
         t.Db.AppUsers.Add(new AppUser
         {
-            UserCode = "U001", UserName = "Nguyễn Văn An", RoleCode = "Admin",
+            UserCode = "U001", UserName = "Nguyễn Văn An", RoleCode = "ADMIN",
             PasswordHash = "x", IsActive = true, CreatedAt = DateTime.UtcNow,
         });
         t.Db.ReceivingResults.Add(new ReceivingResult
@@ -847,7 +849,7 @@ public class ReceivingServiceTests
 
         var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(locationCode: "  "), Worker(), default);
 
-        ResultAssert.BadRequest(res, "LOC-001");
+        ResultAssert.BadRequest(res, "VAL-001");
         Assert.Equal(0, await t.Db.ReceivingResults.CountAsync());
         Assert.Equal(0, await t.Db.Stocks.CountAsync(s => s.SerialNo.StartsWith("RCV-")));
         Assert.Equal(0m, (await t.Db.ReceivingPlans.SingleAsync()).ActualQty);
@@ -1103,7 +1105,8 @@ public class ReceivingServiceTests
 
         var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 10), Worker(), default);
 
-        ResultAssert.BadRequest(res, "RSN-001");
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
+        Assert.Equal(ReceivingStatus.Partial, (await t.Db.ReceivingPlans.FirstAsync()).Status);
     }
 
     [Fact]
@@ -1163,7 +1166,7 @@ public class ReceivingServiceTests
     }
 
     [Fact]
-    public async Task CreateResult_rejects_a_shortage_without_a_reason()
+    public async Task CreateResult_accepts_a_partial_scan_without_a_reason()
     {
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
@@ -1173,8 +1176,8 @@ public class ReceivingServiceTests
 
         var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(qty: 7, reasonCode: null), Worker(), default);
 
-        ResultAssert.BadRequest(res, "RSN-001");
-        Assert.Equal(0m, (await t.Db.ReceivingPlans.FirstAsync()).ActualQty);
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
+        Assert.Equal(7m, (await t.Db.ReceivingPlans.FirstAsync()).ActualQty);
     }
 
     [Fact]
@@ -1311,6 +1314,7 @@ public class ReceivingServiceTests
         await SeedRefsAsync(t);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-02", ItemName = "Other", ItemGroupCode = "IG-01",
             UomCode = "pcs", IsActive = true, CreatedAt = DateTime.UtcNow,
         });
@@ -1393,7 +1397,7 @@ public class ReceivingServiceTests
         await SeedRefsAsync(t);
         t.Db.AppUsers.Add(new AppUser
         {
-            UserCode = "U001", UserName = "Nguyen Van An", RoleCode = "Admin",
+            UserCode = "U001", UserName = "Nguyen Van An", RoleCode = "ADMIN",
             PasswordHash = "x", IsActive = true, CreatedAt = DateTime.UtcNow,
         });
         t.Db.ReceivingPlans.Add(Plan(qty: 15));
@@ -1444,7 +1448,7 @@ public class ReceivingServiceTests
 
         var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult() with { LotNo = "   " }, Worker(), default);
 
-        ResultAssert.BadRequest(res, "LOT-001");
+        ResultAssert.BadRequest(res, "VAL-001");
         Assert.Empty(t.Db.ReceivingResults);
     }
 
@@ -1486,7 +1490,7 @@ public class ReceivingServiceTests
 
         var res = await new ReceivingService(t.Db).CreateResultAsync(ValidResult(serialNo: "01") with { LotNo = "LOT-B" }, Worker(), default);
 
-        ResultAssert.Error(res, 409, "SCN-006");
+        ResultAssert.Error(res, 409, "SCN-005");
         Assert.Empty(t.Db.ReceivingResults);
     }
 
@@ -1613,7 +1617,7 @@ public class ReceivingServiceTests
     {
         using var t = TestDb.Seeded(); await SeedRefsAsync(t);
         ResultAssert.BadRequest(await new ReceivingService(t.Db).CreateResultAsync(
-            new ReceivingResultWriteDto("IT-01", 10, null, null, "W1", "LOT-A"), Worker(), default), "LOC-001");
+            new ReceivingResultWriteDto("IT-01", 10, null, null, "W1", "LOT-A"), Worker(), default), "VAL-001");
         Assert.Empty(await t.Db.Stocks.ToListAsync());
     }
 

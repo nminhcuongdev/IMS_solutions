@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -9,12 +10,12 @@ public static class FactoryEndpoints
     public static IEndpointRouteBuilder MapFactoryEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/masters/factories").WithTags("Factories");
-        g.MapGet("", ListAsync);
-        g.MapGet("/{code}", GetAsync);
-        g.MapPost("", CreateAsync);
-        g.MapPut("/{code}", UpdateAsync);
-        g.MapDelete("/{code}", DeleteAsync);
-        g.MapGet("/export.csv", ExportCsvAsync);
+        g.MapGet("", ListAsync).RequireLookup();
+        g.MapGet("/{code}", GetAsync).RequireLookup();
+        g.MapPost("", CreateAsync).RequirePermission("m_factory.New", "m_factory.Copy");
+        g.MapPut("/{code}", UpdateAsync).RequirePermission("m_factory.Edit");
+        g.MapDelete("/{code}", DeleteAsync).RequirePermission("m_factory.Delete");
+        app.MapGet("/export/factories", ExportCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("m_factory.Export");
         return app;
     }
 

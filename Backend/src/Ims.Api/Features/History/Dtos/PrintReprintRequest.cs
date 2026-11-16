@@ -1,3 +1,3 @@
 namespace Ims.Api.Features.History;
 
-public sealed record PrintReprintRequest(string DeviceCode, int Count, Dictionary<string, string> Fields);
+public sealed record PrintReprintRequest(string DeviceCode, int Count, Dictionary<string, string>? Fields = null, bool ClientPrinted = false);

@@ -14,7 +14,7 @@ public class ProductionServiceTests
 {
     private static ClaimsPrincipal User => new(new ClaimsIdentity(new[]
     {
-        new Claim(ClaimTypes.NameIdentifier, "admin"), new Claim("role_code", "Admin")
+        new Claim(ClaimTypes.NameIdentifier, "admin"), new Claim("role_code", "ADMIN")
     }, "test"));
 
     private static TestDb Setup()
@@ -41,7 +41,7 @@ public class ProductionServiceTests
         t.Db.Processes.Single().IsActive = false;
         await t.Db.SaveChangesAsync();
         var service = new ProductionService(t.Db);
-        var line = Assert.Single(ResultAssert.Ok<ApiSuccess<IReadOnlyList<ProductionLineRowDto>>>(await service.LinesAsync("MO1", default)).Data!);
+        var line = Assert.Single(((dynamic)ResultAssert.Ok<ApiSuccess<object>>(await service.GetAsync("MO1", default)).Data!).Lines);
         Assert.Equal(("Process", false), (line.ProcessName, line.ProcessActive));
         var listed = Assert.Single(ResultAssert.Ok<ApiListSuccess<ProductionLineRowDto>>(await service.ListAsync(default, unit: "line")).Data);
         Assert.Equal("Process", listed.ProcessName);
@@ -67,9 +67,9 @@ public class ProductionServiceTests
     {
         using var t = Setup();
         var service = new ProductionService(t.Db);
-        ResultAssert.Created<ApiSuccess<IReadOnlyList<ProductionConsumption>>>(await service.ConsumptionAsync("MO1", new ConsumptionWriteDto("consume1", "P1", "MAT", "RAW", 6), User, default));
+        ResultAssert.Created<ApiSuccess<IReadOnlyList<ProductionResult>>>(await service.ConsumptionAsync("MO1", new ConsumptionWriteDto("consume1", "P1", "MAT", "RAW", 6), User, default));
         Assert.Equal(2, t.Db.ProductionConsumptions.Count());
-        ResultAssert.Created<ApiSuccess<IReadOnlyList<ProductionReturn>>>(await service.ReturnAsync("MO1", new ReturnWriteDto("return1", "MAT", "RAW", 5), User, default));
+        ResultAssert.Created<ApiSuccess<IReadOnlyList<ProductionResult>>>(await service.ReturnAsync("MO1", new ReturnWriteDto("return1", "MAT", "RAW", 5), User, default));
         ResultAssert.Error(await service.ReturnAsync("MO1", new ReturnWriteDto("return2", "MAT", "RAW", 2), User, default), 409, "QTY-004");
         Assert.Equal(10, t.Db.Stocks.Where(x => x.ItemCode == "MAT").Sum(x => x.StockQty));
     }
@@ -101,16 +101,14 @@ public class ProductionServiceTests
         t.Db.Reasons.Add(new Reason { ReasonCode = "ADJ", ReasonName = "Correction",
             ReasonCategoryValue = ReasonCategory.Adjustment, CreatedAt = DateTime.Now });
         t.Db.AppFunctions.Add(new AppFunction { FunctionCode = "prd_result", FunctionName = "Production Result", IsActive = true });
-        t.Db.Permissions.Add(new Permission { PermissionCode = "prd_result.view", FunctionCode = "prd_result", Action = "view", IsActive = true });
-        t.Db.Permissions.Add(new Permission { PermissionCode = "prd_result.reverse", FunctionCode = "prd_result", Action = "reverse", IsActive = true });
-        t.Db.RolePermissions.Add(new RolePermission { RoleCode = "Admin", PermissionCode = "prd_result.view", IsAllowed = true });
-        t.Db.RolePermissions.Add(new RolePermission { RoleCode = "Admin", PermissionCode = "prd_result.reverse", IsAllowed = true });
+        t.Db.Permissions.Add(new Permission { PermissionCode = "prd_result.Open", FunctionCode = "prd_result", ActionType = "Open", IsActive = true });
+        t.Db.Permissions.Add(new Permission { PermissionCode = "prd_result.Reverse", FunctionCode = "prd_result", ActionType = "Reverse", IsActive = true });
         t.Db.SaveChanges();
         var service = new ProductionService(t.Db);
         ResultAssert.Created<ApiSuccess<ProductionOutputResultDto>>(await service.OutputAsync("MO1", new OutputWriteDto("out1", 2), User, default));
         var no = t.Db.ProductionOutputs.Single(x => x.ReversesNo == null).No;
         ResultAssert.Error(await service.ReverseOutputAsync(no, new ReverseWriteDto("ADJ"), new ClaimsPrincipal(), default), 403, "AUTH-006");
-        ResultAssert.Ok<ApiSuccess<ProductionOutput>>(await service.ReverseOutputAsync(no, new ReverseWriteDto("ADJ"), User, default));
+        ResultAssert.Ok<ApiSuccess<ProductionResult>>(await service.ReverseOutputAsync(no, new ReverseWriteDto("ADJ"), User, default));
         ResultAssert.Error(await service.ReverseOutputAsync(no, new ReverseWriteDto("ADJ"), User, default), 409, "INV-008");
         Assert.Equal(0, t.Db.Stocks.Single(x => x.ItemCode == "FG1").StockQty);
     }

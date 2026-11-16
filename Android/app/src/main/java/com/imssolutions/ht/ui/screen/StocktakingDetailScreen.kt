@@ -56,7 +56,7 @@ fun StocktakingDetailScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (g == null) {
-                EmptyBox(t("noResults", "Không tìm thấy dòng nào."))
+                EmptyBox(t("noResults", "No rows were found."))
             } else {
                 StCard(t("htItemInfo", "Item Information")) {
                     StRow(t("thItemCode", "Item Code"), g.itemCode)
@@ -92,7 +92,7 @@ fun StocktakingDetailScreen(
                     }
 
                     Text(
-                        t("htStZeroNote", "Không thấy kiện nào thì ghi 0 — đó cũng là một kết quả."),
+                        t("htStZeroNote", "If no package is found, enter 0; that is a result too."),
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

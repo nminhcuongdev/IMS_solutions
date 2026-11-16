@@ -167,7 +167,7 @@ fun BusyOverlay(visible: Boolean) {
                 ) {
                     CircularProgressIndicator()
                     Spacer(Modifier.height(12.dp))
-                    Text(t("htProcessing", "Đang xử lý…"), style = MaterialTheme.typography.bodyMedium)
+                    Text(t("htProcessing", "Processing…"), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -200,7 +200,7 @@ fun EmptyBox(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun ErrorBar(code: String, message: String, modifier: Modifier = Modifier) {
     val key = if (code == "VAL-005" && "/ ? & = # %" !in message) "valTooLong" else code
-    val text = t(key, message, message)
+    val text = t(key, message, t(message, message))
     ErrorSound(code to message)
     Row(
         modifier

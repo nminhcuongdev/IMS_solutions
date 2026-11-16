@@ -3,12 +3,13 @@ import { BTN_ICON } from "@/layout/icons";
 import { useT } from "@/i18n/LanguageContext";
 import { useShortcuts, type ShortcutMap } from "./useShortcuts";
 import { ShortcutHelp } from "./ShortcutHelp";
+import { usePermissions } from "@/auth/PermissionContext";
 
 export function CommonToolbar({
   searchDraft, onSearchDraftChange, onSearch,
   onNew, onEdit, onCopy, onDelete, onExport,
   disableEdit, disableCopy, disableDelete,
-  extra, extraKeys, labelButton, hideImport,
+  extra, extraKeys, labelButton, hideImport, fn,
 }: {
   searchDraft: string;
   onSearchDraftChange: (v: string) => void;
@@ -25,21 +26,24 @@ export function CommonToolbar({
   extraKeys?: ShortcutMap;
   labelButton?: ReactNode;
   hideImport?: boolean;
+  fn: string;
 }) {
   const t = useT();
   const searchRef = useRef<HTMLInputElement>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const { can: allows } = usePermissions();
+  const can = (action: string) => allows(fn, action);
 
   useShortcuts({
     ...extraKeys,
     "/": () => searchRef.current?.focus(),
-    n: onNew,
-    N: onNew,
-    e: () => { if (!disableEdit) onEdit(); },
-    E: () => { if (!disableEdit) onEdit(); },
-    c: () => { if (!disableCopy) onCopy(); },
-    C: () => { if (!disableCopy) onCopy(); },
-    Delete: () => { if (!disableDelete) onDelete(); },
+    n: () => { if (can("New")) onNew(); },
+    N: () => { if (can("New")) onNew(); },
+    e: () => { if (!disableEdit && can("Edit")) onEdit(); },
+    E: () => { if (!disableEdit && can("Edit")) onEdit(); },
+    c: () => { if (!disableCopy && can("Copy")) onCopy(); },
+    C: () => { if (!disableCopy && can("Copy")) onCopy(); },
+    Delete: () => { if (!disableDelete && can("Delete")) onDelete(); },
     "?": () => setShowHelp(true),
     Escape: () => {
       if (showHelp) { setShowHelp(false); return; }
@@ -60,28 +64,28 @@ export function CommonToolbar({
         {extra}
       </div>
       <div className="search-btns">
-        <button className="btn btn-primary" onClick={onSearch}>
+        <button className="btn btn-primary" data-role="search" onClick={onSearch}>
           <img className="icn-img" src={BTN_ICON.search} alt="" /> <span>{t("search", "Search")}</span>
         </button>
-        <button className="btn btn-add" onClick={onNew}>
+        {can("New") && <button className="btn btn-add" onClick={onNew}>
           <PlusIcon /> <span>{t("btnNew", "New")}</span>
-        </button>
-        <button className="btn btn-edit" onClick={onEdit} disabled={disableEdit}>
+        </button>}
+        {can("Edit") && <button className="btn btn-edit" onClick={onEdit} disabled={disableEdit}>
           <img className="icn-img" src={BTN_ICON.edit} alt="" /> <span>{t("btnEdit", "Edit")}</span>
-        </button>
-        <button className="btn btn-outline" onClick={onCopy} disabled={disableCopy}>
+        </button>}
+        {can("Copy") && <button className="btn btn-outline" onClick={onCopy} disabled={disableCopy}>
           <img className="icn-img" src={BTN_ICON.copy} alt="" /> <span>{t("btnCopy", "Copy")}</span>
-        </button>
-        <button className="btn btn-delete" onClick={onDelete} disabled={disableDelete}>
+        </button>}
+        {can("Delete") && <button className="btn btn-delete" onClick={onDelete} disabled={disableDelete}>
           <TrashIcon /> <span>{t("btnDelete", "Delete")}</span>
-        </button>
-        {labelButton}
-        {!hideImport && <button className="btn btn-outline" disabled title={t("importDisabled", "CSV import is not available in this version.")}>
+        </button>}
+        {can("Label") && labelButton}
+        {!hideImport && can("Import") && <button className="btn btn-outline" disabled title={t("importDisabled", "CSV import is not available in this version.")}>
           <img className="icn-img" src={BTN_ICON.upload} alt="" /> <span>{t("btnImport", "Import")}</span>
         </button>}
-        <button className="btn btn-outline" onClick={onExport}>
+        {can("Export") && <button className="btn btn-outline" onClick={onExport}>
           <ExportIcon /> <span>{t("btnExport", "Export")}</span>
-        </button>
+        </button>}
       </div>
 
       {showHelp && <ShortcutHelp onClose={() => setShowHelp(false)} />}

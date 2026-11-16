@@ -7,8 +7,8 @@ export const statusBadge = (isActive: boolean) => (isActive ? "badge-ok" : "badg
 export const htScanBadge = (required: boolean) => (required ? "badge-info" : "badge-cancel");
 export const holdBadge = (isOnHold: boolean) => (isOnHold ? "badge-ng" : "badge-ok");
 
-export const roleBadge = (role: string | null | undefined) =>
-  role === "Admin" ? "badge-ok" : role === "Worker" ? "badge-warn" : "badge-info";
+export const roleBadge = (isBuiltin: boolean | null | undefined) =>
+  isBuiltin ? "badge-ok" : "badge-info";
 
 const DIST_STATUS_BADGE: Record<string, string> = {
   latest: "badge-ok", downloaded: "badge-info", waiting: "badge-warn",

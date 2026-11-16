@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -8,7 +9,7 @@ public static class SuperAdminEndpoints
 {
     public static IEndpointRouteBuilder MapSuperAdminEndpoints(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/super-admin").WithTags("Super Admin").RequireAuthorization();
+        var g = app.MapGroup("/super-admin").WithTags("Super Admin").RequireAuthorization().AuthenticatedOnly();
         g.MapGet("/general", GetGeneralAsync);
         g.MapPut("/general", SaveGeneralAsync);
         g.MapGet("/function-visibility", GetVisibilityAsync);

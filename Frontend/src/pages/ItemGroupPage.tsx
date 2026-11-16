@@ -62,7 +62,7 @@ export function ItemGroupPage() {
 
   return (
     <div className="pg on">
-      <CommonToolbar
+      <CommonToolbar fn="m_itemgroup"
         searchDraft={qDraft} onSearchDraftChange={setQDraft}
         onSearch={() => setPage(1)}
         onNew={() => { setModal("new"); setTarget(null); }}

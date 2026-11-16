@@ -40,21 +40,23 @@ class ReceivingRepository {
         ApiClient.call { languageLabels(lang = lang) }.data?.size ?: 0
 
     suspend fun issueLabel(line: ReceivingPlan, qty: Double, printerDeviceCode: String?): PrintHistoryRow {
+        val printer = printerDeviceCode?.takeIf { it.isNotBlank() }
+            ?: throw ApiException("htNoPrinter", 0, "Select a printer in Settings.")
         val history = PrintHistoryRequest(
             category = "Receiving",
             docNo = line.poNo,
             itemCode = line.itemCode,
             qty = qty,
             uomCode = line.unit,
-            spec = printerDeviceCode,
+            spec = printer,
         )
-        if (!printerDeviceCode.isNullOrBlank()) {
+        run {
             val qr = buildReceivingQr(line, qty)
             return ApiClient.call {
                 printLabel(
                     PrintLabelRequest(
                         layoutKey = "ReceivingQR",
-                        deviceCode = printerDeviceCode,
+                        deviceCode = printer,
                         history = history,
                         fields = mapOf(
                             "PONo" to line.poNo,
@@ -66,14 +68,13 @@ class ReceivingRepository {
                             "ItemQty" to formatQty(qty),
                             "Lot" to (line.lotNo ?: ""),
                             "ScheduledDate" to (line.scheduledDate ?: ""),
+                            "ReprintFlag" to "",
                             "QR" to qr,
                         ),
                     ),
                 )
-            }.data ?: throw ApiException("SYS-004", 500, "Máy chủ không trả về bản ghi in.")
+            }.data ?: throw ApiException("SYS-004", 500, "The server did not return the print record.")
         }
-        return ApiClient.call { createPrintHistory(history) }.data
-            ?: throw ApiException("SYS-004", 500, "Máy chủ không trả về bản ghi in.")
     }
 
     private fun formatQty(qty: Double): String =
@@ -92,9 +93,13 @@ class ReceivingRepository {
         )
     }
 
-    suspend fun linesOf(poNo: String): List<ReceivingPlan> = ApiClient.call {
-        listReceivingSchedule(poNo = poNo, pageSize = 200, sort = "po_branch_no")
-    }.data.filter { it.poNo.equals(poNo, ignoreCase = true) }
+    suspend fun listAllPlans(query: String? = null, date: String? = null): ApiListSuccess<ReceivingPlan> =
+        Paging.all { page, size -> listPlans(query, date, page, size) }
+
+    suspend fun linesOf(poNo: String): List<ReceivingPlan> =
+        Paging.all { page, size ->
+            ApiClient.call { listReceivingSchedule(poNo = poNo, page = page, pageSize = size, sort = "po_branch_no") }
+        }.data.filter { it.poNo.equals(poNo, ignoreCase = true) }
 
     suspend fun listResults(page: Int = 1, pageSize: Int = 50): ApiListSuccess<ReceivingResult> =
         ApiClient.call { listReceivingResult(page = page, pageSize = pageSize, sort = "-created_at") }
@@ -109,14 +114,10 @@ class ReceivingRepository {
         lotNo: String?,
         locationCode: String?,
     ): ReceivingResult {
-        require(actualQty >= 0) { "actualQty không được âm" }
+        if (actualQty < 0) throw ApiException("QTY-001", 400, "Please enter a valid quantity (0 or more).")
 
         val lot = lotNo?.trim()?.takeIf { it.isNotBlank() }
-        if (lot == null && actualQty > 0) throw ApiException("LOT-001", 400, "Vui lòng nhập số lô.")
         val reason = reasonCode?.takeIf { it.isNotBlank() }
-        if (actualQty < line.expectedQty && reason == null) {
-            throw ApiException("RSN-001", 400, "Vui lòng chọn lý do.")
-        }
 
         val request = ReceivingResultRequest(
             itemCode = line.itemCode,
@@ -127,15 +128,9 @@ class ReceivingRepository {
             lotNo = lot,
             reasonCode = reason,
         )
-        val sent = request.copy(requestId = retryKey.idFor(request))
-        val saved = try {
+        return retryKey.send(request, { r, id -> r.copy(requestId = id) }) { sent ->
             ApiClient.call { createReceivingResult(sent) }
-        } catch (e: ApiException) {
-            retryKey.failed(e)
-            throw e
-        }
-        retryKey.succeeded()
-        return saved.data ?: throw ApiException("SYS-004", 500, "Máy chủ không trả về dòng vừa ghi.")
+        }.data ?: throw ApiException("SYS-004", 500, "The server did not return the saved row.")
     }
 }
 

@@ -68,7 +68,7 @@ public class ReasonServiceTests
 
         var res = await new ReasonService(t.Db).CreateAsync(body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class ReasonServiceTests
         var blankName = await new ReasonService(t.Db).CreateAsync(Valid(name: " "), default);
 
         ResultAssert.BadRequest(blankCode, "VAL-001");
-        ResultAssert.BadRequest(blankName, "VAL-002");
+        ResultAssert.BadRequest(blankName, "VAL-001");
 
         var created = await new ReasonService(t.Db).CreateAsync(Valid(), default);
         ResultAssert.Created<ApiSuccess<ReasonDto>>(created);
@@ -158,7 +158,7 @@ public class ReasonServiceTests
         var badCategory = await new ReasonService(t.Db).UpdateAsync("R1", Valid(category: "Nope"), default);
         var unknownRow = await new ReasonService(t.Db).UpdateAsync("NOPE", Valid(), default);
 
-        ResultAssert.BadRequest(badCategory, "VAL-002");
+        ResultAssert.BadRequest(badCategory, "VAL-001");
         ResultAssert.NotFound(unknownRow);
     }
 

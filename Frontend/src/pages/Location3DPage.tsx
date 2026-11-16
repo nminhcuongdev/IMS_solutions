@@ -4,6 +4,7 @@ import { AdditiveBlending, Vector3, type Mesh, type MeshBasicMaterial } from "th
 import { Grid, Html, OrbitControls } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { listLocations, type Location } from "@/api/locations";
+
 import { useT } from "@/i18n/LanguageContext";
 import { layoutLocations, orphanCount, RACK_POST, type PlacedBox } from "@/lib/locationLayout";
 import { qs, useFetch } from "@/lib/useFetch";
@@ -92,7 +93,7 @@ export function Location3DPage() {
           <label>
             <input type="checkbox" checked={showDisabled}
               onChange={e => setShowDisabled(e.target.checked)} />
-            {" "}{t("showDisabledLocations", "Hiện cả vị trí đã Disable")}
+            {" "}{t("loc3dShowDisabled", "Also show disabled locations")}
           </label>
 
           <span className="relative ml-4.5">
@@ -140,8 +141,7 @@ export function Location3DPage() {
         {error && <div className="search-row text-rose-600 text-[12px]">{error}</div>}
         {orphans > 0 && (
           <div className="search-row text-amber-700 text-[12px]">
-            {orphans} vị trí không gắn được vào sơ đồ (thiếu Large hoặc Middle cha) — xem lưới
-            Location Master.
+            {t("loc3dUnplaced", "{0} locations cannot be placed in the diagram (parent Large or Middle missing). See the Location Master list.").replace("{0}", String(orphans))}
           </div>
         )}
       </div>
@@ -383,7 +383,7 @@ function DetailPanel({ loc, t, zoneColor, onGoTo }: {
   if (!loc) {
     return (
       <div className="tbl-wrap p-4 text-slate-500 text-[13px]">
-        {t("pick3dLocation", "Bấm vào một ô kệ để xem chi tiết.")}
+        {t("loc3dClickHint", "Click a shelf cell to see its details.")}
       </div>
     );
   }
@@ -397,7 +397,7 @@ function DetailPanel({ loc, t, zoneColor, onGoTo }: {
 
       <button className="btn btn-outline w-full mb-3"
         onClick={() => onGoTo(loc.locationCode)}>
-        {t("btnGoTo", "Đi tới")}
+        {t("loc3dGoTo", "Go to")}
       </button>
 
       <Row label={t("thLocType", "Type")} value={loc.locationType} />

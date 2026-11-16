@@ -21,11 +21,10 @@ public class ImsDbContext : DbContext
     public DbSet<Ims.Domain.Masters.Process> Processes => Set<Ims.Domain.Masters.Process>();
     public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
     public DbSet<ProductionOrderLine> ProductionOrderLines => Set<ProductionOrderLine>();
-    public DbSet<ProductionConsumption> ProductionConsumptions => Set<ProductionConsumption>();
-    public DbSet<ProductionOutput> ProductionOutputs => Set<ProductionOutput>();
-    public DbSet<ProductionReceipt> ProductionReceipts => Set<ProductionReceipt>();
-    public DbSet<ProductionLabel> ProductionLabels => Set<ProductionLabel>();
-    public DbSet<ProductionReturn> ProductionReturns => Set<ProductionReturn>();
+    public DbSet<ProductionResult> ProductionResults => Set<ProductionResult>();
+    public IQueryable<ProductionResult> ProductionConsumptions => ProductionResults.Where(x => x.ResultType == ProductionResultType.Consume);
+    public IQueryable<ProductionResult> ProductionOutputs => ProductionResults.Where(x => x.ResultType == ProductionResultType.Output);
+    public IQueryable<ProductionResult> ProductionReturns => ProductionResults.Where(x => x.ResultType == ProductionResultType.Return);
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
 
@@ -38,9 +37,9 @@ public class ImsDbContext : DbContext
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
-    public DbSet<FunctionVisibility> FunctionVisibilities => Set<FunctionVisibility>();
     public DbSet<GeneralSetting> GeneralSettings => Set<GeneralSetting>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
+    public DbSet<RequestReplay> RequestReplays => Set<RequestReplay>();
 
     public DbSet<AlertConfig> AlertConfigs => Set<AlertConfig>();
 

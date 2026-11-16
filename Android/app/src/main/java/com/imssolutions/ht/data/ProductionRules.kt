@@ -80,6 +80,14 @@ fun productionOrdersFor(
 fun returnableQty(consumed: Double, returned: Double): Double =
     (consumed - returned).coerceAtLeast(0.0)
 
+fun productionWorksOf(timeline: List<ProductionWork>): ProductionWorks = ProductionWorks(
+    receipts = timeline.filter { it.type == "receipt" },
+    consumptions = timeline.filter { it.type == "consumption" },
+    outputs = timeline.filter { it.type == "output" },
+    labels = timeline.filter { it.type == "label" },
+    returns = timeline.filter { it.type == "return" },
+)
+
 fun activeProductionWorks(rows: List<ProductionWork>): List<ProductionWork> {
     val reversed = rows.mapNotNull { it.reversesNo }.toSet()
     return rows.filter { it.reversesNo == null && it.no !in reversed }
@@ -100,5 +108,5 @@ fun productionMenuKeys(permissions: MyPermissions?): Set<String> {
     if (permissions == null) return emptySet()
     val codes = setOf("ht_prd_receipt", "ht_prd_input", "ht_prd_return", "ht_prd_output")
     if (permissions.isSuperAdmin) return codes
-    return permissions.functions.filter { it.functionCode in codes && "view" in it.actions }.map { it.functionCode }.toSet()
+    return permissions.functions.filter { it.functionCode in codes && "Open" in it.actions }.map { it.functionCode }.toSet()
 }

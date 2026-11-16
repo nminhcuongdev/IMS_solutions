@@ -21,6 +21,7 @@ public class InventoryHistoryConfig : IEntityTypeConfiguration<InventoryHistory>
         b.Property(x => x.ActionType).HasColumnName("action_type").Code(20);
         b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("decimal(18,4)");
         b.Property(x => x.ReasonCode).HasColumnName("reason_code").CodeN(20);
+        b.Property(x => x.ReferenceNo).HasColumnName("reference_no").CodeN(30);
         b.Property(x => x.CreatedBy).HasColumnName("created_by").CodeN(20);
 
         b.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_inventory_history_created_at");

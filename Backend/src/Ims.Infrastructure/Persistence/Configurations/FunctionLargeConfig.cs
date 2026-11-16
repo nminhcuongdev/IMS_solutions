@@ -14,6 +14,7 @@ public class FunctionLargeConfig : IEntityTypeConfiguration<FunctionLarge>
         b.Property(x => x.LargeName).HasColumnName("large_name").Text(50);
         b.Property(x => x.DisplayOrder).HasColumnName("display_order");
         b.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        b.Property(x => x.IsVisible).HasColumnName("is_visible").HasDefaultValue(true);
         b.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("GETDATE()");
         b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
     }

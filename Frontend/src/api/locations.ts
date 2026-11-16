@@ -35,4 +35,4 @@ export const createLocation = (body: LocationWrite) => apiCall<Location>(P, { me
 export const updateLocation = (code: string, body: LocationWrite) =>
   apiCall<Location>(`${P}/${encodeURIComponent(code)}`, { method: "PUT", body });
 export const deleteLocation = (code: string) => apiCall<void>(`${P}/${encodeURIComponent(code)}`, { method: "DELETE" });
-export const exportLocationsCsv = () => apiDownload(`${P}/export.csv`);
+export const exportLocationsCsv = () => apiDownload("/export/locations");

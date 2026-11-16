@@ -20,7 +20,7 @@ public class StockScanServiceTests
         t.Db.AppUsers.Add(new AppUser
         {
             UserCode = "U-RFID", UserName = "Trần Thị Bích", PasswordHash = "x",
-            RoleCode = "Admin", IsActive = true, CreatedAt = new DateTime(2026, 1, 1),
+            RoleCode = "ADMIN", IsActive = true, CreatedAt = new DateTime(2026, 1, 1),
         });
         t.Db.StockScans.AddRange(
             Row("0000003", "M47903000", "Printer head", scanned: false),

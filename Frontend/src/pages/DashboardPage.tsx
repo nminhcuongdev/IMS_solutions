@@ -1,6 +1,12 @@
 import type { MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useT } from "@/i18n/LanguageContext";
+import { usePermissions } from "@/auth/PermissionContext";
+import { ROUTE_MAP } from "@/layout/Sidebar";
+
+const CODE_BY_PATH: Record<string, string> = Object.fromEntries(
+  Object.entries(ROUTE_MAP).map(([code, path]) => [path, code]),
+);
 
 type Link = { key: string; fallback: string; to?: string };
 type Card = { icon: string; key: string; fallback: string; to: string; links: Link[] };
@@ -47,6 +53,12 @@ const CARDS: Card[] = [
 export function DashboardPage() {
   const t = useT();
   const nav = useNavigate();
+  const { canOpen } = usePermissions();
+  const allowed = (to: string | undefined) => !!to && canOpen(CODE_BY_PATH[to] ?? "");
+  const cards = CARDS
+    .map(c => ({ ...c, links: c.links.filter(l => !l.to || allowed(l.to)) }))
+    .map(c => ({ ...c, to: allowed(c.to) ? c.to : c.links.find(l => l.to)?.to ?? "" }))
+    .filter(c => c.to);
 
   function open(e: MouseEvent, to: string | undefined) {
     if (!to) return;
@@ -56,7 +68,7 @@ export function DashboardPage() {
 
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 max-md:grid-cols-1">
-      {CARDS.map(c => (
+      {cards.map(c => (
         <div
           className="cursor-pointer overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-md"
           key={c.key} onClick={() => nav(c.to)}>

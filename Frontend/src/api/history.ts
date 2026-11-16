@@ -17,6 +17,8 @@ export interface PrintHistoryRow {
   statusName: string | null;
   createdBy: string | null;
   workerName: string | null;
+  canReprint: boolean;
+  reprintOfNo: number | null;
 }
 
 export interface RfidGateHistoryRow {
@@ -71,10 +73,10 @@ function qs(q: Record<string, unknown>): string {
 }
 
 export const exportPrintHistoryCsv = (q: PrintHistoryQuery = {}) =>
-  apiDownload("/print-history/export.csv" + qs({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/print-history" + qs({ ...q, page: undefined, pageSize: undefined }));
 
 export const exportRfidHistoryCsv = (q: RfidHistoryQuery = {}) =>
-  apiDownload("/rfid-gate-history/export.csv" + qs({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/rfid-gate-history" + qs({ ...q, page: undefined, pageSize: undefined }));
 
 export interface PrintHistoryWrite {
   category: string;
@@ -86,11 +88,28 @@ export interface PrintHistoryWrite {
   spec?: string | null;
   scheduledDate?: string | null;
   reprint?: boolean;
+  printData?: Record<string, string>;
+  layoutFile?: string;
 }
 
 export const createPrintHistory = (body: PrintHistoryWrite) =>
   apiCall<PrintHistoryRow>("/print-history", { method: "POST", body });
 
 export const reprintPrintHistory = (
-  no: number, body: { deviceCode: string; count: number; fields: Record<string, string> },
+  no: number, body: { deviceCode: string; count: number; fields?: Record<string, string>; clientPrinted?: boolean },
 ) => apiCall<PrintHistoryRow>(`/print-history/${no}/reprint`, { method: "POST", body });
+
+export interface PrintSource {
+  docNo: string; itemCode: string; itemName: string | null; uomCode: string | null; qty: number;
+  lotNo: string | null; expiryDate: string | null; productionDate: string | null; scheduledDate: string | null;
+  factoryCode: string | null; factoryName: string | null; address: string | null;
+  partnerCode: string | null; partnerName: string | null; barcode: string | null;
+}
+
+export interface PrintReprintData {
+  layoutFile: string;
+  fields: Record<string, string> | null;
+  source: PrintSource | null;
+}
+
+export const getReprintData = (no: number) => apiCall<PrintReprintData>(`/print-history/${no}/reprint-data`);

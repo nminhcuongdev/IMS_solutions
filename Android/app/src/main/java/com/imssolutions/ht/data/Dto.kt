@@ -37,6 +37,8 @@ data class ApiErrorBody(
     val httpStatus: Int = 0,
     val severity: String = "",
     val message: String = "",
+    val args: List<String>? = null,
+    val messageKey: String? = null,
 )
 
 @Serializable
@@ -226,6 +228,7 @@ data class ReturnResultRequest(
     val serialNo: String? = null,
     val locationCode: String? = null,
     val lotNo: String? = null,
+    val requestId: String? = null,
 )
 
 @Serializable
@@ -360,6 +363,7 @@ data class ShippingResultRequest(
     val lotNo: String? = null,
     val expiryDate: String? = null,
     val reasonCode: String? = null,
+    val requestId: String? = null,
 )
 
 @Serializable
@@ -410,6 +414,7 @@ data class PickingResultRequest(
     val serialNo: String? = null,
     val locationCode: String? = null,
     val lotNo: String? = null,
+    val requestId: String? = null,
 )
 
 

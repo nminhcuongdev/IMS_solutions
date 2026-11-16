@@ -1,11 +1,14 @@
 package com.imssolutions.rfid.data
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.HttpException
 import retrofit2.Retrofit
@@ -50,6 +53,21 @@ class ApiClient(private val prefs: Prefs) {
             .create(ImsApi::class.java)
     }
 
+    private val prober = OkHttpClient.Builder()
+        .connectTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
+        .readTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
+        .build()
+
+    suspend fun probe(baseUrl: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url(baseUrl + "stock-scan").header("Accept", "application/json").build()
+            prober.newCall(req).execute().use { res ->
+                val type = res.header("Content-Type").orEmpty()
+                type.contains("json", ignoreCase = true) && res.body?.string().orEmpty().contains("\"success\"")
+            }
+        }.getOrDefault(false)
+    }
+
     suspend fun <T> call(block: suspend ImsApi.() -> T): T =
         try {
             api.block()
@@ -68,5 +86,9 @@ class ApiClient(private val prefs: Prefs) {
                 ?.let { return ApiException(it.code, it.httpStatus, it.message) }
         }
         return ApiException("HTTP-${code()}", code(), message())
+    }
+
+    private companion object {
+        const val PROBE_TIMEOUT_S = 4L
     }
 }

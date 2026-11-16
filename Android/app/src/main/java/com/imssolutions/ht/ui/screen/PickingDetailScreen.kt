@@ -40,7 +40,7 @@ fun PickingDetailScreen(
 
     LaunchedEffect(soNo, serialNo) { vm.load(soNo, serialNo) }
 
-    OnScan { code -> if (state.locationEditable) vm.setLocation(code) }
+    OnScan { code -> vm.onScan(code) }
 
     val strings = LocalHtStrings.current
     LaunchedEffect(state.toast) {
@@ -62,7 +62,7 @@ fun PickingDetailScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.line == null -> EmptyBox(t("htLineNotFound", "Không tìm thấy dòng này."))
+                state.line == null -> EmptyBox(t("htLineNotFound", "This line was not found."))
                 else -> {
                     val line = state.line!!
                     Column(
@@ -80,18 +80,18 @@ fun PickingDetailScreen(
                                         onValueChange = vm::setLocation,
                                         singleLine = true,
                                         shape = RoundedCornerShape(8.dp),
-                                        placeholder = { Text(t("htScanOrTypeLocation", "Quét hoặc nhập mã vị trí"), fontSize = 13.sp) },
+                                        placeholder = { Text(t("htScanOrTypeLocation", "Scan or type the location code"), fontSize = 13.sp) },
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
                                 Text(
-                                    t("htPickNoPlanLocation", "Kế hoạch chưa ghi vị trí — nhập nơi đã lấy hàng."),
+                                    t("htPickNoPlanLocation", "The plan has no location; enter where the goods were taken."),
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             } else {
                                 PickRow(
-                                    "Location",
+                                    t("thLocation", "Location"),
                                     listOfNotNull(line.locationCode, line.locationName)
                                         .joinToString(" · "),
                                 )
@@ -108,12 +108,24 @@ fun PickingDetailScreen(
                             if (line.isPartial) {
                                 PickRow(t("htScannedProgress", "Picked so far"), "${fmt(line.pickedQty)} ${line.unit.orEmpty()}".trim())
                                 Text(
-                                    t("htPickTotalHint", "Nhập TỔNG đã nhặt được, không phải phần thêm."),
+                                    t("htPickTotalHint", "Enter the TOTAL picked, not the extra amount."),
                                     fontSize = 11.sp,
                                     color = Color(0xFFB26A00),
                                 )
                             }
 
+                            Spacer(Modifier.height(10.dp))
+                            PickField(t("thLot", "Lot")) {
+                                OutlinedTextField(
+                                    value = state.lotNo,
+                                    onValueChange = vm::setLot,
+                                    singleLine = true,
+                                    readOnly = state.lotFromLabel,
+                                    shape = RoundedCornerShape(8.dp),
+                                    placeholder = { Text(t("htScanProductLabel", "Scan the product label"), fontSize = 13.sp) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                             Spacer(Modifier.height(10.dp))
                             PickField(t("thActualQty", "Actual")) {
                                 OutlinedTextField(
@@ -129,14 +141,14 @@ fun PickingDetailScreen(
                             }
                             if (state.overPicked) {
                                 Text(
-                                    t("htPickOverPlan", "Không nhặt được nhiều hơn số kế hoạch."),
+                                    t("htPickOverPlan", "You cannot pick more than planned."),
                                     fontSize = 11.sp,
                                     color = Color(0xFFDC3545),
                                 )
                             }
                             if (state.short) {
                                 Text(
-                                    t("htPickShortHint", "Nhặt thiếu — dòng sẽ vẫn ở Not Picked để nhặt tiếp."),
+                                    t("htPickShortHint", "Short pick: the line stays Not Picked so it can be picked later."),
                                     fontSize = 11.sp,
                                     color = Color(0xFFB26A00),
                                 )

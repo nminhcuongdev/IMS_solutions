@@ -100,7 +100,11 @@ fun PrdOutputScreen(
                             PrdTextInput(state.lot, vm::setLot, readOnly = !state.lotEditable)
                         }
                         PrdField(t("hpExpiry", "Expiry date")) {
-                            PrdTextInput(state.expiry, vm::setExpiry, placeholder = "yyyy-MM-dd")
+                            PrdTextInput(
+                                state.expiry, vm::setExpiry,
+                                placeholder = state.item?.expirationPeriod?.takeIf { it > 0 }
+                                    ?.let { t("hpExpiryAuto", "Blank = today + {0} days (server date)", it.toInt()) } ?: "yyyy-MM-dd",
+                            )
                         }
                         PrdField(t("hpLocation", "Storage location (from the production order)")) {
                             PrdTextInput(order.storageLocationCode, {}, readOnly = true)

@@ -6,6 +6,7 @@ import { useLang } from "@/i18n/LanguageContext";
 import { LanguageSelect } from "@/i18n/LanguageSelect";
 import { FUNCTION_LABEL_KEY } from "@/i18n/labelKeys";
 import { ROUTE_MAP, Sidebar } from "./Sidebar";
+import { ScreenProvider, usePermissions } from "@/auth/PermissionContext";
 import { BRAND } from "@/brand";
 import { errorText } from "@/lib/errorText";
 import { useSearchConditionToggle } from "@/lib/useSearchConditionToggle";
@@ -32,10 +33,14 @@ export function AppLayout() {
   const [menu, setMenu] = useState<MenuResponse | null>(null);
   const [menuError, setMenuError] = useState<string | null>(null);
   const { t } = useLang();
+  const perms = usePermissions();
+
+  useEffect(() => { perms.refresh(); }, [loc.pathname]);
 
   useEffect(() => {
-    fetchMenu().then(setMenu).catch(e => setMenuError(errorText(t, e)));
-  }, []);
+    if (!perms.ready) return;
+    fetchMenu().then(m => { setMenu(m); setMenuError(null); }).catch(e => setMenuError(errorText(t, e)));
+  }, [perms.ready, perms.data]);
 
   const cur = findCurrent(loc.pathname, menu);
   const current = cur.code
@@ -68,7 +73,7 @@ export function AppLayout() {
         </header>
         <main className="content flex-1 overflow-auto px-6 py-5 max-md:p-3">
           {menuError && <div className="page-info">{t("errMenuLoad", "Menu load failed")}: {menuError}</div>}
-          <Outlet />
+          {!perms.ready ? null : cur.code && !perms.canOpen(cur.code) ? <div role="alert" className="text-rose-600">{t("AUTH-006", "You do not have permission to perform this operation.")}</div> : <ScreenProvider fn={cur.code}><Outlet /></ScreenProvider>}
         </main>
         <footer className="flex h-[30px] shrink-0 items-center justify-center border-t border-slate-200 bg-white text-[11px] text-slate-400">
           © {new Date().getFullYear()} {BRAND.fullName}

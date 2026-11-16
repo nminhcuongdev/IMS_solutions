@@ -115,13 +115,13 @@ export function SuperAdminPage() {
     return out;
   }, [visibility]);
 
-  if (loading) return <div className="page-info">Loading…</div>;
+  if (loading) return <div className="page-info">{t("loading", "Loading…")}</div>;
 
   return (
     <div className="pg on" id="pg-super_admin">
       <div className="search-box">
         <Section labelKey="saFunctionVisibility" en="Function Visibility" first />
-        <VisibilityTable rows={[...(visByDevice.PC ?? []), ...(visByDevice.HT ?? [])]}
+        <VisibilityTable rows={[...(visByDevice.Group ?? []), ...(visByDevice.PC ?? []), ...(visByDevice.HT ?? [])]}
           onToggle={toggleVis} />
 
         <Section labelKey="saFactorySettings" en="Factory Settings" />
@@ -222,7 +222,10 @@ function VisibilityTable({ rows, onToggle }: {
 }) {
   const t = useT();
   const group = (r: VisibilityRow) => (r.largeCode ? t(groupLabelKey(r.largeCode), r.largeName ?? r.largeCode) : "");
-  const fn = (r: VisibilityRow) => t(FUNCTION_LABEL_KEY[r.targetCode] ?? r.targetCode, r.functionName);
+  const isGroup = (r: VisibilityRow) => r.targetType === "Group";
+  const fn = (r: VisibilityRow) => isGroup(r)
+    ? t("saAllFunctions", "All functions in this group")
+    : t(FUNCTION_LABEL_KEY[r.targetCode] ?? r.targetCode, r.functionName);
   const { sorted, sort, onSort } = useLocalSort(rows, r => `${r.targetType}|${r.targetCode}`, {
     device: r => r.targetType,
     group,
@@ -234,14 +237,14 @@ function VisibilityTable({ rows, onToggle }: {
       <table className="tbl">
         <thead><tr>
           <SortTh field="device" sort={sort} onSort={onSort}>{t("saDeviceCol", "Device")}</SortTh>
-          <SortTh field="group" sort={sort} onSort={onSort}>{t("saFunction", "Function")}</SortTh>
+          <SortTh field="group" sort={sort} onSort={onSort}>{t("thGroup", "Group")}</SortTh>
           <SortTh field="function" sort={sort} onSort={onSort}>{t("saFunction", "Function")}</SortTh>
           <SortTh field="visibility" sort={sort} onSort={onSort}>{t("saVisibility", "Visibility")}</SortTh>
         </tr></thead>
         <tbody>
           {sorted.map(r => (
             <tr key={`${r.targetType}|${r.targetCode}`}>
-              <td>{r.targetType}</td>
+              <td>{isGroup(r) ? t("thGroup", "Group") : r.targetType}</td>
               <td className="text-left">{group(r) || "—"}</td>
               <td className="text-left">{fn(r)}</td>
               <td>

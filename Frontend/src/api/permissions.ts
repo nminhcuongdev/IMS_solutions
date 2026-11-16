@@ -1,26 +1,27 @@
 import { apiCall } from "./client";
 import type { CurrentPermissions } from "./CurrentPermissions";
 
-export interface PermissionRow {
+export interface PermissionMatrixRow {
   permissionCode: string;
+  device: "PC" | "HT";
   largeCode: string;
   largeName: string;
   functionCode: string;
   functionName: string;
-  action: string;
-  general: boolean;
-  worker: boolean;
+  actionType: string;
+  isAllowed: boolean;
+  locked: boolean;
 }
 
-export interface PermissionItem {
-  roleCode: "General" | "Worker";
+export interface PermissionMatrixItem {
   permissionCode: string;
   isAllowed: boolean;
 }
 
-export const listPermissions = () => apiCall<PermissionRow[]>("/permissions");
+export const getPermissionMatrix = (roleCode: string) =>
+  apiCall<PermissionMatrixRow[]>("/permissions", { query: { roleCode } });
 
-export const savePermissions = (items: PermissionItem[]) =>
-  apiCall<PermissionRow[]>("/permissions", { method: "PUT", body: { items } });
+export const savePermissionMatrix = (roleCode: string, items: PermissionMatrixItem[]) =>
+  apiCall<PermissionMatrixRow[]>("/permissions", { method: "PUT", body: { roleCode, items } });
 
 export const getCurrentPermissions = () => apiCall<CurrentPermissions>("/permissions/me");

@@ -26,6 +26,7 @@ class TokenStore(private val context: Context) {
         val LANG_DATA_AT = stringPreferencesKey("lang_data_at")
         val REMEMBER_ME = booleanPreferencesKey("remember_me")
         val REMEMBERED_USER = stringPreferencesKey("remembered_user")
+        val SAVED_SERVERS = stringPreferencesKey("saved_servers")
     }
 
     data class HtSettings(
@@ -71,6 +72,16 @@ class TokenStore(private val context: Context) {
     }
 
     fun baseUrlBlocking(): String = runBlocking { baseUrl.first() }
+
+    val savedServers: Flow<List<String>> = context.dataStore.data.map { p ->
+        p[Keys.SAVED_SERVERS].orEmpty().split('\n').filter { it.isNotBlank() }
+    }
+
+    fun savedServersBlocking(): List<String> = runBlocking { savedServers.first() }
+
+    suspend fun saveSavedServers(list: List<String>) {
+        context.dataStore.edit { it[Keys.SAVED_SERVERS] = list.joinToString("\n") }
+    }
 
     val session: Flow<Session?> = context.dataStore.data.map { p ->
         val t = p[Keys.TOKEN]

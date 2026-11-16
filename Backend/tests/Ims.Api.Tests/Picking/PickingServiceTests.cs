@@ -97,7 +97,7 @@ public class PickingServiceTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        ResultAssert.Error(await new PickingService(t.Db).CreateResultAsync(new PickingResultWriteDto("IT-01", 10, "SO-001", "01"), Worker(), default), 404, "LOC-003");
+        ResultAssert.Error(await new PickingService(t.Db).CreateResultAsync(new PickingResultWriteDto("IT-01", 10, "SO-001", "01"), Worker(), default), 404, "SCN-003");
 
         Assert.Empty(await t.Db.PickingResults.ToListAsync());
         Assert.Equal(0m, (await t.Db.PickingPlans.SingleAsync()).PickedQty);
@@ -148,7 +148,7 @@ public class PickingServiceTests
 
 
     [Fact]
-    public async Task A_pick_records_the_lot_it_took_off_the_shelf()
+    public async Task A_pick_of_an_item_without_lot_management_records_no_lot()
     {
         using var t = TestDb.Seeded(); await SeedRefsAsync(t);
         t.Db.PickingPlans.Add(Plan(qty: 10));
@@ -157,11 +157,11 @@ public class PickingServiceTests
 
         await new PickingService(t.Db).CreateResultAsync(new PickingResultWriteDto("IT-01", 10, "SO-001", "01"), Worker(), default);
 
-        Assert.Equal("LOT-1", (await t.Db.PickingResults.SingleAsync()).LotNo);
+        Assert.Null((await t.Db.PickingResults.SingleAsync()).LotNo);
     }
 
     [Fact]
-    public async Task Picking_again_from_the_same_lot_keeps_naming_it()
+    public async Task Picking_again_without_lot_management_keeps_the_lot_empty()
     {
         using var t = TestDb.Seeded(); await SeedRefsAsync(t);
         t.Db.PickingPlans.Add(Plan(qty: 10));
@@ -171,7 +171,7 @@ public class PickingServiceTests
         await new PickingService(t.Db).CreateResultAsync(new PickingResultWriteDto("IT-01", 4, "SO-001", "01"), Worker(), default);
         await new PickingService(t.Db).CreateResultAsync(new PickingResultWriteDto("IT-01", 10, "SO-001", "01"), Worker(), default);
 
-        Assert.Equal("LOT-1", (await t.Db.PickingResults.OrderBy(r => r.No).LastAsync()).LotNo);
+        Assert.Null((await t.Db.PickingResults.OrderBy(r => r.No).LastAsync()).LotNo);
     }
 
     [Fact]
@@ -619,7 +619,7 @@ public class PickingServiceTests
 
         var r = await new PickingService(t.Db).CreateResultAsync(new PickingResultWriteDto("IT-01", 10, "SO-001", "01"), Worker(), default);
 
-        ResultAssert.BadRequest(r, "LOC-001");
+        ResultAssert.BadRequest(r, "VAL-001");
     }
 
     [Fact]
@@ -644,7 +644,7 @@ public class PickingServiceTests
         var r = await new PickingService(t.Db).CreateResultAsync(new PickingResultWriteDto("IT-01", 10, "SO-001", "01"), Worker(), default);
 
         ResultAssert.Created<ApiSuccess<PickingResultDto>>(r);
-        Assert.Equal("LOT-1", (await t.Db.PickingResults.SingleAsync()).LotNo);
+        Assert.Null((await t.Db.PickingResults.SingleAsync()).LotNo);
     }
 
 

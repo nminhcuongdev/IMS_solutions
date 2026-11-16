@@ -10,6 +10,7 @@ import { printErrorText } from "@/lib/printErrors";
 import { buildProductLabelQr, qrDate } from "@/lib/qrPayload";
 import { useLanPrinters } from "@/lib/useLanPrinters";
 import { LanPrinterField } from "@/pages/LanPrinterField";
+import { snapshotOf } from "@/lib/printSnapshot";
 
 export function ReceivingLabelModal({
   rows, reprint = false, onClose, onPrinted,
@@ -21,7 +22,7 @@ export function ReceivingLabelModal({
 }) {
   const t = useT();
   const { user } = useAuth();
-  const { printers, deviceCode, setDeviceCode, setting, error: printersError } = useLanPrinters();
+  const { printers, deviceCode, setDeviceCode, setting, error: printersError, engineOnline, recheck } = useLanPrinters();
   const [items, setItems] = useState<Record<string, Item>>({});
   const [index, setIndex] = useState(0);
   const [preview, setPreview] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export function ReceivingLabelModal({
     Address: "",
     Lot: p.row.lotNo ?? "",
     ScheduledDate: p.row.scheduledDate ?? "",
-    ReprintFlag: reprint ? "R" : "",
+    ReprintFlag: reprint ? "REPRINT" : "",
     QR: buildProductLabelQr({
       gtin: p.item?.barcode,
       lotNo: p.row.lotNo,
@@ -92,6 +93,7 @@ export function ReceivingLabelModal({
           category: "Receiving", docNo: p.row.poNo, itemCode: p.row.itemCode,
           qty: p.expectedQty, uomCode: p.row.unit, packageCount: p.labelCount,
           spec: deviceCode, scheduledDate: p.row.scheduledDate, reprint,
+          printData: snapshotOf(fieldsOf(p)), layoutFile: LAYOUT,
         });
         done += p.labelCount;
       }
@@ -123,7 +125,7 @@ export function ReceivingLabelModal({
             </>
           )}
 
-          <LanPrinterField printers={printers} deviceCode={deviceCode} onChange={setDeviceCode} />
+          <LanPrinterField printers={printers} deviceCode={deviceCode} onChange={setDeviceCode} engineOnline={engineOnline} onRecheck={recheck} />
 
           <div className="text-[12px] text-slate-600 mt-1.5">
             {fillBold(t("labelSummaryTotal", "Rows: {0} · Total labels: {1}"), printable.length, totalLabels)}
@@ -165,7 +167,7 @@ export function ReceivingLabelModal({
           </button>
           <button className="btn btn-primary" onClick={onPrint}
             disabled={busy || !setting || printable.length === 0}>
-            {busy ? "Đang in…" : t("btnPrint", "Print")}
+            {busy ? t("printing", "Printing…") : t("btnPrint", "Print")}
           </button>
         </div>
       </div>

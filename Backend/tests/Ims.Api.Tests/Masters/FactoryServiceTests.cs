@@ -98,7 +98,7 @@ public class FactoryServiceTests
 
         var res = await new FactoryService(t.Db).CreateAsync(NormalUser(), body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -366,7 +366,7 @@ public class FactoryServiceTests
 
         var res = await new FactoryService(t.Db).UpdateAsync("FAC-01", NormalUser(), body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -481,7 +481,7 @@ public class FactoryServiceTests
         t.Db.Locations.RemoveRange(t.Db.Locations);
         t.Db.AppUsers.Add(new AppUser
         {
-            UserCode = "U1", UserName = "User 1", RoleCode = "Admin",
+            UserCode = "U1", UserName = "User 1", RoleCode = "ADMIN",
             FactoryCode = "FAC-01", PasswordHash = "x", IsActive = true, CreatedAt = DateTime.UtcNow,
         });
         await t.Db.SaveChangesAsync();

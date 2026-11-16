@@ -61,7 +61,7 @@ export function ReasonPage() {
 
   return (
     <div className="pg on">
-      <CommonToolbar
+      <CommonToolbar fn="m_reason"
         searchDraft={qDraft} onSearchDraftChange={setQDraft}
         onSearch={() => setPage(1)}
         onNew={() => { setModal("new"); setTarget(null); }}

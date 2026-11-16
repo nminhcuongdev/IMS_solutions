@@ -63,6 +63,7 @@ data class StockDisposalRequest(
     val serialNo: String,
     val reasonCode: String,
     val qty: Double,
+    val requestId: String? = null,
 )
 
 data class DisposalLine(
@@ -73,6 +74,7 @@ data class DisposalLine(
     val unit: String?,
     val stockQty: Double,
     val qty: Double = 1.0,
+    val locationCode: String? = null,
 ) {
     val key: String get() = "$itemCode/$serialNo"
 
@@ -84,6 +86,7 @@ data class StockTransferRequest(
     val itemCode: String,
     val serialNo: String,
     val toLocationCode: String,
+    val requestId: String? = null,
 )
 
 data class TransferLine(

@@ -15,7 +15,7 @@ export function LocationLabelModal({
   onPrinted: (labels: number) => void;
 }) {
   const t = useT();
-  const { printers, deviceCode, setDeviceCode, setting, error: printersError } = useLanPrinters();
+  const { printers, deviceCode, setDeviceCode, setting, error: printersError, engineOnline, recheck } = useLanPrinters();
   const [count, setCount] = useState("1");
   const [index, setIndex] = useState(0);
   const [preview, setPreview] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export function LocationLabelModal({
             <input className="bg-slate-50 text-slate-600" type="text" readOnly value={rows.length} />
           </div>
 
-          <LanPrinterField printers={printers} deviceCode={deviceCode} onChange={setDeviceCode} />
+          <LanPrinterField printers={printers} deviceCode={deviceCode} onChange={setDeviceCode} engineOnline={engineOnline} onRecheck={recheck} />
 
           <div className="mfg">
             <label>{t("thLabelCount", "Label Print Count")}</label>

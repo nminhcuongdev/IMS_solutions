@@ -12,21 +12,24 @@ using Ims.Infrastructure.Persistence;
 
 namespace Ims.Api.Features.Auth;
 
-internal sealed class AuthService(ImsDbContext db, IOptions<JwtOptions> jwtOpts) : IAuthService
+internal sealed class AuthService(ImsDbContext db, IOptions<JwtOptions> jwtOpts, IClock? clock = null) : IAuthService
 {
     public const string SuperAdminUserCode = "superadmin";
 
     public async Task<ServiceResult> LoginAsync(LoginRequest body, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(body.UserId) || string.IsNullOrWhiteSpace(body.Password))
-            return Outcome.BadRequest(new ApiError(ErrorCatalog.Auth001()));
+        var noUser = string.IsNullOrWhiteSpace(body.UserId);
+        var noPassword = string.IsNullOrWhiteSpace(body.Password);
+        if (noUser && noPassword) return Outcome.Json(new ApiError(ErrorCatalog.Auth002()), statusCode: 401);
+        if (noUser) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldUserId", "User ID")));
+        if (noPassword) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("password", "Password")));
 
         var user = await db.AppUsers
             .FirstOrDefaultAsync(u => u.UserCode == body.UserId && !u.IsDeleted, ct);
         if (user is null)
             return Outcome.Json(new ApiError(ErrorCatalog.Auth003()), statusCode: 401);
         if (!user.IsActive)
-            return Outcome.Json(new ApiError(ErrorCatalog.Auth003()), statusCode: 401);
+            return Outcome.Json(new ApiError(ErrorCatalog.Auth005Disabled()), statusCode: 403);
 
         var hasher = new PasswordHasher<AppUser>();
         var verify = hasher.VerifyHashedPassword(user, user.PasswordHash, body.Password);
@@ -43,7 +46,8 @@ internal sealed class AuthService(ImsDbContext db, IOptions<JwtOptions> jwtOpts)
 
         var opts = jwtOpts.Value;
         var jti = Guid.NewGuid().ToString("N");
-        var expiresAt = DateTime.UtcNow.AddSeconds(opts.ExpiresSeconds);
+        var now = (clock ?? new LocalClock()).Now;
+        var expiresAt = now.AddSeconds(opts.ExpiresSeconds);
 
         var claims = new List<Claim>
         {
@@ -65,7 +69,7 @@ internal sealed class AuthService(ImsDbContext db, IOptions<JwtOptions> jwtOpts)
             issuer: opts.Issuer,
             audience: opts.Audience,
             claims: claims,
-            notBefore: DateTime.UtcNow,
+            notBefore: now,
             expires: expiresAt,
             signingCredentials: creds);
         var jwt = new JwtSecurityTokenHandler().WriteToken(token);
@@ -91,7 +95,8 @@ internal sealed class AuthService(ImsDbContext db, IOptions<JwtOptions> jwtOpts)
             return Outcome.Json(new ApiError(ErrorCatalog.Auth005()), statusCode: 401);
 
         long expUnix = long.TryParse(expClaim, out var v) ? v : 0;
-        var expiresAt = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
+        var now = (clock ?? new LocalClock()).Now;
+        var expiresAt = expUnix > 0 ? DateTimeOffset.FromUnixTimeSeconds(expUnix).LocalDateTime : default;
 
         if (!await db.RevokedTokens.AnyAsync(r => r.Jti == jti, ct))
         {
@@ -99,8 +104,8 @@ internal sealed class AuthService(ImsDbContext db, IOptions<JwtOptions> jwtOpts)
             {
                 Jti = jti,
                 UserCode = sub,
-                RevokedAt = DateTime.UtcNow,
-                ExpiresAt = expiresAt == default ? DateTime.UtcNow.AddDays(1) : expiresAt,
+                RevokedAt = now,
+                ExpiresAt = expiresAt == default ? now.AddDays(1) : expiresAt,
             });
             await db.SaveChangesAsync(ct);
         }

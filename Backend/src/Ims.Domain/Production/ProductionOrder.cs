@@ -19,5 +19,7 @@ public class ProductionOrder
     public string? CancelReasonCode { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
+    public DateTime? ReceivedAt { get; set; }
+    public string? ReceivedBy { get; set; }
     public string CreatedBy { get; set; } = null!;
 }

@@ -47,4 +47,4 @@ export const createItem = (body: ItemWrite) => apiCall<Item>(P, { method: "POST"
 export const updateItem = (code: string, body: ItemWrite) =>
   apiCall<Item>(`${P}/${encodeURIComponent(code)}`, { method: "PUT", body });
 export const deleteItem = (code: string) => apiCall<void>(`${P}/${encodeURIComponent(code)}`, { method: "DELETE" });
-export const exportItemsCsv = () => apiDownload(`${P}/export.csv`);
+export const exportItemsCsv = () => apiDownload("/export/items");

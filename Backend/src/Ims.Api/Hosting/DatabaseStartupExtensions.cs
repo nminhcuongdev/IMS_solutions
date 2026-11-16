@@ -17,11 +17,11 @@ internal static class DatabaseStartupExtensions
         {
             await db.Database.MigrateAsync();
             await SeedData.RunAsync(db);
-            log.LogInformation("Database migrate + seed hoàn tất.");
+            log.LogInformation("Database migrate and seed completed.");
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "Migrate/seed thất bại. Kiểm tra quyền truy cập SQL của identity đang chạy app.");
+            log.LogError(ex, "Migration/seed failed. Check the SQL permissions of the identity that runs the app.");
         }
     }
 }

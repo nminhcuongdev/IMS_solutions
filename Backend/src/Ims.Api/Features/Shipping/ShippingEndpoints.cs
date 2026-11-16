@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -8,17 +9,18 @@ public static class ShippingEndpoints
 {
     public static IEndpointRouteBuilder MapShippingEndpoints(this IEndpointRouteBuilder app)
     {
-        var schedule = app.MapGroup("/shipping-schedule").WithTags("Shipping").RequireAuthorization();
-        schedule.MapGet("", ListPlansAsync);
-        schedule.MapPost("", CreatePlanAsync);
-        schedule.MapPut("/status", ChangeStatusAsync);
-        schedule.MapPost("/{soNo}/shortage", RegisterShortageAsync);
-        schedule.MapGet("/export.csv", ExportPlansCsvAsync);
+        var schedule = app.MapGroup("/schedules/shipping").WithTags("Shipping").RequireAuthorization().RequireModule("shipping");
+        schedule.MapGet("", ListPlansAsync).RequirePermission("shp_import.Open", "ht_shipping.Open");
+        schedule.MapPost("", CreatePlanAsync).RequirePermission("shp_import.New");
+        schedule.MapPut("/status", ChangeStatusAsync).RequirePermission("shp_import.StatusChange", "ht_shipping.Open");
+        schedule.MapPost("/{soNo}/shortage", RegisterShortageAsync).RequirePermission("shp_import.Shortage", "ht_shipping.Open");
+        app.MapGet("/export/shipping-schedule", ExportPlansCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("shipping").RequirePermission("shp_import.Export");
 
-        var result = app.MapGroup("/shipping-result").WithTags("Shipping").RequireAuthorization();
-        result.MapGet("", ListResultsAsync);
-        result.MapPost("", CreateResultAsync);
-        result.MapGet("/export.csv", ExportResultsCsvAsync);
+        var result = app.MapGroup("/results/shipping").WithTags("Shipping").RequireAuthorization().RequireModule("shipping");
+        var write = app.MapGroup("/shipping-result").WithTags("Shipping").RequireAuthorization().RequireModule("shipping");
+        result.MapGet("", ListResultsAsync).RequirePermission("shp_result.Open", "ht_shipping.Open");
+        write.MapPost("", CreateResultAsync).RequirePermission("ht_shipping.Open");
+        app.MapGet("/export/shipping-result", ExportResultsCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("shipping").RequirePermission("shp_result.Export");
         return app;
     }
 

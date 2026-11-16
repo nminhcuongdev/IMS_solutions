@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
+using Ims.Api.Features.Inventory;
 using Ims.Domain.Masters;
 using Ims.Domain.Receiving;
 using Ims.Infrastructure.Persistence;
@@ -270,8 +271,9 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
                 LocationCode = stock.LocationCode,
                 LotNo = stock.LotNo,
                 SerialNo = stock.SerialNo,
-                ActionType = Domain.Inventory.InventoryAction.Adjust,
+                ActionType = Domain.Inventory.InventoryAction.Receiving,
                 Qty = -receipt.Qty,
+                ReferenceNo = receipt.No.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 CreatedBy = worker,
             });
         }
@@ -303,6 +305,11 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
             .Select(r => r.LotNo)
             .FirstOrDefaultAsync(ct);
         if (item.IsLotManaged && string.IsNullOrWhiteSpace(lotNo)) return false;
+        if (!item.IsLotManaged) lotNo = null;
+        var factoryCode = await LocationFactory.OfAsync(db, locationCode, ct);
+        if (factoryCode is null) return false;
+        if (!string.IsNullOrWhiteSpace(plan.FactoryCode)
+            && !string.Equals(plan.FactoryCode, factoryCode, StringComparison.OrdinalIgnoreCase)) return false;
 
         var result = new ReceivingResult
         {
@@ -320,9 +327,6 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
         db.ReceivingResults.Add(result);
         await db.SaveChangesAsync(ct);
 
-        var factoryCode = plan.FactoryCode
-            ?? await db.Factories.Where(f => !f.IsDeleted).OrderBy(f => f.FactoryCode)
-                .Select(f => f.FactoryCode).FirstAsync(ct);
         var stock = new Domain.Inventory.Stock
         {
             ItemCode = plan.ItemCode,
@@ -394,10 +398,10 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
         var now = DateTime.Now;
         var worker = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        plan.ReasonCode = reasonCode;
         if (!await ReceiveUpToAsync(plan, arrived, worker, now, ct))
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
-        plan.Status = shortageQty == 0 ? ReceivingStatus.Arrived : ReceivingStatus.Partial;
+        plan.ReasonCode = shortageQty == 0 ? null : reasonCode;
+        plan.Status = ReceivingStatus.Arrived;
         plan.UpdatedAt = now;
         if (worker is not null) plan.UpdatedBy = worker;
         await db.SaveChangesAsync(ct);
@@ -460,11 +464,13 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
         var itemCode = body.ItemCode.Trim();
-        var packageQty = await db.Items
+        var itemInfo = await db.Items
             .Where(i => i.ItemCode == itemCode && !i.IsDeleted)
-            .Select(i => (decimal?)i.PackageQty)
+            .Select(i => new { i.IsLotManaged })
             .FirstOrDefaultAsync(ct);
-        if (packageQty is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
+        if (itemInfo is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
+        if (qty > 0 && ExpiryRules.IsExpired(body.ExpiryDate, DateTime.Now))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Inv001()));
 
         var locationCode = NullIfBlank(body.LocationCode)?.Trim();
         if (locationCode is null && qty > 0)
@@ -482,8 +488,16 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
                                             && r.ReasonCategoryValue == ReasonCategory.Shortage, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Reason")));
 
-        var lotNo = NullIfBlank(body.LotNo)?.Trim();
-        if (lotNo is null && qty > 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Lot001()));
+        var lot = LotRules.Check(itemInfo.IsLotManaged, body.LotNo, required: qty > 0);
+        if (lot.Error is { } lotError) return Outcome.BadRequest(new ApiError(lotError));
+        var lotNo = lot.Lot;
+
+        string? locationFactory = null;
+        if (qty > 0 && locationCode is not null)
+        {
+            locationFactory = await LocationFactory.OfAsync(db, locationCode, ct);
+            if (locationFactory is null) return Outcome.Conflict(new ApiError(ErrorCatalog.Loc003NoFactory()));
+        }
 
         var poNo = NullIfBlank(body.PoNo)?.Trim();
         ReceivingPlan? plan = null;
@@ -506,13 +520,11 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
             if (lotNo is not null && !string.IsNullOrWhiteSpace(plan.LotNo)
                 && !string.Equals(plan.LotNo, lotNo, StringComparison.Ordinal))
                 return Outcome.Conflict(new ApiError(ErrorCatalog.Scn006()));
-            var remaining = Math.Max(plan.Qty - plan.ActualQty, 0m);
-            var expected = packageQty is > 1 ? Math.Min(packageQty.Value, remaining) : remaining;
-
             if (plan.ActualQty + qty > plan.Qty)
                 return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
-            if (qty < expected && reasonCode is null)
-                return Outcome.BadRequest(new ApiError(ErrorCatalog.Rsn001()));
+            if (locationFactory is not null && !string.IsNullOrWhiteSpace(plan.FactoryCode)
+                && !string.Equals(plan.FactoryCode, locationFactory, StringComparison.OrdinalIgnoreCase))
+                return Outcome.Conflict(new ApiError(ErrorCatalog.Loc004Factory()));
         }
 
         var now = DateTime.Now;
@@ -527,7 +539,7 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
             ItemCode = itemCode,
             Qty = qty,
             LocationCode = locationCode,
-            LotNo = NullIfBlank(body.LotNo)?.Trim(),
+            LotNo = lotNo,
             IsOnHold = body.IsOnHold,
             ReasonCode = reasonCode,
             ExpiryDate = body.ExpiryDate,
@@ -544,7 +556,8 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
             plan.Status = plan.ActualQty >= plan.Qty ? ReceivingStatus.Arrived
                 : plan.ActualQty > 0 ? ReceivingStatus.Partial
                 : plan.Status;
-            if (reasonCode is not null) plan.ReasonCode = reasonCode;
+            if (plan.ActualQty >= plan.Qty) plan.ReasonCode = null;
+            else if (reasonCode is not null) plan.ReasonCode = reasonCode;
             plan.UpdatedAt = now;
             plan.UpdatedBy = worker;
         }
@@ -553,13 +566,7 @@ internal sealed class ReceivingService(ImsDbContext db) : IReceivingService
 
         if (qty > 0)
         {
-            var factoryCode = plan?.FactoryCode
-                ?? (locationCode is null ? null : await db.Locations
-                    .Where(l => l.LocationCode == locationCode && l.ZoneCode != null)
-                    .Join(db.Zones, l => l.ZoneCode, z => z.ZoneCode, (l, z) => z.FactoryCode)
-                    .FirstOrDefaultAsync(ct))
-                ?? await db.Factories.Where(f => !f.IsDeleted).OrderBy(f => f.FactoryCode)
-                    .Select(f => f.FactoryCode).FirstAsync(ct);
+            var factoryCode = locationFactory!;
             var period = await db.Items.Where(i => i.ItemCode == itemCode)
                 .Select(i => i.ExpirationPeriod).FirstAsync(ct);
             var expiry = body.ExpiryDate

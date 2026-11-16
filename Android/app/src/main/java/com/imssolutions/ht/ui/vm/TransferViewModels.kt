@@ -10,6 +10,8 @@ import kotlinx.coroutines.launch
 import com.imssolutions.ht.ui.HtMsg
 import com.imssolutions.ht.data.InventoryRepository
 import com.imssolutions.ht.data.Location
+import com.imssolutions.ht.data.StockLine
+import com.imssolutions.ht.data.StockScanRules
 import com.imssolutions.ht.data.TransferLine
 import com.imssolutions.ht.data.Zone
 import com.imssolutions.ht.scan.QrPayload
@@ -55,7 +57,7 @@ class TransferViewModel : ViewModel() {
 
     fun beginScan(): Boolean {
         if (_state.value.toLocationCode.isNullOrBlank()) {
-            _state.update { it.copy(error = "LOC-001" to "Chưa chọn vị trí đích.") }
+            _state.update { it.copy(error = "LOC-001" to "Please enter a Location.") }
             return false
         }
         _state.update { it.copy(lines = emptyList(), error = null, toast = null, done = false) }
@@ -66,49 +68,53 @@ class TransferViewModel : ViewModel() {
         val payload = when (val r = QrPayload.parse(raw)) {
             is QrScan.Ok -> r.payload
             is QrScan.Invalid -> {
-                _state.update { it.copy(error = "SCN-001" to "Mã quét không đúng định dạng.") }
+                _state.update { it.copy(error = "SCN-001" to "The scanned code is not in a valid format.") }
                 return
             }
         }
         val itemCode = payload.itemCode?.trim().orEmpty()
         if (itemCode.isEmpty()) {
-            _state.update { it.copy(error = "SCN-006" to "Nhãn không có mã hàng.") }
+            _state.update { it.copy(error = "VAL-001" to "fldItemCode") }
             return
         }
         val lot = payload.lotNo?.trim()
-
-        if (_state.value.lines.any {
-                it.itemCode.equals(itemCode, ignoreCase = true) &&
-                    it.lotNo?.trim().orEmpty().equals(lot.orEmpty(), ignoreCase = true)
-            }
-        ) {
-            _state.update { it.copy(error = "SCN-007" to "Nhãn này đã được quét rồi.") }
-            return
-        }
+        val serial = payload.serialNo?.trim()?.takeIf { it.isNotEmpty() }
 
         if (_state.value.busy) return
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.resolveTransferScan(itemCode, lot) }
-                .onSuccess { line ->
+            runCatching { repo.candidates(itemCode, lot, serial) }
+                .onSuccess { found ->
+                    val fresh = found.filter { c -> _state.value.lines.none { it.serialNo == c.serialNo && it.itemCode == c.itemCode } }
                     when {
-                        line == null -> _state.update {
-                            it.copy(
-                                busy = false,
-                                error = "SYS-404" to itemCode,
-                            )
+                        found.isEmpty() -> _state.update {
+                            it.copy(busy = false, error = if (serial != null) "SCN-003" to serial else "SYS-404" to itemCode)
                         }
-                        line.locationCode.equals(_state.value.toLocationCode, ignoreCase = true) ->
-                            _state.update {
-                                it.copy(
-                                    busy = false,
-                                    error = "LOC-001" to "${line.itemCode} đã ở ${line.locationCode} rồi.",
-                                )
-                            }
-                        else -> _state.update { it.copy(busy = false, lines = it.lines + line) }
+                        fresh.isEmpty() -> _state.update {
+                            it.copy(busy = false, error = "SCN-007" to "This label has already been scanned or used.")
+                        }
+                        fresh.size == 1 -> add(fresh[0])
+                        else -> _state.update { it.copy(busy = false, choices = fresh) }
                     }
                 }
                 .onFailure { e -> _state.update { it.copy(busy = false, error = e.toPair()) } }
+        }
+    }
+
+    fun choose(serialNo: String) {
+        val line = _state.value.choices.firstOrNull { it.serialNo == serialNo } ?: return
+        add(line)
+    }
+
+    fun dismissChoices() = _state.update { it.copy(choices = emptyList()) }
+
+    private fun add(line: StockLine) {
+        if (line.locationCode.equals(_state.value.toLocationCode, ignoreCase = true)) {
+            _state.update { it.copy(busy = false, choices = emptyList(), error = "LOC-001" to "Please enter a Location.") }
+            return
+        }
+        _state.update {
+            it.copy(busy = false, choices = emptyList(), lines = it.lines + StockScanRules.toTransfer(line))
         }
     }
 
@@ -128,11 +134,11 @@ class TransferViewModel : ViewModel() {
         if (s.busy) return
         val to = s.toLocationCode?.takeIf { it.isNotBlank() }
         if (to == null) {
-            _state.update { it.copy(error = "LOC-001" to "Chưa chọn vị trí đích.") }
+            _state.update { it.copy(error = "LOC-001" to "Please enter a Location.") }
             return
         }
         if (s.lines.isEmpty()) {
-            _state.update { it.copy(error = "STK-005" to "Chưa quét nhãn nào.") }
+            _state.update { it.copy(error = "STK-005" to "No labels have been scanned yet.") }
             return
         }
 
@@ -145,10 +151,10 @@ class TransferViewModel : ViewModel() {
                             busy = false,
                             done = r.skipped.isEmpty(),
                             toast = if (r.skipped.isEmpty()) {
-                                HtMsg("htTransferDoneN", "Đã chuyển {0} dòng sang {1}.", r.updated, to)
+                                HtMsg("htTransferDoneN", "Moved {0} rows to {1}.", r.updated, to)
                             } else {
                                 HtMsg(
-                                    "htBatchPartial", "Đã xử lý {0} dòng. Lỗi: {1}",
+                                    "htBatchPartial", "Processed {0} rows. Failed: {1}",
                                     r.updated, r.skipped.joinToString(", "),
                                 )
                             },
@@ -167,6 +173,7 @@ data class TransferState(
     val zoneCode: String? = null,
     val toLocationCode: String? = null,
     val lines: List<TransferLine> = emptyList(),
+    val choices: List<StockLine> = emptyList(),
     val busy: Boolean = false,
     val error: Pair<String, String>? = null,
     val toast: HtMsg? = null,

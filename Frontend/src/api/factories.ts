@@ -26,4 +26,4 @@ export const createFactory = (body: FactoryWrite) => apiCall<Factory>(P, { metho
 export const updateFactory = (code: string, body: FactoryWrite) =>
   apiCall<Factory>(`${P}/${encodeURIComponent(code)}`, { method: "PUT", body });
 export const deleteFactory = (code: string) => apiCall<void>(`${P}/${encodeURIComponent(code)}`, { method: "DELETE" });
-export const exportFactoriesCsv = () => apiDownload(`${P}/export.csv`);
+export const exportFactoriesCsv = () => apiDownload("/export/factories");

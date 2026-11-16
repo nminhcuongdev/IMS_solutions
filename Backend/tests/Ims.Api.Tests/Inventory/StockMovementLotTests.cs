@@ -82,7 +82,7 @@ public class StockMovementLotTests
     {
         using var t = await SeedAsync(("SN-B", "LOT-B", 10));
 
-        ResultAssert.Error((await TakeAsync(t, "LOT-A", 4))!, 404, "LOT-002");
+        ResultAssert.Error((await TakeAsync(t, "LOT-A", 4))!, 404, "SCN-003");
 
         Assert.Equal(10m, await QtyAsync(t, "SN-B"));
     }
@@ -96,7 +96,7 @@ public class StockMovementLotTests
         await t.Db.SaveChangesAsync();
         t.Db.ChangeTracker.Clear();
 
-        ResultAssert.Error((await TakeAsync(t, "LOT-A", 4))!, 409, "SCN-006");
+        ResultAssert.Error((await TakeAsync(t, "LOT-A", 4))!, 409, "SCN-005");
         Assert.Equal(10m, await QtyAsync(t, "SN-NOLOT"));
     }
 

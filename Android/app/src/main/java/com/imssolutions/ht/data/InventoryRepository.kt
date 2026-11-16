@@ -2,10 +2,13 @@ package com.imssolutions.ht.data
 
 class InventoryRepository {
 
+    private val disposalKeys = RetryKeys()
+    private val transferKeys = RetryKeys()
+
     suspend fun listItems(
         query: String? = null,
         page: Int = 1,
-        pageSize: Int = 200,
+        pageSize: Int = Paging.PAGE_SIZE,
     ): ApiListSuccess<StockGroup> = ApiClient.call {
         listStockByItem(
             page = page,
@@ -14,76 +17,51 @@ class InventoryRepository {
         )
     }
 
-    suspend fun linesOf(itemCode: String): List<StockLine> = ApiClient.call {
-        listStockLines(itemCode = itemCode, pageSize = 200, sort = "location_code")
-    }.data.filter { it.itemCode.equals(itemCode, ignoreCase = true) }
+    suspend fun listAllItems(query: String? = null): ApiListSuccess<StockGroup> =
+        Paging.all { page, size -> listItems(query, page, size) }
 
+    suspend fun linesOf(itemCode: String): List<StockLine> =
+        Paging.all { page, size ->
+            ApiClient.call { listStockLines(itemCode = itemCode, page = page, pageSize = size, sort = "location_code") }
+        }.data.filter { it.itemCode.equals(itemCode, ignoreCase = true) }
 
     suspend fun disposalReasons(): List<Reason> =
         ApiClient.call { listReasons(category = "Defect") }.data
 
-    suspend fun resolveScan(itemCode: String, lotNo: String?): DisposalLine? {
-        val lines = linesOf(itemCode).filter { it.stockQty > 0 }
-        val lot = lotNo?.trim()?.takeIf { it.isNotBlank() }
-        val hit = if (lot == null) lines.firstOrNull()
-        else lines.firstOrNull { it.lotNo?.trim().equals(lot, ignoreCase = true) }
-        return hit?.let {
-            DisposalLine(
-                itemCode = it.itemCode, serialNo = it.serialNo, itemName = it.itemName,
-                lotNo = it.lotNo, unit = it.unit, stockQty = it.stockQty,
-            )
-        }
-    }
+    suspend fun candidates(itemCode: String, lotNo: String?, serialNo: String?): List<StockLine> =
+        StockScanRules.candidates(linesOf(itemCode), lotNo, serialNo)
 
     suspend fun disposeAll(lines: List<DisposalLine>, reasonCode: String): StockBulkResult {
         var done = 0
         val failed = mutableListOf<String>()
         for (l in lines) {
+            val request = StockDisposalRequest(
+                itemCode = l.itemCode, serialNo = l.serialNo, reasonCode = reasonCode, qty = l.qty,
+            )
             runCatching {
-                ApiClient.call {
-                    disposeStock(
-                        StockDisposalRequest(
-                            itemCode = l.itemCode, serialNo = l.serialNo,
-                            reasonCode = reasonCode, qty = l.qty,
-                        ),
-                    )
+                disposalKeys.of(l.key).send(request, { r, id -> r.copy(requestId = id) }) { sent ->
+                    ApiClient.call { disposeStock(sent) }
                 }
             }.onSuccess { done++ }.onFailure { failed += l.key }
         }
         return StockBulkResult(done, failed)
     }
 
-
     suspend fun zones(): List<Zone> = ApiClient.call { listZones() }.data
 
     suspend fun locationsIn(zoneCode: String): List<Location> =
         ApiClient.call { listLocations(zoneCode = zoneCode, type = "Small") }.data
 
-    suspend fun resolveTransferScan(itemCode: String, lotNo: String?): TransferLine? {
-        val lines = linesOf(itemCode)
-        val lot = lotNo?.trim()?.takeIf { it.isNotBlank() }
-        val hit = if (lot == null) lines.firstOrNull { it.stockQty > 0 } ?: lines.firstOrNull()
-        else lines.firstOrNull { it.lotNo?.trim().equals(lot, ignoreCase = true) }
-        return hit?.let {
-            TransferLine(
-                itemCode = it.itemCode, serialNo = it.serialNo, itemName = it.itemName,
-                lotNo = it.lotNo, unit = it.unit, qty = it.stockQty, locationCode = it.locationCode,
-            )
-        }
-    }
-
     suspend fun transferAll(lines: List<TransferLine>, toLocationCode: String): StockBulkResult {
         var done = 0
         val failed = mutableListOf<String>()
         for (l in lines) {
+            val request = StockTransferRequest(
+                itemCode = l.itemCode, serialNo = l.serialNo, toLocationCode = toLocationCode,
+            )
             runCatching {
-                ApiClient.call {
-                    transferStock(
-                        StockTransferRequest(
-                            itemCode = l.itemCode, serialNo = l.serialNo,
-                            toLocationCode = toLocationCode,
-                        ),
-                    )
+                transferKeys.of(l.key + ">" + toLocationCode).send(request, { r, id -> r.copy(requestId = id) }) { sent ->
+                    ApiClient.call { transferStock(sent) }
                 }
             }.onSuccess { done++ }.onFailure { failed += l.key }
         }

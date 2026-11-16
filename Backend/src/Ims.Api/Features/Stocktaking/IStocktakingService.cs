@@ -27,7 +27,9 @@ internal interface IStocktakingService
         string? itemName = null, bool notScanned = false, bool statusDiff = false);
 
     Task<ServiceResult> ListHistoryAsync(
-        CancellationToken ct, string? q = null, int page = 1, int pageSize = 50, string? sort = null);
+        CancellationToken ct, string? q = null, int page = 1, int pageSize = 50, string? sort = null, long? sessionNo = null);
 
-    Task<ServiceResult> ExportHistoryCsvAsync(CancellationToken ct, string? q = null);
+    Task<ServiceResult> ListSessionsAsync(CancellationToken ct);
+
+    Task<ServiceResult> ExportHistoryCsvAsync(CancellationToken ct, string? q = null, long? sessionNo = null);
 }

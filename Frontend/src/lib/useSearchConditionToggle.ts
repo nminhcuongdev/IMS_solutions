@@ -1,15 +1,33 @@
 import { useEffect } from "react";
 import { useT } from "@/i18n/LanguageContext";
 
+const AREA = ".content .search-box";
+
+function isSearchArea(box: HTMLElement): boolean {
+  const rows = Array.from(box.children).some(x => x.classList.contains("search-row"));
+  if (!rows) return false;
+  return box.hasAttribute("data-search-area") || !!box.querySelector(":scope > .search-btns [data-role='search']");
+}
+
 export function useSearchConditionToggle(pathname: string) {
   const t = useT();
   useEffect(() => {
     let timer: number | undefined;
+    const paint = (box: HTMLElement) => {
+      const toggle = box.querySelector<HTMLButtonElement>(":scope > .sb-toggle");
+      if (!toggle) return;
+      const collapsed = box.classList.contains("sb-collapsed");
+      const label = collapsed ? t("sbShow", "Show search conditions") : t("sbHide", "Hide search conditions");
+      if (toggle.title !== label) toggle.title = label;
+      toggle.setAttribute("aria-label", label);
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+      const icon = toggle.querySelector("img");
+      const src = `/Images/Icon/expand_${collapsed ? "more" : "less"}_50_000000.svg`;
+      if (icon && icon.getAttribute("src") !== src) icon.setAttribute("src", src);
+    };
     const scan = () => {
-      document.querySelectorAll<HTMLElement>(".content .search-box").forEach(box => {
-        const rows = Array.from(box.children).filter(x => x.classList.contains("search-row"));
-        const buttons = Array.from(box.querySelectorAll<HTMLButtonElement>(":scope > .search-btns > button"));
-        if (!rows.length || !buttons.some(b => b.classList.contains("btn-primary") && b.textContent?.trim() === t("search", "Search"))) return;
+      document.querySelectorAll<HTMLElement>(AREA).forEach(box => {
+        if (!isSearchArea(box)) return;
         let toggle = box.querySelector<HTMLButtonElement>(":scope > .sb-toggle");
         if (!toggle) {
           toggle = document.createElement("button");
@@ -27,30 +45,6 @@ export function useSearchConditionToggle(pathname: string) {
         }
         paint(box);
       });
-    };
-    const paint = (box: HTMLElement) => {
-      const toggle = box.querySelector<HTMLButtonElement>(":scope > .sb-toggle");
-      if (!toggle) return;
-      const collapsed = box.classList.contains("sb-collapsed");
-      const label = collapsed ? t("sbShow", "Show search conditions") : t("sbHide", "Hide search conditions");
-      toggle.title = label;
-      toggle.setAttribute("aria-label", label);
-      toggle.setAttribute("aria-expanded", String(!collapsed));
-      const icon = toggle.querySelector("img");
-      if (icon) icon.src = `/Images/Icon/expand_${collapsed ? "more" : "less"}_50_000000.svg`;
-      let summary = box.querySelector<HTMLElement>(":scope > .sb-summary");
-      if (!summary) {
-        summary = document.createElement("div");
-        summary.className = "sb-summary";
-        toggle.after(summary);
-      }
-      const values = Array.from(box.querySelectorAll<HTMLInputElement | HTMLSelectElement>(":scope > .search-row input, :scope > .search-row select"))
-        .filter(el => el instanceof HTMLInputElement ? el.type !== "checkbox" || el.checked : true)
-        .map(el => el instanceof HTMLSelectElement ? el.selectedOptions[0]?.textContent?.trim() : el.value.trim())
-        .filter(Boolean);
-      const summaryText = values.length ? values.join(" · ") : t("sbNoCond", "No search conditions");
-      if (summary.textContent !== summaryText) summary.textContent = summaryText;
-      summary.hidden = !collapsed;
     };
     scan();
     const observer = new MutationObserver(() => { window.clearTimeout(timer); timer = window.setTimeout(scan, 30); });

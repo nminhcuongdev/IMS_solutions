@@ -6,5 +6,6 @@ import kotlinx.serialization.Serializable
 data class ProductionOrderDetail(
     val order: ProductionOrder = ProductionOrder(),
     val lines: List<ProductionLine> = emptyList(),
+    val works: List<ProductionWork> = emptyList(),
     val outputQty: Double = 0.0,
 )

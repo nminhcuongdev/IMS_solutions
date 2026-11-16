@@ -27,4 +27,4 @@ export const createPartner = (body: PartnerWrite) => apiCall<Partner>(P, { metho
 export const updatePartner = (code: string, body: PartnerWrite) =>
   apiCall<Partner>(`${P}/${encodeURIComponent(code)}`, { method: "PUT", body });
 export const deletePartner = (code: string) => apiCall<void>(`${P}/${encodeURIComponent(code)}`, { method: "DELETE" });
-export const exportPartnersCsv = () => apiDownload(`${P}/export.csv`);
+export const exportPartnersCsv = () => apiDownload("/export/partners");

@@ -15,6 +15,7 @@ public class StockScanConfig : IEntityTypeConfiguration<StockScan>
         b.Property(x => x.ItemName).HasColumnName("item_name").TextN(255);
         b.Property(x => x.ItemCategory).HasColumnName("item_category").TextN(100);
         b.Property(x => x.IsScanned).HasColumnName("is_scanned").HasDefaultValue(false);
+        b.Property(x => x.IsTarget).HasColumnName("is_target").HasDefaultValue(true).HasSentinel(true);
         b.Property(x => x.WorkerCode).HasColumnName("worker_code").CodeN(50);
         b.Property(x => x.WorkerName).HasColumnName("worker_name").TextN(255);
         b.HasIndex(x => x.ItemCode).HasDatabaseName("IX_stock_scan_item_code");

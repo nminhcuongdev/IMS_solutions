@@ -69,7 +69,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
 export function useLang(): LanguageCtx {
   const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useLang phải nằm trong <LanguageProvider>");
+  if (!ctx) throw new Error("useLang must be used inside <LanguageProvider>");
   return ctx;
 }
 

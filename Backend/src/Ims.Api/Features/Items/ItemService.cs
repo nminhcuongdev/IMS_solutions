@@ -78,8 +78,11 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         var code = body.ItemCode.Trim();
         if (await db.Items.AnyAsync(i => i.ItemCode == code, ct))
             return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        var groupCode = body.ItemGroupCode.Trim();
-        if (!await db.ItemGroups.AnyAsync(g => g.ItemGroupCode == groupCode && !g.IsDeleted, ct))
+        if (string.IsNullOrWhiteSpace(body.ItemGroupCode)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldItemGroupCode", "品目グループコード")));
+        var wantedGroup = body.ItemGroupCode.Trim().ToUpper();
+        var groupCode = await db.ItemGroups.Where(g => g.ItemGroupCode.ToUpper() == wantedGroup && !g.IsDeleted)
+            .Select(g => g.ItemGroupCode).FirstOrDefaultAsync(ct);
+        if (groupCode is null)
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("ItemGroup")));
         if (!string.IsNullOrWhiteSpace(body.PackingTypeCode)
             && !await db.DefaultValues.AnyAsync(d => d.ValueType == "PackingType" && d.ValueCode == body.PackingTypeCode && d.IsActive, ct))
@@ -120,8 +123,11 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
         if (i is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
         if (ValidateName(body.ItemName) is { } e) return e;
         if (HasNegative(body)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
-        var groupCode = body.ItemGroupCode.Trim();
-        if (!await db.ItemGroups.AnyAsync(g => g.ItemGroupCode == groupCode && !g.IsDeleted, ct))
+        if (string.IsNullOrWhiteSpace(body.ItemGroupCode)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldItemGroupCode", "品目グループコード")));
+        var wantedGroup = body.ItemGroupCode.Trim().ToUpper();
+        var groupCode = await db.ItemGroups.Where(g => g.ItemGroupCode.ToUpper() == wantedGroup && !g.IsDeleted)
+            .Select(g => g.ItemGroupCode).FirstOrDefaultAsync(ct);
+        if (groupCode is null)
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("ItemGroup")));
         if (!string.IsNullOrWhiteSpace(body.PackingTypeCode)
             && !await db.DefaultValues.AnyAsync(d => d.ValueType == "PackingType" && d.ValueCode == body.PackingTypeCode && d.IsActive, ct))
@@ -162,10 +168,7 @@ internal sealed class ItemService(ImsDbContext db) : IItemService
             || await db.PickingPlans.AnyAsync(x => x.ItemCode == code && x.Status == PickingStatus.NotPicked, ct)
             || await db.ProductionOrders.AnyAsync(x => x.OutputItemCode == code, ct)
             || await db.ProductionOrderLines.AnyAsync(x => x.ItemCode == code, ct)
-            || await db.ProductionConsumptions.AnyAsync(x => x.ItemCode == code, ct)
-            || await db.ProductionOutputs.AnyAsync(x => x.ItemCode == code, ct)
-            || await db.ProductionReturns.AnyAsync(x => x.ItemCode == code, ct)
-            || await db.ProductionLabels.AnyAsync(x => x.ItemCode == code, ct))
+            || await db.ProductionResults.AnyAsync(x => x.ItemCode == code, ct))
             return Outcome.Conflict(new ApiError(ErrorCatalog.Del001()));
         i.IsDeleted = true; i.UpdatedAt = DateTime.Now;
         await db.SaveChangesAsync(ct);

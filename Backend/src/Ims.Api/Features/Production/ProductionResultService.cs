@@ -51,11 +51,13 @@ internal sealed partial class ProductionService
                     .Select(x => new ProductionWorkDto("output", x.No, x.ProductionOrderNo, x.ItemCode, x.LotNo, x.Qty, x.CreatedAt, x.CreatedBy,
                         x.ReversesNo != null || db.ProductionOutputs.Any(r => r.ReversesNo == x.No))).ToListAsync(ct));
             if (type is null or "all" or "rcpt" or "receipt")
-                rows.AddRange(await db.ProductionReceipts.AsNoTracking()
-                    .Select(x => new ProductionWorkDto("receipt", x.No, x.ProductionOrderNo, null, null, null, x.CreatedAt, x.CreatedBy)).ToListAsync(ct));
+                rows.AddRange(await db.ProductionOrders.AsNoTracking().Where(x => x.ReceivedAt != null)
+                    .Select(x => new ProductionWorkDto("receipt", x.No, x.ProductionOrderNo, null, null, null, x.ReceivedAt!.Value, x.ReceivedBy)).ToListAsync(ct));
             if (type is null or "all" or "label")
-                rows.AddRange(await db.ProductionLabels.AsNoTracking()
-                    .Select(x => new ProductionWorkDto("label", x.No, x.ProductionOrderNo, x.ItemCode, x.LotNo, x.TotalQty, x.CreatedAt, x.CreatedBy)).ToListAsync(ct));
+                rows.AddRange((await db.ProductionOutputs.AsNoTracking().Where(x => x.LabelIssuedAt != null && x.ReversesNo == null).ToListAsync(ct))
+                    .GroupBy(x => x.RequestId)
+                    .Select(g => new ProductionWorkDto("label", g.Min(x => x.No), g.First().ProductionOrderNo, g.First().ItemCode,
+                        g.First().LotNo, g.Sum(x => x.Qty), g.Min(x => x.LabelIssuedAt!.Value), g.First().LabelIssuedBy)));
             if (type is null or "all" or "pick" or "picking")
                 rows.AddRange(await db.ProductionOrderLines.AsNoTracking().Where(x => x.PickedAt != null)
                     .Select(x => new ProductionWorkDto("picking", x.No, x.ProductionOrderNo, x.ItemCode, null, x.PlannedQty, x.PickedAt!.Value, x.PickedBy)).ToListAsync(ct));
@@ -83,9 +85,7 @@ internal sealed partial class ProductionService
         var outputs = await query.ToListAsync(ct);
         var reversedNos = (await db.ProductionOutputs.AsNoTracking().Where(x => x.ReversesNo != null)
             .Select(x => x.ReversesNo!.Value).ToListAsync(ct)).ToHashSet();
-        var requestIds = outputs.Select(x => x.RequestId).Distinct().ToList();
-        var labeled = (await db.ProductionLabels.AsNoTracking().Where(x => requestIds.Contains(x.OutputRequestId))
-            .Select(x => x.OutputRequestId).ToListAsync(ct)).ToHashSet();
+        var labeled = outputs.Where(x => x.LabelIssuedAt != null).Select(x => x.RequestId).ToHashSet();
         var codes = outputs.Select(x => x.ItemCode).Distinct().ToList();
         var items = await db.Items.AsNoTracking().Where(x => codes.Contains(x.ItemCode)).ToDictionaryAsync(x => x.ItemCode, ct);
         var orderNos = outputs.Select(x => x.ProductionOrderNo).Distinct().ToList();

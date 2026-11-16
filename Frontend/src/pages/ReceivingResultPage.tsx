@@ -1,3 +1,5 @@
+import { listPrintHistory, type PrintHistoryRow } from "@/api/history";
+import { ReprintModal } from "@/pages/ReprintModal";
 import { fmtDate, fmtDateTime } from "@/lib/dateFormat";
 import { useMemo, useState } from "react";
 import {
@@ -58,6 +60,7 @@ export function ReceivingResultPage() {
   const [poDraft, setPoDraft] = useState(poNo);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [recorded, setRecorded] = useState<PrintHistoryRow | null>(null);
   const [reprintRows, setReprintRows] = useState<ReceivingPlanRow[] | null>(null);
   const toggle = (no: number) => setSelected(prev => {
     const s = new Set(prev);
@@ -86,11 +89,19 @@ export function ReceivingResultPage() {
   const someChecked = rows.some(r => selected.has(r.no));
   const toggleAll = () => setSelected(allChecked ? new Set() : new Set(rows.map(r => r.no)));
 
-  const openReprint = () => {
+  const openReprint = async () => {
     const picked = rows.filter(r => selected.has(r.no));
     if (picked.length === 0) {
       toast.err(t("alertSelectAtLeastOne", "Please select at least one row."));
       return;
+    }
+    if (picked.length === 1) {
+      const one = picked[0];
+      const doc = one.poNo ?? "";
+      const found = doc ? await listPrintHistory({ category: "Receiving", q: doc, pageSize: 50 }).then(r => r.data, () => []) : [];
+      const original = found.filter(h => h.docNo === doc && h.itemCode === one.itemCode && h.canReprint)
+        .sort((a, b) => a.no - b.no)[0];
+      if (original) { setRecorded(original); return; }
     }
     setReprintRows(picked.map(asLabelRow));
   };
@@ -137,7 +148,7 @@ export function ReceivingResultPage() {
 
         <div className="search-btns">
           <SearchButton onClick={search} />
-          <PrintButton onClick={openReprint}>{t("btnReprint", "Reprint")}</PrintButton>
+          <PrintButton action="Reprint" onClick={openReprint}>{t("btnReprint", "Reprint")}</PrintButton>
           <CsvButton onClick={onExport} />
         </div>
       </div>
@@ -206,6 +217,14 @@ export function ReceivingResultPage() {
         onGoPage={p => setPage(p, { push: true })}
         onChangeSize={n => patch({ size: n === 50 ? null : String(n), page: null })} />
 
+      {recorded && (
+        <ReprintModal row={recorded} onClose={() => setRecorded(null)}
+          onPrinted={count => {
+            setRecorded(null);
+            setSelected(new Set());
+            toast.ok(`${t("labelIssueDone", "Labels issued")}: ${count}`);
+          }} />
+      )}
       {reprintRows && (
         <ReceivingLabelModal
           rows={reprintRows}

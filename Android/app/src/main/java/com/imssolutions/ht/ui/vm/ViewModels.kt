@@ -13,6 +13,7 @@ import com.imssolutions.ht.ui.HtMsg
 import com.imssolutions.ht.data.ApiClient
 import com.imssolutions.ht.data.ApiException
 import com.imssolutions.ht.data.ServerAddress
+import com.imssolutions.ht.data.ServerProbe
 import com.imssolutions.ht.data.HtConfig
 import com.imssolutions.ht.data.LoginRequest
 import com.imssolutions.ht.data.Reason
@@ -57,11 +58,11 @@ class LoginViewModel : ViewModel() {
         val s = _state.value
         if (s.loading) return
         if (s.userCode.isBlank()) {
-            _state.update { it.copy(error = "AUTH-001" to "Vui lòng nhập User ID.") }
+            _state.update { it.copy(error = "AUTH-001" to "Please enter a User ID.") }
             return
         }
         if (s.password.isBlank()) {
-            _state.update { it.copy(error = "AUTH-002" to "Vui lòng nhập cả User ID và mật khẩu.") }
+            _state.update { it.copy(error = "AUTH-002" to "Please enter both User ID and Password.") }
             return
         }
         _state.update { it.copy(loading = true, error = null) }
@@ -70,7 +71,7 @@ class LoginViewModel : ViewModel() {
                 ApiClient.call { login(LoginRequest(userId = s.userCode.trim(), password = s.password)) }.data
             }.onSuccess { r ->
                 if (r == null) {
-                    _state.update { it.copy(loading = false, error = "ERR" to "Máy chủ trả về dữ liệu rỗng.") }
+                    _state.update { it.copy(loading = false, error = "ERR" to "The server returned no data.") }
                 } else {
                     ApiClient.tokens.save(r.token, r.userCode, r.userName, r.defaultLanguage)
                     ApiClient.tokens.saveRemembered(s.rememberMe, s.userCode.trim())
@@ -152,7 +153,7 @@ class ReceivingListViewModel : ViewModel() {
         val s = _state.value
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.listPlans(date = s.date) }
+            runCatching { repo.listAllPlans(date = s.date) }
                 .onSuccess { r -> _state.update { it.copy(loading = false, plans = r.data) } }
                 .onFailure { e -> _state.update { it.copy(loading = false, error = e.toPair()) } }
         }
@@ -274,7 +275,7 @@ class ReceivingDetailViewModel : ViewModel() {
 
     private fun locationMissing(s: ReceivingDetailState): Boolean {
         if (!s.missingLocation) return false
-        _state.update { it.copy(error = "LOC-001" to "Vui lòng quét tem vị trí.") }
+        _state.update { it.copy(error = "LOC-001" to "Please scan the location label.") }
         return true
     }
 
@@ -319,7 +320,7 @@ class ReceivingDetailViewModel : ViewModel() {
 
         val qty = s.actualQty.trim().toDoubleOrNull()
         if (qty == null || qty < 0) {
-            _state.update { it.copy(error = "QTY-001" to "Vui lòng nhập số lượng hợp lệ (từ 0 trở lên).") }
+            _state.update { it.copy(error = "QTY-001" to "Please enter a valid quantity (0 or more).") }
             return
         }
         if (locationMissing(s)) return
@@ -360,16 +361,16 @@ class ReceivingDetailViewModel : ViewModel() {
         runCatching { repo.confirmLine(line, qty, s.reasonCode, s.lotNo, s.locationCode) }
             .onSuccess { row ->
                 val msg = when {
-                    printed -> HtMsg("htLabelAndConfirmed", "Đã in nhãn và chốt: thực nhận {0}", fmt(row.qty))
-                    row.status == STATUS_ARRIVED -> HtMsg("htReceivedFull", "Đã chốt: nhận đủ {0}", fmt(row.qty))
-                    else -> HtMsg("htReceivedShort", "Đã ghi thiếu hàng: thực nhận {0}", fmt(row.qty))
+                    printed -> HtMsg("htLabelAndConfirmed", "Label printed and confirmed: received {0}", fmt(row.qty))
+                    row.status == STATUS_ARRIVED -> HtMsg("htReceivedFull", "Confirmed: received in full {0}", fmt(row.qty))
+                    else -> HtMsg("htReceivedShort", "Saved a partial receipt: received {0}", fmt(row.qty))
                 }
                 _state.update { it.copy(busy = false, toast = msg, done = true) }
             }
             .onFailure { e ->
                 val (code, msg) = e.toPair()
                 _state.update {
-                    it.copy(busy = false, error = if (printed) code to "Đã in nhãn nhưng CHƯA chốt được dòng. $msg" else code to msg)
+                    it.copy(busy = false, error = if (printed) code to "The label was printed but the line was NOT confirmed. $msg" else code to msg)
                 }
             }
     }
@@ -384,6 +385,10 @@ data class SettingsState(
     val loading: Boolean = true,
     val serverIp: String = "",
     val serverUrl: String? = null,
+    val serverCandidates: List<String> = emptyList(),
+    val chosenServer: String? = null,
+    val savedServers: List<String> = emptyList(),
+    val probing: Boolean = false,
     val printerDeviceCode: String = "",
     val zoneCode: String = "",
     val printers: List<Pair<String, String>> = emptyList(),
@@ -405,7 +410,31 @@ class SettingsViewModel : ViewModel() {
     private val deviceIp = ServerAddress.deviceIpv4()
 
     fun setServerIp(v: String) = _state.update {
-        it.copy(serverIp = v, serverUrl = ServerAddress.toBaseUrl(v, deviceIp), error = null)
+        val c = ServerAddress.candidates(v, deviceIp)
+        it.copy(serverIp = v, serverUrl = c.singleOrNull(), serverCandidates = c, chosenServer = null, error = null)
+    }
+
+    fun pickServer(url: String) = _state.update {
+        it.copy(
+            serverIp = ServerAddress.toDisplay(url), serverUrl = url, serverCandidates = listOf(url),
+            chosenServer = url, error = null,
+        )
+    }
+
+    fun forgetServer(url: String) {
+        val next = _state.value.savedServers.filter { !ServerAddress.sameServer(it, url) }
+        _state.update { it.copy(savedServers = next) }
+        viewModelScope.launch { ApiClient.tokens.saveSavedServers(next) }
+    }
+
+    private suspend fun resolveServer(s: SettingsState): String? {
+        s.chosenServer?.let { return it }
+        val c = s.serverCandidates.ifEmpty { ServerAddress.candidates(s.serverIp, deviceIp) }
+        if (c.size <= 1) return c.firstOrNull()
+        val current = ApiClient.tokens.baseUrlBlocking()
+        c.firstOrNull { ServerAddress.sameServer(it, current) }?.let { return it }
+        _state.update { it.copy(probing = true) }
+        return try { ServerProbe.firstAnswering(c) } finally { _state.update { it.copy(probing = false) } }
     }
     fun setPrinterDeviceCode(v: String) = _state.update { it.copy(printerDeviceCode = v) }
     fun setZone(v: String) = _state.update { it.copy(zoneCode = v) }
@@ -425,6 +454,9 @@ class SettingsViewModel : ViewModel() {
                     loading = false,
                     serverIp = ServerAddress.toDisplay(prefs.serverIp.ifBlank { store.baseUrlBlocking() }),
                     serverUrl = prefs.serverIp.ifBlank { store.baseUrlBlocking() },
+                    serverCandidates = listOf(prefs.serverIp.ifBlank { store.baseUrlBlocking() }),
+                    chosenServer = prefs.serverIp.ifBlank { store.baseUrlBlocking() },
+                    savedServers = store.savedServersBlocking().ifEmpty { listOf(store.baseUrlBlocking()) },
                     printerDeviceCode = when {
                         printers.isFailure -> prefs.printerDeviceCode
                         else -> prefs.printerDeviceCode.takeIf { c -> p.any { it.first == c } }
@@ -449,7 +481,7 @@ class SettingsViewModel : ViewModel() {
                 .onSuccess { count ->
                     val at = nowStamp()
                     ApiClient.tokens.saveLangDataAt(at)
-                    _state.update { it.copy(downloading = false, langDataAt = at, toast = HtMsg("htDataDownloadDoneN", "Đã tải {0} nhãn ngôn ngữ", count)) }
+                    _state.update { it.copy(downloading = false, langDataAt = at, toast = HtMsg("htDataDownloadDoneN", "Downloaded {0} language labels", count)) }
                 }
                 .onFailure { e -> _state.update { it.copy(downloading = false, error = e.toPair()) } }
         }
@@ -459,30 +491,42 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch {
             clear()
             ApiClient.tokens.saveLangDataAt(null)
-            _state.update { it.copy(langDataAt = null, toast = HtMsg("htLangDataClearDone", "Đã xoá dữ liệu ngôn ngữ")) }
+            _state.update { it.copy(langDataAt = null, toast = HtMsg("htLangDataClearDone", "Language data cleared")) }
         }
     }
 
     fun save(then: (() -> Unit)? = null) {
         val s = _state.value
-        val url = ServerAddress.toBaseUrl(s.serverIp, deviceIp)
-        if (url == null) {
-            _state.update { it.copy(error = "VAL-004" to "Địa chỉ máy chủ không hợp lệ.") }
+        if (s.probing) return
+        if (ServerAddress.candidates(s.serverIp, deviceIp).isEmpty() && s.chosenServer == null) {
+            _state.update { it.copy(error = "VAL-004" to "The server address is not valid.") }
             return
         }
         val deviceId = if (s.deviceId.isBlank()) "" else UpdateRules.deviceIdOf(s.deviceId)
         if (deviceId == null) {
-            _state.update { it.copy(error = "VAL-005" to "Mã thiết bị phải từ 1 đến 40 ký tự.") }
+            _state.update { it.copy(error = "VAL-005" to "The device code must be 1 to 40 characters.") }
             return
         }
         viewModelScope.launch {
-            ApiClient.tokens.saveBaseUrl(url)
-            ApiClient.tokens.saveHtSettings(url, s.printerDeviceCode, s.zoneCode)
+            val url = resolveServer(s)
+            if (url == null) {
+                _state.update { it.copy(error = "NET-002" to "No IMS API answered at this address.") }
+                return@launch
+            }
+            val store = ApiClient.tokens
+            val previous = store.baseUrlBlocking()
+            val known = store.savedServersBlocking().ifEmpty { listOf(previous) }
+            val saved = ServerAddress.remember(known, url)
+            if (!ServerAddress.sameServer(previous, url)) store.clear()
+            store.saveBaseUrl(url)
+            store.saveSavedServers(saved)
+            store.saveHtSettings(url, s.printerDeviceCode, s.zoneCode)
             ApiClient.updates.saveDeviceId(deviceId)
             _state.update {
                 it.copy(
-                    serverIp = ServerAddress.toDisplay(url), serverUrl = url, deviceId = deviceId,
-                    toast = if (then == null) HtMsg("htSettingsSaved", "Đã lưu") else null,
+                    serverIp = ServerAddress.toDisplay(url), serverUrl = url, serverCandidates = listOf(url),
+                    chosenServer = url, savedServers = saved, deviceId = deviceId, error = null,
+                    toast = if (then == null) HtMsg("htSettingsSaved", "Saved") else null,
                 )
             }
             then?.invoke()

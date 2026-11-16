@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
-import { LanguageProvider } from "@/i18n/LanguageContext";
+import { PermissionProvider } from "@/auth/PermissionContext";
+import { LanguageProvider, useT } from "@/i18n/LanguageContext";
 import { NativeValidationText } from "@/i18n/NativeValidationText";
 import { ToastProvider } from "@/lib/Toast";
 import { ConfirmProvider } from "@/lib/Confirm";
@@ -56,6 +57,11 @@ function KeepQuery({ to }: { to: string }) {
   return <Navigate to={to + search} replace />;
 }
 
+function Loading3D() {
+  const t = useT();
+  return <div className="page-info p-6">{t("loc3dLoading", "Loading 3D view...")}</div>;
+}
+
 function AuthGate() {
   return <div className="page-info p-6" />;
 }
@@ -77,6 +83,7 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
+      <PermissionProvider>
       <LanguageProvider>
       <NativeValidationText />
       <ToastProvider>
@@ -93,7 +100,7 @@ export default function App() {
           <Route path="masters/zones"       element={<ZonePage />} />
           <Route path="masters/locations"   element={<LocationPage />} />
           <Route path="masters/locations-3d" element={
-            <Suspense fallback={<div className="page-info p-6">Đang tải khung cảnh 3D…</div>}>
+            <Suspense fallback={<Loading3D />}>
               <Location3DPage />
             </Suspense>} />
           <Route path="masters/item-groups" element={<ItemGroupPage />} />
@@ -144,6 +151,7 @@ export default function App() {
       </ConfirmProvider>
       </ToastProvider>
       </LanguageProvider>
+      </PermissionProvider>
     </AuthProvider>
   );
 }

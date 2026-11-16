@@ -12,13 +12,25 @@ internal sealed partial class ProductionService
 {
     private async Task<ServiceResult?> CheckReverseAsync(ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct)
     {
-        if (!(await new PermissionEvaluator(db).ReadAsync(user, ct)).Allows("prd_result", "reverse"))
+        if (!(await new PermissionEvaluator(db).ReadAsync(user, ct)).Allows("prd_result", "Reverse"))
             return new ServiceResult(403, new ApiError(ErrorCatalog.Auth006()));
         if (string.IsNullOrWhiteSpace(body.ReasonCode)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Rsn001()));
         if (!await db.Reasons.AnyAsync(x => x.ReasonCode == body.ReasonCode && !x.IsDeleted
             && x.ReasonCategoryValue == ReasonCategory.Adjustment, ct))
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Rsn001()));
         return null;
+    }
+
+    public async Task<ServiceResult> ReverseAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct)
+    {
+        var type = await db.ProductionResults.Where(x => x.No == no).Select(x => x.ResultType).FirstOrDefaultAsync(ct);
+        return type switch
+        {
+            ProductionResultType.Consume => await ReverseConsumptionAsync(no, body, user, ct),
+            ProductionResultType.Output => await ReverseOutputAsync(no, body, user, ct),
+            ProductionResultType.Return => await ReverseReturnAsync(no, body, user, ct),
+            _ => await CheckReverseAsync(body, user, ct) ?? Outcome.NotFound(new ApiError(ErrorCatalog.Sys404("Production result"))),
+        };
     }
 
     public async Task<ServiceResult> ReverseConsumptionAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct)
@@ -29,8 +41,11 @@ internal sealed partial class ProductionService
         if (await db.ProductionConsumptions.AnyAsync(x => x.ReversesNo == no, ct)) return Outcome.Conflict(new ApiError(ErrorCatalog.Inv008()));
         var order = await OrderAsync(source.ProductionOrderNo, ct);
         if (order?.StatusCode == 3) return Outcome.Conflict(new ApiError(ErrorCatalog.Sts004()));
-        var returned = await db.ProductionReturns.Where(x => x.ConsumptionNo == no && x.ReversesNo == null
-            && !db.ProductionReturns.Any(r => r.ReversesNo == x.No)).SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
+        var sameSerialConsumed = await Effective(db.ProductionConsumptions).Where(x => x.ProductionOrderNo == source.ProductionOrderNo
+            && x.LineNo == source.LineNo && x.SerialNo == source.SerialNo).ToListAsync(ct);
+        var sameSerialReturned = await Effective(db.ProductionReturns).Where(x => x.ProductionOrderNo == source.ProductionOrderNo
+            && x.LineNo == source.LineNo && x.SerialNo == source.SerialNo).ToListAsync(ct);
+        var returned = ProductionReturnRules.ReturnedAgainst(source, sameSerialConsumed, sameSerialReturned);
         if (returned > 0) return Outcome.Conflict(new ApiError(ErrorCatalog.Inv005()));
         var worker = Worker(user);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -45,19 +60,19 @@ internal sealed partial class ProductionService
         stock.Recalculate();
         stock.UpdatedAt = DateTime.Now;
         stock.UpdatedBy = worker;
-        var reverse = new ProductionConsumption { RequestId = $"REV-{no}", ProductionOrderNo = source.ProductionOrderNo,
+        var reverse = new ProductionResult { ResultType = ProductionResultType.Consume, RequestId = $"REV-{no}", ProductionOrderNo = source.ProductionOrderNo,
             LineNo = source.LineNo, ItemCode = source.ItemCode, LotNo = source.LotNo, SerialNo = source.SerialNo,
             Qty = source.Qty, LocationCode = source.LocationCode, FactoryCode = source.FactoryCode,
             ExpiryDate = source.ExpiryDate, ReversesNo = no, ReasonCode = body.ReasonCode,
             CreatedAt = DateTime.Now, CreatedBy = worker };
-        db.ProductionConsumptions.Add(reverse);
+        db.ProductionResults.Add(reverse);
         db.InventoryHistories.Add(new InventoryHistory { ItemCode = source.ItemCode, SerialNo = source.SerialNo,
             FactoryCode = source.FactoryCode, LocationCode = source.LocationCode, LotNo = source.LotNo,
-            Qty = source.Qty, ActionType = InventoryAction.Adjust, ReasonCode = body.ReasonCode,
+            Qty = source.Qty, ActionType = InventoryAction.ProdReverse, ReasonCode = body.ReasonCode,
             CreatedAt = DateTime.Now, CreatedBy = worker });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return Outcome.Ok(new ApiSuccess<ProductionConsumption>(reverse));
+        return Outcome.Ok(new ApiSuccess<ProductionResult>(reverse));
     }
 
     public async Task<ServiceResult> ReverseOutputAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct)
@@ -83,18 +98,18 @@ internal sealed partial class ProductionService
         stock.Recalculate();
         stock.UpdatedAt = DateTime.Now;
         stock.UpdatedBy = worker;
-        var reverse = new ProductionOutput { RequestId = $"REV-{no}", ProductionOrderNo = source.ProductionOrderNo,
+        var reverse = new ProductionResult { ResultType = ProductionResultType.Output, FactoryCode = stock.FactoryCode, RequestId = $"REV-{no}", ProductionOrderNo = source.ProductionOrderNo,
             ItemCode = source.ItemCode, LotNo = source.LotNo, SerialNo = source.SerialNo,
             Qty = source.Qty, LocationCode = source.LocationCode, ExpiryDate = source.ExpiryDate,
             ReversesNo = no, ReasonCode = body.ReasonCode, CreatedAt = DateTime.Now, CreatedBy = worker };
-        db.ProductionOutputs.Add(reverse);
+        db.ProductionResults.Add(reverse);
         db.InventoryHistories.Add(new InventoryHistory { ItemCode = source.ItemCode, SerialNo = source.SerialNo,
             FactoryCode = stock.FactoryCode, LocationCode = source.LocationCode, LotNo = source.LotNo,
-            Qty = -source.Qty, ActionType = InventoryAction.Adjust, ReasonCode = body.ReasonCode,
+            Qty = -source.Qty, ActionType = InventoryAction.ProdReverse, ReasonCode = body.ReasonCode,
             CreatedAt = DateTime.Now, CreatedBy = worker });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return Outcome.Ok(new ApiSuccess<ProductionOutput>(reverse));
+        return Outcome.Ok(new ApiSuccess<ProductionResult>(reverse));
     }
 
     public async Task<ServiceResult> ReverseReturnAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct)
@@ -114,19 +129,19 @@ internal sealed partial class ProductionService
         stock.Recalculate();
         stock.UpdatedAt = DateTime.Now;
         stock.UpdatedBy = worker;
-        var reverse = new ProductionReturn { RequestId = $"REV-{no}", ProductionOrderNo = source.ProductionOrderNo,
-            LineNo = source.LineNo, ConsumptionNo = source.ConsumptionNo, ItemCode = source.ItemCode,
+        var reverse = new ProductionResult { ResultType = ProductionResultType.Return, RequestId = $"REV-{no}", ProductionOrderNo = source.ProductionOrderNo,
+            LineNo = source.LineNo, ItemCode = source.ItemCode,
             LotNo = source.LotNo, SerialNo = source.SerialNo, Qty = source.Qty,
             LocationCode = source.LocationCode, FactoryCode = source.FactoryCode,
             ExpiryDate = source.ExpiryDate, ReversesNo = no, ReasonCode = body.ReasonCode,
             CreatedAt = DateTime.Now, CreatedBy = worker };
-        db.ProductionReturns.Add(reverse);
+        db.ProductionResults.Add(reverse);
         db.InventoryHistories.Add(new InventoryHistory { ItemCode = source.ItemCode, SerialNo = source.SerialNo,
             FactoryCode = source.FactoryCode, LocationCode = source.LocationCode, LotNo = source.LotNo,
-            Qty = -source.Qty, ActionType = InventoryAction.Adjust, ReasonCode = body.ReasonCode,
+            Qty = -source.Qty, ActionType = InventoryAction.ProdReverse, ReasonCode = body.ReasonCode,
             CreatedAt = DateTime.Now, CreatedBy = worker });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return Outcome.Ok(new ApiSuccess<ProductionReturn>(reverse));
+        return Outcome.Ok(new ApiSuccess<ProductionResult>(reverse));
     }
 }

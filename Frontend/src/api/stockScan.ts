@@ -48,3 +48,20 @@ export const resetStockScan = () =>
 
 export const getStockScanSummary = () =>
   apiCall<StockScanSummary>("/stock-scan/summary");
+
+export interface StockScanPart {
+  itemCode: string | null;
+  itemName: string | null;
+  total: number;
+  scanned: number;
+  isTarget: boolean;
+}
+
+export const getStockScanParts = () =>
+  apiCall<StockScanPart[]>("/stock-scan/parts");
+
+export const setStockScanTargets = (itemCodes: string[]) =>
+  apiCall<StockScanPart[]>("/stock-scan/targets", { method: "PUT", body: { itemCodes } });
+
+export const deleteStockScanPart = (itemCode: string) =>
+  apiCall<{ deleted: number; parts: StockScanPart[] }>(`/stock-scan/parts?itemCode=${encodeURIComponent(itemCode)}`, { method: "DELETE" });

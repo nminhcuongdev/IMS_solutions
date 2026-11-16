@@ -1,3 +1,4 @@
+import { useScreenCan } from "@/auth/PermissionContext";
 import { useCallback, useMemo, useState } from "react";
 import {
   exportStockCsv, holdStock, listStock, releaseHold,
@@ -31,7 +32,7 @@ const parseKey = (k: string): StockKey => {
   return { itemCode: k.slice(0, i), serialNo: k.slice(i + 1) };
 };
 
-export function HoldItemPage() {
+export function HoldItemPage() { const can = useScreenCan();
   const t = useT();
   const toast = useToast();
   const [page, setPage] = useUrlNumber("page", 1);
@@ -151,18 +152,18 @@ export function HoldItemPage() {
 
         <div className="search-btns">
           <SearchButton onClick={search} />
-          <button className="btn btn-special" disabled={selected.size !== 1 || busy}
+          {can("Hold") && <button className="btn btn-special" disabled={selected.size !== 1 || busy}
             title={t("holdOneRowNote", "Select exactly one row to hold.")}
             onClick={() => setModal(true)}>
             <svg className="ic" viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 0-5 5v3H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-1V7a5 5 0 0 0-5-5zm3 8H9V7a3 3 0 0 1 6 0v3z" /></svg>
             {" "}<span>{t("btnHold", "Hold")}</span>
-          </button>
-          <button className="btn btn-edit" disabled={selected.size === 0 || busy}
+          </button>}
+          {can("Release") && <button className="btn btn-edit" disabled={selected.size === 0 || busy}
             title={t("holdSkipNote", "Rows already in the requested state are skipped and reported back.")}
             onClick={onRelease}>
             <svg className="ic" viewBox="0 0 24 24"><path d="M17 8V7a5 5 0 0 0-9.9-1h2.1a3 3 0 0 1 5.8 1v1H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-1z" /></svg>
             {" "}<span>{t("btnReleaseHold", "Release Hold")}</span>
-          </button>
+          </button>}
           <CsvButton onClick={onExport} />
         </div>
       </div>

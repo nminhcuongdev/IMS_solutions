@@ -97,29 +97,29 @@ type QueryRecord = Record<string, string | number | boolean | undefined | null>;
 export const listReceivingSchedule = (
   q: ReceivingScheduleQuery = {},
 ): Promise<ApiListSuccess<ReceivingPlanRow>> =>
-  apiList<ReceivingPlanRow>("/receiving-schedule", { query: q as QueryRecord });
+  apiList<ReceivingPlanRow>("/schedules/receiving", { query: q as QueryRecord });
 
 export const createReceivingPlan = (body: ReceivingPlanWrite) =>
-  apiCall<ReceivingPlanRow>("/receiving-schedule", { method: "POST", body });
+  apiCall<ReceivingPlanRow>("/schedules/receiving", { method: "POST", body });
 
 export const changeReceivingStatus = (
   lines: { poNo: string; serialNo: string }[], status: ReceivingStatusAction,
 ) =>
-  apiCall<ReceivingStatusChangeResult>("/receiving-schedule/status", {
+  apiCall<ReceivingStatusChangeResult>("/schedules/receiving/status", {
     method: "PUT", body: { lines, status },
   });
 
 export const registerReceivingShortage = (
   poNo: string, shortageQty: number, reasonCode: string, serialNo?: string | null,
 ) =>
-  apiCall<ReceivingPlanRow>(`/receiving-schedule/${encodeURIComponent(poNo)}/shortage`, {
+  apiCall<ReceivingPlanRow>(`/schedules/receiving/${encodeURIComponent(poNo)}/shortage`, {
     method: "POST", body: { shortageQty, reasonCode, serialNo },
   });
 
 export const listReceivingResult = (
   q: ReceivingResultQuery = {},
 ): Promise<ApiListSuccess<ReceivingResultRow>> =>
-  apiList<ReceivingResultRow>("/receiving-result", { query: q as QueryRecord });
+  apiList<ReceivingResultRow>("/results/receiving", { query: q as QueryRecord });
 
 function qsOf(q: Record<string, unknown>): string {
   const p = new URLSearchParams();
@@ -132,7 +132,7 @@ function qsOf(q: Record<string, unknown>): string {
 }
 
 export const exportReceivingScheduleCsv = (q: ReceivingScheduleQuery = {}) =>
-  apiDownload("/receiving-schedule/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/receiving-schedule" + qsOf({ ...q, page: undefined, pageSize: undefined }));
 
 export const exportReceivingResultCsv = (q: ReceivingResultQuery = {}) =>
-  apiDownload("/receiving-result/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/receiving-result" + qsOf({ ...q, page: undefined, pageSize: undefined }));

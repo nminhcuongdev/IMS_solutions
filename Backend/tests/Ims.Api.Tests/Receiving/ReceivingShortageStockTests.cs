@@ -21,6 +21,7 @@ public class ReceivingShortageStockTests
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-01", ItemName = "Printer", ItemGroupCode = "IG-01",
             UomCode = "pcs", PackingTypeCode = "BOX", PackageQty = 5,
             IsActive = true, CreatedAt = now,
@@ -107,7 +108,7 @@ public class ReceivingShortageStockTests
 
         var res = await Service(t).RegisterShortageAsync("PO-A", new ReceivingShortageDto(4, "RS-SHORT"), default);
 
-        ResultAssert.BadRequest(res, "LOC-001");
+        ResultAssert.BadRequest(res, "VAL-001");
         t.Db.ChangeTracker.Clear();
         var plan = await t.Db.ReceivingPlans.FirstAsync();
         Assert.Equal(0m, plan.ActualQty);

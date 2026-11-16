@@ -54,7 +54,7 @@ public class PartnerServiceTests
         var blankName = await new PartnerService(t.Db).CreateAsync(Valid(name: " "), default);
 
         ResultAssert.BadRequest(blankCode, "VAL-001");
-        ResultAssert.BadRequest(blankName, "VAL-002");
+        ResultAssert.BadRequest(blankName, "VAL-001");
 
         var created = await new PartnerService(t.Db).CreateAsync(Valid(), default);
         ResultAssert.Created<ApiSuccess<PartnerDto>>(created);
@@ -134,7 +134,7 @@ public class PartnerServiceTests
         var blankName = await new PartnerService(t.Db).UpdateAsync("BP001", Valid(name: ""), default);
 
         ResultAssert.NotFound(unknownRow);
-        ResultAssert.BadRequest(blankName, "VAL-002");
+        ResultAssert.BadRequest(blankName, "VAL-001");
     }
 
 

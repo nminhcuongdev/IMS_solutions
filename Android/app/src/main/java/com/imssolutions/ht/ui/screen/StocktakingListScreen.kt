@@ -49,7 +49,7 @@ fun StocktakingListScreen(
             when {
                 state.busy && state.groups.isEmpty() -> LoadingBox()
                 state.groups.isEmpty() && state.error == null -> EmptyBox(
-                    t("htStEmptyShelfScan", "Không còn gì để đếm ở kệ này."),
+                    t("htStEmptyShelfScan", "Nothing is left to count at this shelf."),
                 )
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)) {
                     items(state.groups, key = { it.key }) { g ->

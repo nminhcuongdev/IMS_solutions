@@ -12,8 +12,13 @@ function fill(text: string, detail: string | null): string {
   return text.replace(/[:：]?\s*\{0\}/, "").trim();
 }
 
+function fillAll(text: string, args: string[]): string {
+  return args.reduce((acc, arg, i) => acc.split(`{${i}}`).join(arg), text);
+}
+
 export function errorText(t: Translate, ex: unknown): string {
   if (ex instanceof ApiCallError) {
+    if (ex.messageKey) return fillAll(t(ex.messageKey, ex.message), ex.args.map(a => t(a, a)));
     if (ex.code === "VAL-005" && !ex.message.includes(BAD_CHARS))
       return t("valTooLong", ex.message);
     if (ex.code === "SYS-404") {
@@ -22,7 +27,8 @@ export function errorText(t: Translate, ex: unknown): string {
         : null;
       return fill(t("SYS-404", ex.message), detail);
     }
-    return fill(t(ex.code, ex.message), null);
+    const arg = ex.args[0];
+    return fill(t(ex.code, ex.message), arg ? t(arg, arg) : null);
   }
   if (ex instanceof MlEngineError) return t(ex.code, ex.fallback);
   if (ex instanceof TypeError && /fetch|network/i.test(ex.message)) return t("NET-002", "Network connection lost.");

@@ -417,14 +417,28 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("item_code");
 
+                    b.Property<string>("LayoutFile")
+                        .HasMaxLength(200)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("layout_file");
+
                     b.Property<int>("PackageCount")
                         .HasColumnType("int")
                         .HasColumnName("package_count");
+
+                    b.Property<string>("PrintData")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("print_data");
 
                     b.Property<decimal?>("Qty")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)")
                         .HasColumnName("qty");
+
+                    b.Property<long?>("ReprintOfNo")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reprint_of_no");
 
                     b.Property<DateOnly?>("ScheduledDate")
                         .HasColumnType("date")
@@ -578,6 +592,12 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(20)")
                         .HasColumnName("reason_code");
+
+                    b.Property<string>("ReferenceNo")
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("reference_no");
 
                     b.Property<string>("SerialNo")
                         .HasMaxLength(30)
@@ -878,6 +898,8 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnName("user_name");
 
                     b.HasKey("UserCode");
+
+                    b.HasIndex("RoleCode");
 
                     b.ToTable("app_user", (string)null);
                 });
@@ -1966,211 +1988,6 @@ namespace Ims.Infrastructure.Persistence.Migrations
                     b.ToTable("picking_result_lot", (string)null);
                 });
 
-            modelBuilder.Entity("Ims.Domain.Production.ProductionConsumption", b =>
-                {
-                    b.Property<long>("No")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("no");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("No"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("GETDATE()");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateOnly?>("ExpiryDate")
-                        .HasColumnType("date")
-                        .HasColumnName("expiry_date");
-
-                    b.Property<string>("FactoryCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("factory_code");
-
-                    b.Property<string>("ItemCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("item_code");
-
-                    b.Property<int>("LineNo")
-                        .HasColumnType("int")
-                        .HasColumnName("line_no");
-
-                    b.Property<string>("LocationCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("location_code");
-
-                    b.Property<string>("LotNo")
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("lot_no");
-
-                    b.Property<string>("ProductionOrderNo")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("production_order_no");
-
-                    b.Property<decimal>("Qty")
-                        .HasColumnType("decimal(18,4)")
-                        .HasColumnName("qty");
-
-                    b.Property<string>("ReasonCode")
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("reason_code");
-
-                    b.Property<string>("RequestId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("request_id");
-
-                    b.Property<long?>("ReversesNo")
-                        .HasColumnType("bigint")
-                        .HasColumnName("reverses_no");
-
-                    b.Property<string>("SerialNo")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("serial_no");
-
-                    b.HasKey("No");
-
-                    b.HasIndex("FactoryCode");
-
-                    b.HasIndex("LocationCode");
-
-                    b.HasIndex("ReasonCode");
-
-                    b.HasIndex("ReversesNo")
-                        .IsUnique()
-                        .HasFilter("[reverses_no] IS NOT NULL");
-
-                    b.HasIndex("ItemCode", "LotNo");
-
-                    b.HasIndex("ProductionOrderNo", "LineNo");
-
-                    b.HasIndex("RequestId", "SerialNo")
-                        .IsUnique()
-                        .HasFilter("[reverses_no] IS NULL");
-
-                    b.ToTable("production_consumption", (string)null);
-                });
-
-            modelBuilder.Entity("Ims.Domain.Production.ProductionLabel", b =>
-                {
-                    b.Property<long>("No")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("no");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("No"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("GETDATE()");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("created_by");
-
-                    b.Property<string>("ItemCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("item_code");
-
-                    b.Property<int>("LabelCount")
-                        .HasColumnType("int")
-                        .HasColumnName("label_count");
-
-                    b.Property<string>("LotNo")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("lot_no");
-
-                    b.Property<string>("OutputRequestId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("output_request_id");
-
-                    b.Property<string>("ProductionOrderNo")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("production_order_no");
-
-                    b.Property<decimal>("RemainderQty")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18,4)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("remainder_qty");
-
-                    b.Property<string>("RequestId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("request_id");
-
-                    b.Property<decimal>("StdQty")
-                        .HasColumnType("decimal(18,4)")
-                        .HasColumnName("std_qty");
-
-                    b.Property<decimal>("TotalQty")
-                        .HasColumnType("decimal(18,4)")
-                        .HasColumnName("total_qty");
-
-                    b.HasKey("No");
-
-                    b.HasIndex("ItemCode");
-
-                    b.HasIndex("OutputRequestId")
-                        .IsUnique();
-
-                    b.HasIndex("ProductionOrderNo");
-
-                    b.HasIndex("RequestId")
-                        .IsUnique();
-
-                    b.ToTable("production_label", (string)null);
-                });
-
             modelBuilder.Entity("Ims.Domain.Production.ProductionOrder", b =>
                 {
                     b.Property<long>("No")
@@ -2247,6 +2064,16 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)")
                         .HasColumnName("production_order_no");
+
+                    b.Property<DateTime?>("ReceivedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("received_at");
+
+                    b.Property<string>("ReceivedBy")
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("received_by");
 
                     b.Property<int>("StatusCode")
                         .HasColumnType("int")
@@ -2378,7 +2205,7 @@ namespace Ims.Infrastructure.Persistence.Migrations
                     b.ToTable("production_order_line", (string)null);
                 });
 
-            modelBuilder.Entity("Ims.Domain.Production.ProductionOutput", b =>
+            modelBuilder.Entity("Ims.Domain.Production.ProductionResult", b =>
                 {
                     b.Property<long>("No")
                         .ValueGeneratedOnAdd()
@@ -2386,159 +2213,6 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnName("no");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("No"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("GETDATE()");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateOnly?>("ExpiryDate")
-                        .HasColumnType("date")
-                        .HasColumnName("expiry_date");
-
-                    b.Property<string>("ItemCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("item_code");
-
-                    b.Property<string>("LocationCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("location_code");
-
-                    b.Property<string>("LotNo")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("lot_no");
-
-                    b.Property<string>("ProductionOrderNo")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("production_order_no");
-
-                    b.Property<decimal>("Qty")
-                        .HasColumnType("decimal(18,4)")
-                        .HasColumnName("qty");
-
-                    b.Property<string>("ReasonCode")
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("reason_code");
-
-                    b.Property<string>("RequestId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("request_id");
-
-                    b.Property<long?>("ReversesNo")
-                        .HasColumnType("bigint")
-                        .HasColumnName("reverses_no");
-
-                    b.Property<string>("SerialNo")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("serial_no");
-
-                    b.HasKey("No");
-
-                    b.HasIndex("LocationCode");
-
-                    b.HasIndex("ProductionOrderNo");
-
-                    b.HasIndex("ReasonCode");
-
-                    b.HasIndex("ReversesNo")
-                        .IsUnique()
-                        .HasFilter("[reverses_no] IS NOT NULL");
-
-                    b.HasIndex("ItemCode", "LotNo");
-
-                    b.HasIndex("RequestId", "SerialNo")
-                        .IsUnique()
-                        .HasFilter("[reverses_no] IS NULL");
-
-                    b.ToTable("production_output", (string)null);
-                });
-
-            modelBuilder.Entity("Ims.Domain.Production.ProductionReceipt", b =>
-                {
-                    b.Property<long>("No")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("no");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("No"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("GETDATE()");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("created_by");
-
-                    b.Property<string>("ProductionOrderNo")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("production_order_no");
-
-                    b.Property<string>("RequestId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("request_id");
-
-                    b.HasKey("No");
-
-                    b.HasIndex("ProductionOrderNo");
-
-                    b.HasIndex("RequestId")
-                        .IsUnique();
-
-                    b.ToTable("production_receipt", (string)null);
-                });
-
-            modelBuilder.Entity("Ims.Domain.Production.ProductionReturn", b =>
-                {
-                    b.Property<long>("No")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("no");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("No"));
-
-                    b.Property<long>("ConsumptionNo")
-                        .HasColumnType("bigint")
-                        .HasColumnName("consumption_no");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -2571,7 +2245,17 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("item_code");
 
-                    b.Property<int>("LineNo")
+                    b.Property<DateTime?>("LabelIssuedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("label_issued_at");
+
+                    b.Property<string>("LabelIssuedBy")
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("label_issued_by");
+
+                    b.Property<int?>("LineNo")
                         .HasColumnType("int")
                         .HasColumnName("line_no");
 
@@ -2612,6 +2296,13 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(50)")
                         .HasColumnName("request_id");
 
+                    b.Property<string>("ResultType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)")
+                        .HasColumnName("result_type");
+
                     b.Property<long?>("ReversesNo")
                         .HasColumnType("bigint")
                         .HasColumnName("reverses_no");
@@ -2624,8 +2315,6 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnName("serial_no");
 
                     b.HasKey("No");
-
-                    b.HasIndex("ConsumptionNo");
 
                     b.HasIndex("FactoryCode");
 
@@ -2645,7 +2334,16 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("[reverses_no] IS NULL");
 
-                    b.ToTable("production_return", (string)null);
+                    b.HasIndex("ProductionOrderNo", "ResultType", "LineNo");
+
+                    b.ToTable("production_result", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_production_result_line", "([result_type] = 'Output' AND [line_no] IS NULL) OR ([result_type] <> 'Output' AND [line_no] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_production_result_qty", "[qty] > 0");
+
+                            t.HasCheckConstraint("CK_production_result_type", "[result_type] IN ('Consume', 'Return', 'Output')");
+                        });
                 });
 
             modelBuilder.Entity("Ims.Domain.Receiving.ReceivingPlan", b =>
@@ -2769,6 +2467,7 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_receiving_plan_scheduled_date");
 
                     b.HasIndex("PoNo", "PoBranchNo")
+                        .IsUnique()
                         .HasDatabaseName("IX_receiving_plan_po");
 
                     b.ToTable("receiving_plan", (string)null);
@@ -3489,6 +3188,12 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_scanned");
 
+                    b.Property<bool>("IsTarget")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_target");
+
                     b.Property<string>("ItemCategory")
                         .HasMaxLength(100)
                         .IsUnicode(true)
@@ -3530,6 +3235,12 @@ namespace Ims.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Ims.Domain.Stocktaking.StocktakingHistory", b =>
                 {
+                    b.Property<long>("StocktakingSessionNo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("stocktaking_session_no");
+
                     b.Property<string>("ItemCode")
                         .HasMaxLength(20)
                         .IsUnicode(false)
@@ -3571,7 +3282,9 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
-                    b.HasKey("ItemCode", "LotNo");
+                    b.HasKey("StocktakingSessionNo", "ItemCode", "LotNo");
+
+                    b.HasIndex("ItemCode");
 
                     b.HasIndex("StocktakingDate")
                         .HasDatabaseName("IX_stocktaking_history_date");
@@ -3581,6 +3294,10 @@ namespace Ims.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Ims.Domain.Stocktaking.StocktakingLabel", b =>
                 {
+                    b.Property<long>("StocktakingSessionNo")
+                        .HasColumnType("bigint")
+                        .HasColumnName("stocktaking_session_no");
+
                     b.Property<string>("SerialNo")
                         .HasMaxLength(30)
                         .IsUnicode(false)
@@ -3617,21 +3334,29 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("lot_no");
 
+                    b.Property<bool>("MovedAfterStart")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("moved_after_start");
+
+                    b.Property<decimal>("PlannedQty")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("planned_qty");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(0)
                         .HasColumnName("status");
 
-                    b.Property<long>("StocktakingSessionNo")
-                        .HasColumnType("bigint")
-                        .HasColumnName("stocktaking_session_no");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
-                    b.HasKey("SerialNo");
+                    b.HasKey("StocktakingSessionNo", "SerialNo");
 
                     b.HasIndex("ItemCode");
 
@@ -3809,6 +3534,12 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsVisible")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_visible");
+
                     b.Property<string>("LargeCode")
                         .HasMaxLength(30)
                         .IsUnicode(false)
@@ -3922,6 +3653,12 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsVisible")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_visible");
+
                     b.Property<string>("LargeName")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -3936,39 +3673,6 @@ namespace Ims.Infrastructure.Persistence.Migrations
                     b.HasKey("LargeCode");
 
                     b.ToTable("function_large", (string)null);
-                });
-
-            modelBuilder.Entity("Ims.Domain.System.FunctionVisibility", b =>
-                {
-                    b.Property<string>("TargetType")
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("target_type");
-
-                    b.Property<string>("TargetCode")
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("target_code");
-
-                    b.Property<bool>("IsVisible")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_visible");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("TargetType", "TargetCode");
-
-                    b.ToTable("function_visibility", (string)null);
                 });
 
             modelBuilder.Entity("Ims.Domain.System.GeneralSetting", b =>
@@ -4140,12 +3844,12 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(30)")
                         .HasColumnName("permission_code");
 
-                    b.Property<string>("Action")
+                    b.Property<string>("ActionType")
                         .IsRequired()
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)")
-                        .HasColumnName("action");
+                        .HasColumnName("action_type");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -4186,9 +3890,49 @@ namespace Ims.Infrastructure.Persistence.Migrations
 
                     b.HasKey("PermissionCode");
 
-                    b.HasIndex("FunctionCode");
+                    b.HasIndex("FunctionCode", "ActionType")
+                        .IsUnique();
 
                     b.ToTable("permission", (string)null);
+                });
+
+            modelBuilder.Entity("Ims.Domain.System.RequestReplay", b =>
+                {
+                    b.Property<string>("RequestId")
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("request_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("nvarchar(400)")
+                        .HasColumnName("location");
+
+                    b.Property<string>("ResponseJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("response_json");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("int")
+                        .HasColumnName("status_code");
+
+                    b.HasKey("RequestId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("request_replay", (string)null);
                 });
 
             modelBuilder.Entity("Ims.Domain.System.RevokedToken", b =>
@@ -4243,6 +3987,12 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsBuiltin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_builtin");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -4251,9 +4001,9 @@ namespace Ims.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("RoleName")
                         .IsRequired()
-                        .HasMaxLength(50)
+                        .HasMaxLength(100)
                         .IsUnicode(true)
-                        .HasColumnType("nvarchar(50)")
+                        .HasColumnType("nvarchar(100)")
                         .HasColumnName("role_name");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -4475,6 +4225,15 @@ namespace Ims.Infrastructure.Persistence.Migrations
                     b.Navigation("Location");
                 });
 
+            modelBuilder.Entity("Ims.Domain.Masters.AppUser", b =>
+                {
+                    b.HasOne("Ims.Domain.System.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Ims.Domain.Masters.Device", b =>
                 {
                     b.HasOne("Ims.Domain.Masters.Location", "Location")
@@ -4577,60 +4336,6 @@ namespace Ims.Infrastructure.Persistence.Migrations
                     b.Navigation("PickingResult");
                 });
 
-            modelBuilder.Entity("Ims.Domain.Production.ProductionConsumption", b =>
-                {
-                    b.HasOne("Ims.Domain.Masters.Factory", null)
-                        .WithMany()
-                        .HasForeignKey("FactoryCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ims.Domain.Masters.Item", null)
-                        .WithMany()
-                        .HasForeignKey("ItemCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ims.Domain.Masters.Location", null)
-                        .WithMany()
-                        .HasForeignKey("LocationCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ims.Domain.Masters.Reason", null)
-                        .WithMany()
-                        .HasForeignKey("ReasonCode")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Ims.Domain.Production.ProductionConsumption", null)
-                        .WithMany()
-                        .HasForeignKey("ReversesNo")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Ims.Domain.Production.ProductionOrderLine", null)
-                        .WithMany()
-                        .HasForeignKey("ProductionOrderNo", "LineNo")
-                        .HasPrincipalKey("ProductionOrderNo", "LineNo")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Ims.Domain.Production.ProductionLabel", b =>
-                {
-                    b.HasOne("Ims.Domain.Masters.Item", null)
-                        .WithMany()
-                        .HasForeignKey("ItemCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ims.Domain.Production.ProductionOrder", null)
-                        .WithMany()
-                        .HasForeignKey("ProductionOrderNo")
-                        .HasPrincipalKey("ProductionOrderNo")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Ims.Domain.Production.ProductionOrder", b =>
                 {
                     b.HasOne("Ims.Domain.Masters.Reason", null)
@@ -4685,56 +4390,8 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Ims.Domain.Production.ProductionOutput", b =>
+            modelBuilder.Entity("Ims.Domain.Production.ProductionResult", b =>
                 {
-                    b.HasOne("Ims.Domain.Masters.Item", null)
-                        .WithMany()
-                        .HasForeignKey("ItemCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ims.Domain.Masters.Location", null)
-                        .WithMany()
-                        .HasForeignKey("LocationCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ims.Domain.Production.ProductionOrder", null)
-                        .WithMany()
-                        .HasForeignKey("ProductionOrderNo")
-                        .HasPrincipalKey("ProductionOrderNo")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ims.Domain.Masters.Reason", null)
-                        .WithMany()
-                        .HasForeignKey("ReasonCode")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Ims.Domain.Production.ProductionOutput", null)
-                        .WithMany()
-                        .HasForeignKey("ReversesNo")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("Ims.Domain.Production.ProductionReceipt", b =>
-                {
-                    b.HasOne("Ims.Domain.Production.ProductionOrder", null)
-                        .WithMany()
-                        .HasForeignKey("ProductionOrderNo")
-                        .HasPrincipalKey("ProductionOrderNo")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Ims.Domain.Production.ProductionReturn", b =>
-                {
-                    b.HasOne("Ims.Domain.Production.ProductionConsumption", null)
-                        .WithMany()
-                        .HasForeignKey("ConsumptionNo")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("Ims.Domain.Masters.Factory", null)
                         .WithMany()
                         .HasForeignKey("FactoryCode")
@@ -4753,12 +4410,19 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Ims.Domain.Production.ProductionOrder", null)
+                        .WithMany()
+                        .HasForeignKey("ProductionOrderNo")
+                        .HasPrincipalKey("ProductionOrderNo")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Ims.Domain.Masters.Reason", null)
                         .WithMany()
                         .HasForeignKey("ReasonCode")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("Ims.Domain.Production.ProductionReturn", null)
+                    b.HasOne("Ims.Domain.Production.ProductionResult", null)
                         .WithMany()
                         .HasForeignKey("ReversesNo")
                         .OnDelete(DeleteBehavior.Restrict);
@@ -4767,8 +4431,7 @@ namespace Ims.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ProductionOrderNo", "LineNo")
                         .HasPrincipalKey("ProductionOrderNo", "LineNo")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Ims.Domain.Receiving.ReceivingPlan", b =>

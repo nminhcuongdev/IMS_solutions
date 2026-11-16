@@ -51,12 +51,12 @@ internal static class SortSeed
         });
         db.AppUsers.Add(new AppUser
         {
-            UserCode = "U1", UserName = "Zed", PasswordHash = "x", RoleCode = "Admin", IsActive = true,
+            UserCode = "U1", UserName = "Zed", PasswordHash = "x", RoleCode = "ADMIN", IsActive = true,
             CreatedAt = Now,
         });
         db.AppUsers.Add(new AppUser
         {
-            UserCode = "U2", UserName = "Amy", PasswordHash = "x", RoleCode = "Admin", IsActive = true,
+            UserCode = "U2", UserName = "Amy", PasswordHash = "x", RoleCode = "ADMIN", IsActive = true,
             CreatedAt = Now,
         });
         db.Reasons.Add(new Reason

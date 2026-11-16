@@ -10,6 +10,8 @@ public static class ServiceResultHttpExtensions
             return Results.File(file.Contents, file.ContentType, file.FileName);
         if (result.Stream is { } stream)
             return Results.Stream(stream.Write, stream.ContentType, stream.FileName);
+        if (result.Body is ApiError error && result.StatusCode >= 400)
+            return new LocalizedErrorResult(result.StatusCode, error);
         return result.StatusCode switch
         {
             StatusCodes.Status200OK => Results.Ok(result.Body),

@@ -21,6 +21,7 @@ public class ReturnStockTests
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-01", ItemName = "Printer", ItemGroupCode = "IG-01", UomCode = "pcs",
             PackingTypeCode = "BOX", PackageQty = 10, DefaultLocationCode = defaultLocation,
             IsActive = true, CreatedAt = now,
@@ -132,7 +133,7 @@ public class ReturnStockTests
 
         var res = await new ReturnsService(t.Db).RegisterShortageAsync("RTN-001", new ReturnShortageDto(2, "RS-SHORT", "01"), default);
 
-        ResultAssert.BadRequest(res, "LOC-001");
+        ResultAssert.BadRequest(res, "VAL-001");
         Assert.Empty(await ShelfAsync(t));
         Assert.Equal(0m, (await t.Db.ReturnPlans.FirstAsync()).ActualQty);
     }

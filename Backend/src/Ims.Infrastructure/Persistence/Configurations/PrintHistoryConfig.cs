@@ -22,6 +22,9 @@ public class PrintHistoryConfig : IEntityTypeConfiguration<PrintHistory>
         b.Property(x => x.Spec).HasColumnName("spec").TextN(100);
         b.Property(x => x.Status).HasColumnName("status").HasDefaultValue(0);
         b.Property(x => x.CreatedBy).HasColumnName("created_by").CodeN(20);
+        b.Property(x => x.PrintData).HasColumnName("print_data").HasColumnType("nvarchar(max)");
+        b.Property(x => x.LayoutFile).HasColumnName("layout_file").TextN(200);
+        b.Property(x => x.ReprintOfNo).HasColumnName("reprint_of_no");
         b.HasIndex(x => x.CreatedAt);
         b.HasIndex(x => x.ItemCode);
     }

@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -9,8 +10,8 @@ public static class PrintEndpoints
     public static IEndpointRouteBuilder MapPrintEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/print").WithTags("Print").RequireAuthorization();
-        g.MapPost("/preview", PreviewAsync);
-        g.MapPost("/label", LabelAsync);
+        g.MapPost("/preview", PreviewAsync).RequireLookup();
+        g.MapPost("/label", LabelAsync).RequireLookup();
         return app;
     }
 

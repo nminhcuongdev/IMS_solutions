@@ -10,4 +10,5 @@ public sealed record StocktakingHistoryDto(
     decimal ResultQty,
     decimal MissingQty,
     string? Unit,
-    string BadgeKey);
+    string BadgeKey,
+    long StocktakingSessionNo = 0);

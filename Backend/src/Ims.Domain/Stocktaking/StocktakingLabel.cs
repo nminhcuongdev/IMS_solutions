@@ -12,6 +12,10 @@ public class StocktakingLabel
 
     public bool IsScanned { get; set; }
 
+    public decimal PlannedQty { get; set; }
+
+    public bool MovedAfterStart { get; set; }
+
     public int Status { get; set; } = StocktakingLabelStatus.NotStarted;
 
     public DateTime? UpdatedAt { get; set; }

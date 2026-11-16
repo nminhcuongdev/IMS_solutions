@@ -25,4 +25,4 @@ export const createReason = (body: ReasonWrite) => apiCall<Reason>(P, { method: 
 export const updateReason = (code: string, body: ReasonWrite) =>
   apiCall<Reason>(`${P}/${encodeURIComponent(code)}`, { method: "PUT", body });
 export const deleteReason = (code: string) => apiCall<void>(`${P}/${encodeURIComponent(code)}`, { method: "DELETE" });
-export const exportReasonsCsv = () => apiDownload(`${P}/export.csv`);
+export const exportReasonsCsv = () => apiDownload("/export/reasons");

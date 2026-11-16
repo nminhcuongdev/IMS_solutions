@@ -90,12 +90,12 @@ fun StockListScreen(
             when {
                 state.loading -> LoadingBox()
                 state.visible.isEmpty() && state.error == null -> EmptyBox(
-                    if (state.query.isBlank()) t("htNoResults", "Không có mặt hàng nào khớp bộ lọc.")
-                    else t("htNotFoundQuery", "Không tìm thấy \"{0}\".", state.query)
+                    if (state.query.isBlank()) t("htNoResults", "No items match the filter.")
+                    else t("htNotFoundQuery", "\"{0}\" was not found.", state.query)
                 )
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
                     items(state.visible, key = { it.key }) { g ->
-                        val lots = t("htLotCount", "{0} lô", g.lotCount)
+                        val lots = t("htLotCount", "{0} lots", g.lotCount)
                         HtItemCard(
                             code = g.key,
                             subtitle = buildString {

@@ -45,7 +45,7 @@ fun StockDetailScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.empty -> EmptyBox(t("htNoStockForItem", "Mặt hàng \"{0}\" không còn tồn kho.", itemCode))
+                state.empty -> EmptyBox(t("htNoStockForItem", "Item \"{0}\" has no stock left.", itemCode))
                 else -> Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                         .padding(horizontal = 10.dp, vertical = 8.dp),

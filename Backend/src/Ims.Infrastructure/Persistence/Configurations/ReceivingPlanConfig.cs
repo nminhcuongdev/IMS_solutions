@@ -27,7 +27,7 @@ public class ReceivingPlanConfig : IEntityTypeConfiguration<ReceivingPlan>
         b.Property(x => x.LocationCode).HasColumnName("location_code").CodeN(20);
         b.MapAudit();
 
-        b.HasIndex(x => new { x.PoNo, x.PoBranchNo }).HasDatabaseName("IX_receiving_plan_po");
+        b.HasIndex(x => new { x.PoNo, x.PoBranchNo }).IsUnique().HasDatabaseName("IX_receiving_plan_po");
         b.HasIndex(x => x.ScheduledDate).HasDatabaseName("IX_receiving_plan_scheduled_date");
 
         b.HasOne<Ims.Domain.Masters.Item>().WithMany()

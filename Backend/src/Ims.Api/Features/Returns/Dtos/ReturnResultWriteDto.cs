@@ -6,4 +6,6 @@ public sealed record ReturnResultWriteDto(
     string? ReturnNo = null,
     string? SerialNo = null,
     string? LocationCode = null,
-    string? LotNo = null);
+    string? LotNo = null,
+    string? RequestId = null,
+    DateOnly? ExpiryDate = null);

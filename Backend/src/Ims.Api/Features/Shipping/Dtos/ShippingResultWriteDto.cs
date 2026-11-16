@@ -8,4 +8,5 @@ public sealed record ShippingResultWriteDto(
     string? LocationCode = null,
     string? LotNo = null,
     DateOnly? ExpiryDate = null,
-    string? ReasonCode = null);
+    string? ReasonCode = null,
+    string? RequestId = null);

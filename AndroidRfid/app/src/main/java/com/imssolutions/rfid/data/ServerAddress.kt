@@ -6,6 +6,28 @@ import java.net.NetworkInterface
 object ServerAddress {
 
     const val DEFAULT_PORT = 8091
+    const val MAX_SAVED = 5
+
+    fun remember(saved: List<String>, baseUrl: String, max: Int = MAX_SAVED): List<String> =
+        (listOf(baseUrl) + saved.filter { !it.equals(baseUrl, ignoreCase = true) }).take(max)
+
+    fun sameServer(a: String, b: String): Boolean =
+        a.trim().trimEnd('/').equals(b.trim().trimEnd('/'), ignoreCase = true)
+
+    val LAN_PORTS = listOf(DEFAULT_PORT, 443, 80)
+    val CLOUD_PORTS = listOf(443, DEFAULT_PORT, 80)
+
+    fun hasPort(input: String): Boolean =
+        input.trim().removePrefix("http://").removePrefix("https://").trimEnd('/').contains(':')
+
+    fun candidates(input: String, deviceIp: String?): List<String> {
+        if (hasPort(input)) return listOfNotNull(toBaseUrl(input, deviceIp))
+        val first = toBaseUrl(input, deviceIp) ?: return emptyList()
+        val host = first.removePrefix("http://").substringBefore(':')
+        val octets = octetsOf(host)
+        val ports = if (octets != null && octets.size == 4 && isPrivate(octets)) LAN_PORTS else CLOUD_PORTS
+        return ports.map { "http://$host:$it/" }
+    }
 
     fun toBaseUrl(input: String, deviceIp: String?, defaultPort: Int = DEFAULT_PORT): String? {
         var s = input.trim().lowercase()
@@ -21,12 +43,9 @@ object ServerAddress {
         return "http://$host:$port/"
     }
 
-    fun toDisplay(baseUrl: String, defaultPort: Int = DEFAULT_PORT): String {
-        var s = baseUrl.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
-        val colon = s.lastIndexOf(':')
-        if (colon >= 0 && s.substring(colon + 1).toIntOrNull() == defaultPort) s = s.substring(0, colon)
-        return s
-    }
+    fun toDisplay(baseUrl: String): String =
+        baseUrl.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
+
 
     fun resolveHost(text: String, deviceIp: String?): String? {
         if (text.isEmpty()) return null

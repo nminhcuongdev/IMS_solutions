@@ -15,6 +15,10 @@ class Prefs(context: Context) {
             sp.edit().putString(KEY_SERVER, v).apply()
         }
 
+    var savedServers: List<String>
+        get() = sp.getString(KEY_SAVED_SERVERS, null).orEmpty().split('\n').filter { it.isNotBlank() }
+        set(value) { sp.edit().putString(KEY_SAVED_SERVERS, value.joinToString("\n")).apply() }
+
     var language: String
         get() = sp.getString(KEY_LANG, null) ?: "en"
         set(value) { sp.edit().putString(KEY_LANG, value).apply() }
@@ -59,6 +63,7 @@ class Prefs(context: Context) {
     private companion object {
         const val KEY_READER = "reader_kind"
         const val KEY_SERVER = "server_url"
+        const val KEY_SAVED_SERVERS = "saved_servers"
         const val KEY_LANG = "language"
         const val KEY_USER = "last_user_id"
         const val KEY_POWER = "tx_power"

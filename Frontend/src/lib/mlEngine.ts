@@ -2,11 +2,6 @@ import { MlEngineError, printErrorOf } from "@/lib/printErrors";
 
 const ML_SERVER_URL = "http://localhost:8080/";
 
-export const ML_DRIVER_FALLBACK = [
-  "Industrial Printer 4in",
-  "Compact Desktop Printer",
-  "Industrial Printer 6in",
-];
 
 function parse(xmlText: string) {
   const xmlDoc = new DOMParser().parseFromString(xmlText, "text/xml");
@@ -35,7 +30,7 @@ async function createInstance(): Promise<string> {
   const p = await get("CreateInstance", { app: "IMS", disposeTime: "5", apiVersion: "1.0" });
   throwIfError(p, "CreateInstance");
   const id = tag(p.xmlDoc, "instanceId");
-  if (!id) throw new MlEngineError("PRN-001", "Label Engine không trả về instanceId.", "CreateInstance", null);
+  if (!id) throw new MlEngineError("PRN-004", "The label print engine did not return an instance ID.", "CreateInstance", null);
   return id;
 }
 
@@ -58,11 +53,19 @@ export async function mlGetDriverNames(): Promise<string[]> {
   }
 }
 
-export async function mlGetDriverNamesOrFallback(): Promise<{ names: string[]; live: boolean }> {
-  const names = await mlGetDriverNames();
-  return names.length > 0
-    ? { names, live: true }
-    : { names: ML_DRIVER_FALLBACK, live: false };
+export async function mlPing(): Promise<boolean> {
+  try {
+    const id = await createInstance();
+    await disposeInstance(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function mlGetDriverStatus(): Promise<{ names: string[]; live: boolean }> {
+  if (!(await mlPing())) return { names: [], live: false };
+  return { names: await mlGetDriverNames(), live: true };
 }
 
 export interface MlLabelJob {
@@ -116,7 +119,7 @@ export async function mlPreviewLabel(opts: MlLabelJob): Promise<string> {
     throwIfError(pv, "Preview");
 
     const image = tag(pv.xmlDoc, "image");
-    if (!image) throw new MlEngineError("PRT-505", "Không thể tạo hình ảnh xem trước.", "Preview", "505");
+    if (!image) throw new MlEngineError("PRT-505", "Cannot create the preview image.", "Preview", "505");
     return image;
   } finally {
     await disposeInstance(instanceId);

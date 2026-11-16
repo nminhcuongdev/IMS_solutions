@@ -81,22 +81,22 @@ type QueryRecord = Record<string, string | number | boolean | undefined | null>;
 export const listPickingSchedule = (
   q: PickingScheduleQuery = {},
 ): Promise<ApiListSuccess<PickingPlanRow>> =>
-  apiList<PickingPlanRow>("/picking-schedule", { query: q as QueryRecord });
+  apiList<PickingPlanRow>("/schedules/picking", { query: q as QueryRecord });
 
 export const createPickingPlan = (body: PickingPlanWrite) =>
-  apiCall<PickingPlanRow>("/picking-schedule", { method: "POST", body });
+  apiCall<PickingPlanRow>("/schedules/picking", { method: "POST", body });
 
 export const changePickingStatus = (
   lines: { soNo: string; serialNo: string }[], status: PickingStatusAction,
 ) =>
-  apiCall<PickingStatusChangeResult>("/picking-schedule/status", {
+  apiCall<PickingStatusChangeResult>("/schedules/picking/status", {
     method: "PUT", body: { lines, status },
   });
 
 export const listPickingResults = (
   q: PickingResultQuery = {},
 ): Promise<ApiListSuccess<PickingResultRow>> =>
-  apiList<PickingResultRow>("/picking-result", { query: q as QueryRecord });
+  apiList<PickingResultRow>("/results/picking", { query: q as QueryRecord });
 
 function qsOf(q: Record<string, unknown>): string {
   const p = new URLSearchParams();
@@ -109,7 +109,7 @@ function qsOf(q: Record<string, unknown>): string {
 }
 
 export const exportPickingScheduleCsv = (q: PickingScheduleQuery = {}) =>
-  apiDownload("/picking-schedule/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/picking-schedule" + qsOf({ ...q, page: undefined, pageSize: undefined }));
 
 export const exportPickingResultCsv = (q: PickingResultQuery = {}) =>
-  apiDownload("/picking-result/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/picking-result" + qsOf({ ...q, page: undefined, pageSize: undefined }));

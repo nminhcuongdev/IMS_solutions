@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Ims.Api.Http;
@@ -9,15 +10,15 @@ public static class ImportEndpoints
     public static IEndpointRouteBuilder MapImportEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/import").WithTags("Import").RequireAuthorization();
-        g.MapPost("/receiving-schedule", ImportReceivingScheduleAsync).DisableAntiforgery();
-        g.MapGet("/receiving-schedule/template.xlsx", ReceivingTemplateAsync);
-        g.MapPost("/shipping-schedule", ImportShippingScheduleAsync).DisableAntiforgery();
-        g.MapGet("/shipping-schedule/template.xlsx", ShippingTemplateAsync);
-        g.MapPost("/returns-schedule", ImportReturnsScheduleAsync).DisableAntiforgery();
-        g.MapGet("/returns-schedule/template.xlsx", ReturnsTemplateAsync);
-        g.MapPost("/picking-schedule", ImportPickingScheduleAsync).DisableAntiforgery();
-        g.MapPost("/production-order", ImportProductionOrderAsync).DisableAntiforgery();
-        g.MapGet("/picking-schedule/template.xlsx", PickingTemplateAsync);
+        g.MapPost("/receiving-schedule", ImportReceivingScheduleAsync).DisableAntiforgery().RequireModule("receiving").RequirePermission("rcv_import.Import");
+        app.MapGet("/schedules/receiving/template.xlsx", ReceivingTemplateAsync).WithTags("Import").RequireAuthorization().RequireModule("receiving").RequirePermission("rcv_import.Import");
+        g.MapPost("/shipping-schedule", ImportShippingScheduleAsync).DisableAntiforgery().RequireModule("shipping").RequirePermission("shp_import.Import");
+        app.MapGet("/schedules/shipping/template.xlsx", ShippingTemplateAsync).WithTags("Import").RequireAuthorization().RequireModule("shipping").RequirePermission("shp_import.Import");
+        g.MapPost("/returns-schedule", ImportReturnsScheduleAsync).DisableAntiforgery().RequireModule("returns").RequirePermission("returns.Import");
+        app.MapGet("/schedules/returns/template.xlsx", ReturnsTemplateAsync).WithTags("Import").RequireAuthorization().RequireModule("returns").RequirePermission("returns.Import");
+        g.MapPost("/picking-schedule", ImportPickingScheduleAsync).DisableAntiforgery().RequireModule("picking").RequirePermission("pick_import.Import");
+        g.MapPost("/production-order", ImportProductionOrderAsync).DisableAntiforgery().RequireModule("production").RequirePermission("prd_import.Import");
+        app.MapGet("/schedules/picking/template.xlsx", PickingTemplateAsync).WithTags("Import").RequireAuthorization().RequireModule("picking").RequirePermission("pick_import.Import");
         return app;
     }
 

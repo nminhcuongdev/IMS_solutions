@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,12 +9,12 @@ public static class DeviceEndpoints
     public static IEndpointRouteBuilder MapDeviceEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/masters/devices").WithTags("Devices");
-        g.MapGet("", ListAsync);
-        g.MapGet("/{code}", GetAsync);
-        g.MapPost("", CreateAsync);
-        g.MapPut("/{code}", UpdateAsync);
-        g.MapDelete("/{code}", DeleteAsync);
-        g.MapGet("/export.csv", ExportCsvAsync);
+        g.MapGet("", ListAsync).RequireLookup();
+        g.MapGet("/{code}", GetAsync).RequireLookup();
+        g.MapPost("", CreateAsync).RequirePermission("m_device.New", "m_device.Copy");
+        g.MapPut("/{code}", UpdateAsync).RequirePermission("m_device.Edit");
+        g.MapDelete("/{code}", DeleteAsync).RequirePermission("m_device.Delete");
+        app.MapGet("/export/devices", ExportCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("m_device.Export");
         return app;
     }
 

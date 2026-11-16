@@ -2,7 +2,7 @@ import { apiCall, apiDownload, apiList } from "./client";
 import type { ApiListSuccess } from "./types";
 
 export interface AppUser {
-  userCode: string; userName: string; roleCode: string;
+  userCode: string; userName: string; roleCode: string; roleName: string | null;
   factoryCode: string | null;
   defaultLanguage: string | null;
   isActive: boolean;
@@ -28,4 +28,4 @@ export const createUser = (body: UserWrite) => apiCall<AppUser>(P, { method: "PO
 export const updateUser = (code: string, body: UserWrite) =>
   apiCall<AppUser>(`${P}/${encodeURIComponent(code)}`, { method: "PUT", body });
 export const deleteUser = (code: string) => apiCall<void>(`${P}/${encodeURIComponent(code)}`, { method: "DELETE" });
-export const exportUsersCsv = () => apiDownload(`${P}/export.csv`);
+export const exportUsersCsv = () => apiDownload("/export/users");

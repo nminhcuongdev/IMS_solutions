@@ -13,4 +13,14 @@ internal interface IStockScanService
     Task<ServiceResult> ReadAsync(StockScanReadDto body, ClaimsPrincipal user, CancellationToken ct);
 
     Task<ServiceResult> ResetAsync(CancellationToken ct);
+
+    Task<ServiceResult> PartsAsync(CancellationToken ct);
+
+    Task<ServiceResult> SetTargetsAsync(StockScanTargetsDto body, CancellationToken ct);
+
+    Task<ServiceResult> LookupAsync(StockScanLookupDto body, CancellationToken ct);
+
+    Task<ServiceResult> RegisterAsync(StockScanRegisterDto body, CancellationToken ct);
+
+    Task<ServiceResult> DeletePartAsync(string? itemCode, CancellationToken ct);
 }

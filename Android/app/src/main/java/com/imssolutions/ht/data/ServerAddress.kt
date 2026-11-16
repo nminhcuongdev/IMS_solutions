@@ -6,26 +6,62 @@ import java.net.NetworkInterface
 object ServerAddress {
 
     const val DEFAULT_PORT = 8091
+    private const val HTTPS_PORT = 443
+    private const val HTTP_PREFIX = "http://"
+    private const val HTTPS_PREFIX = "https://"
+
+    const val MAX_SAVED = 5
+    val LAN_PORTS = listOf(DEFAULT_PORT, HTTPS_PORT, 80)
+    val CLOUD_PORTS = listOf(HTTPS_PORT, DEFAULT_PORT, 80)
+
+    fun isExplicit(input: String): Boolean {
+        val s = input.trim().lowercase()
+        if (s.startsWith(HTTPS_PREFIX)) return true
+        return s.removePrefix(HTTP_PREFIX).trimEnd('/').contains(':')
+    }
+
+    fun candidates(input: String, deviceIp: String?): List<String> {
+        val first = toBaseUrl(input, deviceIp) ?: return emptyList()
+        if (isExplicit(input)) return listOf(first)
+        val host = first.removePrefix(HTTP_PREFIX).substringBefore(':')
+        val octets = octetsOf(host)
+        val ports = if (octets != null && octets.size == 4 && isPrivate(octets)) LAN_PORTS else CLOUD_PORTS
+        return ports.map { "$HTTP_PREFIX$host:$it/" }
+    }
+
+    fun remember(saved: List<String>, baseUrl: String, max: Int = MAX_SAVED): List<String> =
+        (listOf(baseUrl) + saved.filter { !sameServer(it, baseUrl) }).take(max)
+
+    fun sameServer(a: String, b: String): Boolean =
+        a.trim().trimEnd('/').equals(b.trim().trimEnd('/'), ignoreCase = true)
 
     fun toBaseUrl(input: String, deviceIp: String?, defaultPort: Int = DEFAULT_PORT): String? {
         var s = input.trim().lowercase()
-        s = s.removePrefix("http://").removePrefix("https://").trimEnd('/')
+        val secure = s.startsWith(HTTPS_PREFIX)
+        s = s.removePrefix(HTTP_PREFIX).removePrefix(HTTPS_PREFIX).trimEnd('/')
         if (s.isEmpty()) return null
-        var port = defaultPort
+        var port = if (secure) HTTPS_PORT else defaultPort
         val colon = s.lastIndexOf(':')
         if (colon >= 0) {
             port = s.substring(colon + 1).toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
             s = s.substring(0, colon)
         }
         val host = resolveHost(s, deviceIp) ?: return null
-        return "http://$host:$port/"
+        return when {
+            !secure -> "$HTTP_PREFIX$host:$port/"
+            port == HTTPS_PORT -> "$HTTPS_PREFIX$host/"
+            else -> "$HTTPS_PREFIX$host:$port/"
+        }
     }
 
     fun toDisplay(baseUrl: String, defaultPort: Int = DEFAULT_PORT): String {
-        var s = baseUrl.trim().removePrefix("http://").removePrefix("https://").trimEnd('/')
+        val url = baseUrl.trim()
+        val secure = url.startsWith(HTTPS_PREFIX)
+        var s = url.removePrefix(HTTP_PREFIX).removePrefix(HTTPS_PREFIX).trimEnd('/')
+        val hiddenPort = if (secure) HTTPS_PORT else defaultPort
         val colon = s.lastIndexOf(':')
-        if (colon >= 0 && s.substring(colon + 1).toIntOrNull() == defaultPort) s = s.substring(0, colon)
-        return s
+        if (colon >= 0 && s.substring(colon + 1).toIntOrNull() == hiddenPort) s = s.substring(0, colon)
+        return if (secure) "$HTTPS_PREFIX$s" else s
     }
 
     fun resolveHost(text: String, deviceIp: String?): String? {

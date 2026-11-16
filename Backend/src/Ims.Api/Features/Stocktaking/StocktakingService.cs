@@ -98,12 +98,9 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
         db.StocktakingSessions.Add(session);
         await db.SaveChangesAsync(ct);
 
-        db.StocktakingLabels.RemoveRange(await db.StocktakingLabels.ToListAsync(ct));
-        await db.SaveChangesAsync(ct);
-
         var rows = await db.Stocks.AsNoTracking()
             .Where(s => s.StockQty > 0 && s.LocationCode != null)
-            .Select(s => new { s.ItemCode, s.SerialNo, s.LocationCode, s.LotNo, s.ExpiryDate })
+            .Select(s => new { s.ItemCode, s.SerialNo, s.LocationCode, s.LotNo, s.ExpiryDate, s.StockQty })
             .ToListAsync(ct);
 
         foreach (var r in rows)
@@ -115,6 +112,7 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
                 LocationCode = r.LocationCode!,
                 LotNo = r.LotNo,
                 ExpiryDate = r.ExpiryDate,
+                PlannedQty = r.StockQty,
                 IsScanned = false,
                 Status = StocktakingLabelStatus.NotStarted,
             });
@@ -133,6 +131,7 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
         s.Status = StocktakingSessionStatus.Completed;
         s.CompletedAt = DateTime.Now;
         Touch(s, user);
+        await MarkMovedAsync(db, s, await db.StocktakingLabels.Where(x => x.StocktakingSessionNo == s.No).ToListAsync(ct), ct);
         await db.SaveChangesAsync(ct);
 
         return Outcome.Ok(new ApiSuccess<StocktakingSessionDto>(await MapSessionAsync(db, s, ct)));
@@ -152,31 +151,94 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
             .Select(x => x?.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToHashSet();
 
         var now = DateTime.Now;
+        var who = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await MarkMovedAsync(db, s, labels, ct);
         foreach (var l in labels)
         {
-            if (l.IsScanned || !wanted.Contains(l.SerialNo)) continue;
+            if (l.IsScanned || l.MovedAfterStart || !wanted.Contains(l.SerialNo)) continue;
             l.Status = StocktakingLabelStatus.Missing;
             l.UpdatedAt = now;
         }
 
+        await WriteOffMissingAsync(db, s, labels, who, now, ct);
         await WriteHistoryAsync(db, s, labels, now, ct);
 
         s.Status = StocktakingSessionStatus.Finalized;
         Touch(s, user);
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         return Outcome.Ok(new ApiSuccess<StocktakingSessionDto>(await MapSessionAsync(db, s, ct)));
+    }
+
+    public const string DifferenceReason = "STK";
+
+    private static async Task MarkMovedAsync(
+        ImsDbContext db, StocktakingSession s, List<StocktakingLabel> labels, CancellationToken ct)
+    {
+        var open = labels.Where(l => !l.MovedAfterStart && l.Status != StocktakingLabelStatus.Over).ToList();
+        if (open.Count == 0) return;
+        var start = s.StartedAt ?? s.CreatedAt;
+        var serials = open.Select(l => l.SerialNo).Distinct().ToList();
+        var touched = (await db.InventoryHistories.AsNoTracking()
+                .Where(h => h.SerialNo != null && serials.Contains(h.SerialNo) && h.CreatedAt >= start
+                         && h.ActionType != Domain.Inventory.InventoryAction.Hold
+                         && h.ActionType != Domain.Inventory.InventoryAction.HoldRelease
+                         && h.ActionType != Domain.Inventory.InventoryAction.StocktakeDiff)
+                .Select(h => new { h.ItemCode, h.SerialNo }).Distinct().ToListAsync(ct))
+            .Select(h => (h.ItemCode, h.SerialNo!)).ToHashSet();
+        var stock = (await db.Stocks.AsNoTracking().Where(x => serials.Contains(x.SerialNo))
+                .Select(x => new { x.ItemCode, x.SerialNo, x.StockQty, x.LocationCode }).ToListAsync(ct))
+            .ToDictionary(x => (x.ItemCode, x.SerialNo));
+        foreach (var l in open)
+        {
+            var moved = touched.Contains((l.ItemCode, l.SerialNo))
+                        || !stock.TryGetValue((l.ItemCode, l.SerialNo), out var row)
+                        || row.StockQty != l.PlannedQty
+                        || !string.Equals(row.LocationCode, l.LocationCode, StringComparison.OrdinalIgnoreCase);
+            if (moved) l.MovedAfterStart = true;
+        }
+    }
+
+    private static async Task WriteOffMissingAsync(
+        ImsDbContext db, StocktakingSession s, List<StocktakingLabel> labels, string? who, DateTime now, CancellationToken ct)
+    {
+        var missing = labels.Where(l => l.Status == StocktakingLabelStatus.Missing && !l.MovedAfterStart).ToList();
+        if (missing.Count == 0) return;
+        var reason = await db.Reasons.AnyAsync(r => r.ReasonCode == DifferenceReason && !r.IsDeleted, ct)
+            ? DifferenceReason : null;
+        var serials = missing.Select(l => l.SerialNo).ToList();
+        var rows = await db.Stocks.Where(x => serials.Contains(x.SerialNo)).ToListAsync(ct);
+        foreach (var l in missing)
+        {
+            var row = rows.FirstOrDefault(x => x.ItemCode == l.ItemCode && x.SerialNo == l.SerialNo);
+            if (row is null || row.StockQty <= 0) continue;
+            var previous = row.StockQty;
+            row.StockQty = 0;
+            row.Recalculate();
+            row.UpdatedAt = now;
+            row.UpdatedBy = who;
+            db.InventoryHistories.Add(new Domain.Inventory.InventoryHistory
+            {
+                CreatedAt = now,
+                ItemCode = row.ItemCode,
+                FactoryCode = row.FactoryCode,
+                LocationCode = row.LocationCode,
+                LotNo = row.LotNo,
+                SerialNo = row.SerialNo,
+                ActionType = Domain.Inventory.InventoryAction.StocktakeDiff,
+                Qty = -previous,
+                ReasonCode = reason,
+                ReferenceNo = s.No.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                CreatedBy = who,
+            });
+        }
     }
 
     private static async Task WriteHistoryAsync(
         ImsDbContext db, StocktakingSession s, List<StocktakingLabel> labels, DateTime now, CancellationToken ct)
     {
-        var serials = labels.Select(l => l.SerialNo).ToList();
-        var qtyBySerial = await db.Stocks.AsNoTracking()
-            .Where(x => serials.Contains(x.SerialNo))
-            .Select(x => new { x.ItemCode, x.SerialNo, x.StockQty })
-            .ToListAsync(ct);
-
         var itemCodes = labels.Select(l => l.ItemCode).Distinct().ToList();
         var packQty = await db.Items.AsNoTracking()
             .Where(i => itemCodes.Contains(i.ItemCode))
@@ -185,7 +247,7 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
 
         decimal QtyOf(StocktakingLabel l) => l.Status == StocktakingLabelStatus.Over
             ? packQty.GetValueOrDefault(l.ItemCode)
-            : qtyBySerial.FirstOrDefault(q => q.SerialNo == l.SerialNo && q.ItemCode == l.ItemCode)?.StockQty ?? 0m;
+            : l.PlannedQty;
 
         var groups = labels
             .GroupBy(l => (l.ItemCode, Lot: l.LotNo ?? ""))
@@ -199,16 +261,15 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
             })
             .ToList();
 
-        var keys = groups.Select(g => g.ItemCode).Distinct().ToList();
         var existing = await db.StocktakingHistories
-            .Where(h => keys.Contains(h.ItemCode)).ToListAsync(ct);
+            .Where(h => h.StocktakingSessionNo == s.No).ToListAsync(ct);
 
         foreach (var g in groups)
         {
             var row = existing.FirstOrDefault(h => h.ItemCode == g.ItemCode && h.LotNo == g.Lot);
             if (row is null)
             {
-                row = new StocktakingHistory { ItemCode = g.ItemCode, LotNo = g.Lot };
+                row = new StocktakingHistory { StocktakingSessionNo = s.No, ItemCode = g.ItemCode, LotNo = g.Lot };
                 db.StocktakingHistories.Add(row);
             }
             row.StocktakingName = s.SessionName;
@@ -238,6 +299,9 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
     public async Task<ServiceResult> SaveResultAsync(
         StocktakingResultDto body, ClaimsPrincipal user, CancellationToken ct)
     {
+        var requestId = RequestReplays.Normalize(body.RequestId);
+        if (RequestReplays.Invalid(requestId) is { } badId) return badId;
+        if (await RequestReplays.FindAsync(db, requestId, ct) is { } replay) return replay;
         var s = await CurrentAsync(db, ct);
         if (s is null) return Outcome.Json(new ApiError(ErrorCatalog.Stk001()), statusCode: 409);
         if (!s.AcceptsResults) return Outcome.Json(new ApiError(ErrorCatalog.Stk004()), statusCode: 409);
@@ -287,17 +351,25 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
 
         foreach (var extra in surplus) db.StocktakingLabels.Remove(extra);
 
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.SaveChangesAsync(ct);
 
         var rows = await GroupsAsync(db, db.StocktakingLabels.AsNoTracking()
             .Where(x => x.StocktakingSessionNo == s.No && x.LocationCode == loc && x.ItemCode == item
                      && (lot == null ? x.LotNo == null : x.LotNo == lot)), ct);
-        if (rows.Count > 0) return Outcome.Ok(new ApiSuccess<StocktakingGroupDto>(rows[0]));
-
-        var meta = await db.Items.AsNoTracking().Where(i => i.ItemCode == item)
-            .Select(i => new { i.ItemName, i.UomCode }).FirstOrDefaultAsync(ct);
-        return Outcome.Ok(new ApiSuccess<StocktakingGroupDto>(new StocktakingGroupDto(
-            item, meta?.ItemName, loc, lot, 0, 0, 0m, 0m, meta?.UomCode, now)));
+        ServiceResult result;
+        if (rows.Count > 0) result = Outcome.Ok(new ApiSuccess<StocktakingGroupDto>(rows[0]));
+        else
+        {
+            var meta = await db.Items.AsNoTracking().Where(i => i.ItemCode == item)
+                .Select(i => new { i.ItemName, i.UomCode }).FirstOrDefaultAsync(ct);
+            result = Outcome.Ok(new ApiSuccess<StocktakingGroupDto>(new StocktakingGroupDto(
+                item, meta?.ItemName, loc, lot, 0, 0, 0m, 0m, meta?.UomCode, now)));
+        }
+        RequestReplays.Record(db, requestId, "stocktaking", result, user.FindFirstValue(ClaimTypes.NameIdentifier));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     public async Task<ServiceResult> ListLabelsAsync(
@@ -379,12 +451,22 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
         return CsvFile(sb, "label-stocktaking.csv");
     }
 
+    public async Task<ServiceResult> ListSessionsAsync(CancellationToken ct)
+    {
+        var rows = await db.StocktakingSessions.AsNoTracking()
+            .Where(x => x.Status == StocktakingSessionStatus.Finalized)
+            .OrderByDescending(x => x.No)
+            .Select(x => new StocktakingSessionOptionDto(x.No, x.SessionName, x.CompletedAt))
+            .ToListAsync(ct);
+        return Outcome.Ok(new ApiSuccess<List<StocktakingSessionOptionDto>>(rows));
+    }
+
     public async Task<ServiceResult> ListHistoryAsync(
-        CancellationToken ct, string? q = null, int page = 1, int pageSize = 50, string? sort = null)
+        CancellationToken ct, string? q = null, int page = 1, int pageSize = 50, string? sort = null, long? sessionNo = null)
     {
         var p = NormalizePage(page);
         var ps = NormalizePageSize(pageSize);
-        var query = HistoryFilter(db, q);
+        var query = HistoryFilter(db, q, sessionNo);
 
         var total = await query.CountAsync(ct);
         var rows = await HistoryRowsAsync(db,
@@ -392,10 +474,10 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
         return Outcome.Ok(new ApiListSuccess<StocktakingHistoryDto>(rows, new PageMeta(total, p, ps)));
     }
 
-    public async Task<ServiceResult> ExportHistoryCsvAsync(CancellationToken ct, string? q = null)
+    public async Task<ServiceResult> ExportHistoryCsvAsync(CancellationToken ct, string? q = null, long? sessionNo = null)
     {
         var rows = await HistoryRowsAsync(db,
-            HistoryFilter(db, q).OrderByDescending(h => h.StocktakingDate).ThenBy(h => h.ItemCode), ct);
+            HistoryFilter(db, q, sessionNo).OrderByDescending(h => h.StocktakingDate).ThenBy(h => h.ItemCode), ct);
 
         var sb = new StringBuilder();
         sb.AppendLine("stocktaking_name,stocktaking_date,item_code,item_name,lot_no,unit," +
@@ -429,9 +511,10 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
         return q;
     }
 
-    private static IQueryable<StocktakingHistory> HistoryFilter(ImsDbContext db, string? q)
+    private static IQueryable<StocktakingHistory> HistoryFilter(ImsDbContext db, string? q, long? sessionNo)
     {
         var query = db.StocktakingHistories.AsNoTracking();
+        if (sessionNo is { } sn) query = query.Where(h => h.StocktakingSessionNo == sn);
         if (Trimmed(q) is { } free)
             query = query.Where(h => EF.Functions.Like(h.StocktakingName, LikeContains(free), LikeEscape)
                                   || EF.Functions.Like(h.ItemCode, LikeContains(free), LikeEscape)
@@ -446,7 +529,7 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
     {
         var rows = await q.Select(h => new
         {
-            h.ItemCode, h.LotNo, h.StocktakingName, h.StocktakingDate,
+            h.StocktakingSessionNo, h.ItemCode, h.LotNo, h.StocktakingName, h.StocktakingDate,
             h.PlannedQty, h.ResultQty, h.MissingQty,
             ItemName = db.Items.Where(i => i.ItemCode == h.ItemCode).Select(i => i.ItemName).FirstOrDefault(),
             Unit = db.Items.Where(i => i.ItemCode == h.ItemCode).Select(i => i.UomCode).FirstOrDefault(),
@@ -455,7 +538,8 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
         return rows.Select(r => new StocktakingHistoryDto(
             r.ItemCode, r.ItemName, r.LotNo, r.StocktakingName, r.StocktakingDate,
             r.PlannedQty, r.ResultQty, r.MissingQty, r.Unit,
-            r.PlannedQty == r.ResultQty && r.MissingQty == 0m ? "badgeMatch" : "badgeDiff")).ToList();
+            r.PlannedQty == r.ResultQty && r.MissingQty == 0m ? "badgeMatch" : "badgeDiff",
+            r.StocktakingSessionNo)).ToList();
     }
 
     private static async Task<List<StocktakingLabelDto>> LabelsAsync(
@@ -464,18 +548,17 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
         var rows = await q.Select(x => new
         {
             x.SerialNo, x.ItemCode, x.LocationCode, x.LotNo, x.IsScanned, x.Status,
-            x.ExpiryDate, x.UpdatedAt,
+            x.ExpiryDate, x.UpdatedAt, x.MovedAfterStart,
             ItemName = db.Items.Where(i => i.ItemCode == x.ItemCode).Select(i => i.ItemName).FirstOrDefault(),
             Unit = db.Items.Where(i => i.ItemCode == x.ItemCode).Select(i => i.UomCode).FirstOrDefault(),
-            Qty = db.Stocks.Where(s => s.ItemCode == x.ItemCode && s.SerialNo == x.SerialNo)
-                    .Select(s => (decimal?)s.StockQty).FirstOrDefault(),
+            Qty = (decimal?)x.PlannedQty,
         }).ToListAsync(ct);
 
         var today = DateOnly.FromDateTime(DateTime.Now);
         return rows.Select(r => new StocktakingLabelDto(
             r.SerialNo, r.ItemCode, r.ItemName, r.Qty ?? 0m, r.Unit, r.LocationCode, r.LotNo,
             r.IsScanned, r.Status, StocktakingLabelStatus.ToApiName(r.Status),
-            r.ExpiryDate, r.ExpiryDate is { } e && e < today, r.UpdatedAt)).ToList();
+            r.ExpiryDate, r.ExpiryDate is { } e && e < today, r.UpdatedAt, r.MovedAfterStart)).ToList();
     }
 
     private static async Task<List<StocktakingGroupDto>> GroupsAsync(
@@ -486,8 +569,7 @@ internal sealed class StocktakingService(ImsDbContext db) : IStocktakingService
             x.SerialNo, x.ItemCode, x.LocationCode, x.LotNo, x.IsScanned, x.Status, x.UpdatedAt,
             ItemName = db.Items.Where(i => i.ItemCode == x.ItemCode).Select(i => i.ItemName).FirstOrDefault(),
             Unit = db.Items.Where(i => i.ItemCode == x.ItemCode).Select(i => i.UomCode).FirstOrDefault(),
-            Qty = db.Stocks.Where(s => s.ItemCode == x.ItemCode && s.SerialNo == x.SerialNo)
-                    .Select(s => (decimal?)s.StockQty).FirstOrDefault(),
+            Qty = x.Status == StocktakingLabelStatus.Over ? (decimal?)null : x.PlannedQty,
             PackQty = db.Items.Where(i => i.ItemCode == x.ItemCode)
                     .Select(i => i.PackageQty).FirstOrDefault(),
         }).ToListAsync(ct);

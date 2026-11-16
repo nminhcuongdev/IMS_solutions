@@ -13,7 +13,7 @@ const Ctx = createContext<ToastApi | null>(null);
 
 export function useToast(): ToastApi {
   const api = useContext(Ctx);
-  if (!api) throw new Error("useToast phải nằm trong <ToastProvider>");
+  if (!api) throw new Error("useToast must be used inside <ToastProvider>");
   return api;
 }
 

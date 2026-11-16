@@ -8,7 +8,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 
 @Immutable
 data class HtStrings(
-    val lang: HtLang = HtLang.VI,
+    val lang: HtLang = HtLang.EN,
     val labels: Map<String, String> = emptyMap(),
     val languages: List<HtLang> = HtLang.BUILT_IN,
     val builtin: Map<String, String> = emptyMap(),

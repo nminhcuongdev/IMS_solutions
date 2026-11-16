@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -13,7 +14,7 @@ public static class HtEndpoints
 
         g.MapGet("/printers", ListPrintersAsync).AllowAnonymous();
 
-        g.MapGet("/lots", ListLotsAsync).RequireAuthorization();
+        g.MapGet("/lots", ListLotsAsync).RequireAuthorization().RequireLookup();
         return app;
     }
 

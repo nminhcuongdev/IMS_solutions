@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -8,24 +9,16 @@ public static class ProductionEndpoints
 {
     public static IEndpointRouteBuilder MapProductionEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/production-order").WithTags("Production").RequireAuthorization();
-        group.MapGet("", ListAsync);
-        group.MapGet("/{orderNo}", GetAsync);
-        group.MapGet("/{orderNo}/lines", LinesAsync);
-        group.MapGet("/{orderNo}/works", WorksAsync);
-        group.MapPut("/status", StatusAsync);
-        group.MapPut("/picking", PickingAsync);
-        group.MapPost("/{orderNo}/receipt", ReceiptAsync);
-        group.MapPost("/{orderNo}/consumption", ConsumptionAsync);
-        group.MapPost("/{orderNo}/return", ReturnAsync);
-        group.MapPost("/{orderNo}/output", OutputAsync);
-        group.MapPost("/{orderNo}/label", LabelAsync);
-        app.MapPost("/production-consumption/{no:long}/reverse", ReverseConsumptionAsync).RequireAuthorization();
-        app.MapPost("/production-output/{no:long}/reverse", ReverseOutputAsync).RequireAuthorization();
-        app.MapPost("/production-return/{no:long}/reverse", ReverseReturnAsync).RequireAuthorization();
-        app.MapGet("/production-result", ResultsAsync).RequireAuthorization();
-        app.MapGet("/export/production-order", ExportOrdersAsync).RequireAuthorization();
-        app.MapGet("/export/production-result", ExportResultsAsync).RequireAuthorization();
+        var group = app.MapGroup("/production-order").WithTags("Production").RequireAuthorization().RequireModule("production");
+        group.MapGet("", ListAsync).RequirePermission("prd_import.Open", "ht_prd_receipt.Open", "ht_prd_input.Open", "ht_prd_return.Open", "ht_prd_output.Open");
+        group.MapGet("/{orderNo}", GetAsync).RequirePermission("prd_import.Open", "prd_result.Open", "ht_prd_receipt.Open", "ht_prd_input.Open", "ht_prd_return.Open", "ht_prd_output.Open");
+        group.MapPut("/status", StatusAsync).RequirePermission("prd_import.StatusChange");
+        group.MapPut("/picking", PickingAsync).RequirePermission("prd_import.MaterialPicking");
+        group.MapPost("/{orderNo}/results", RegisterAsync).RequirePermission("ht_prd_receipt.Open", "ht_prd_input.Open", "ht_prd_return.Open", "ht_prd_output.Open");
+        app.MapPost("/production-result/{no:long}/reverse", ReverseAsync).RequireAuthorization().RequireModule("production").RequirePermission("prd_result.Reverse");
+        app.MapGet("/production-result", ResultsAsync).RequireAuthorization().RequireModule("production").RequirePermission("prd_result.Open");
+        app.MapGet("/export/production-order", ExportOrdersAsync).RequireAuthorization().RequireModule("production").RequirePermission("prd_import.Export");
+        app.MapGet("/export/production-result", ExportResultsAsync).RequireAuthorization().RequireModule("production").RequirePermission("prd_result.Export");
         return app;
     }
 
@@ -37,14 +30,8 @@ public static class ProductionEndpoints
         [FromQuery] int? page = null, [FromQuery] int? pageSize = null, [FromQuery] string? sort = null) =>
         (await service.ListAsync(ct, unit, orderNo, itemCode, itemName, productionLotNo, fgLotNo, status, startDateFrom, startDateTo, page, pageSize, sort)).ToHttpResult();
 
-    private static async Task<IResult> GetAsync([FromServices] IProductionService service, string orderNo, CancellationToken ct) =>
-        (await service.GetAsync(orderNo, ct)).ToHttpResult();
-
-    private static async Task<IResult> LinesAsync([FromServices] IProductionService service, string orderNo, CancellationToken ct) =>
-        (await service.LinesAsync(orderNo, ct)).ToHttpResult();
-
-    private static async Task<IResult> WorksAsync([FromServices] IProductionService service, string orderNo, CancellationToken ct) =>
-        (await service.WorksAsync(orderNo, ct)).ToHttpResult();
+    private static async Task<IResult> GetAsync([FromServices] IProductionService service, string orderNo, CancellationToken ct, [FromQuery] string? processCode = null) =>
+        (await service.GetAsync(orderNo, ct, processCode)).ToHttpResult();
 
     private static async Task<IResult> StatusAsync([FromServices] IProductionService service, [FromBody] StatusWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
         (await service.StatusAsync(body, user, ct)).ToHttpResult();
@@ -52,29 +39,11 @@ public static class ProductionEndpoints
     private static async Task<IResult> PickingAsync([FromServices] IProductionService service, [FromBody] PickingWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
         (await service.PickingAsync(body, user, ct)).ToHttpResult();
 
-    private static async Task<IResult> ReceiptAsync([FromServices] IProductionService service, string orderNo, [FromBody] ReceiptWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.ReceiptAsync(orderNo, body, user, ct)).ToHttpResult();
+    private static async Task<IResult> RegisterAsync([FromServices] IProductionService service, string orderNo, [FromBody] ProductionResultWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.RegisterAsync(orderNo, body, user, ct)).ToHttpResult();
 
-    private static async Task<IResult> ConsumptionAsync([FromServices] IProductionService service, string orderNo, [FromBody] ConsumptionWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.ConsumptionAsync(orderNo, body, user, ct)).ToHttpResult();
-
-    private static async Task<IResult> ReturnAsync([FromServices] IProductionService service, string orderNo, [FromBody] ReturnWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.ReturnAsync(orderNo, body, user, ct)).ToHttpResult();
-
-    private static async Task<IResult> OutputAsync([FromServices] IProductionService service, string orderNo, [FromBody] OutputWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.OutputAsync(orderNo, body, user, ct)).ToHttpResult();
-
-    private static async Task<IResult> LabelAsync([FromServices] IProductionService service, string orderNo, [FromBody] LabelWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.LabelAsync(orderNo, body, user, ct)).ToHttpResult();
-
-    private static async Task<IResult> ReverseConsumptionAsync([FromServices] IProductionService service, long no, [FromBody] ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.ReverseConsumptionAsync(no, body, user, ct)).ToHttpResult();
-
-    private static async Task<IResult> ReverseOutputAsync([FromServices] IProductionService service, long no, [FromBody] ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.ReverseOutputAsync(no, body, user, ct)).ToHttpResult();
-
-    private static async Task<IResult> ReverseReturnAsync([FromServices] IProductionService service, long no, [FromBody] ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
-        (await service.ReverseReturnAsync(no, body, user, ct)).ToHttpResult();
+    private static async Task<IResult> ReverseAsync([FromServices] IProductionService service, long no, [FromBody] ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct) =>
+        (await service.ReverseAsync(no, body, user, ct)).ToHttpResult();
 
     private static async Task<IResult> ResultsAsync([FromServices] IProductionService service, CancellationToken ct,
         [FromQuery] string? view = null, [FromQuery] string? type = null, [FromQuery] string? orderNo = null,

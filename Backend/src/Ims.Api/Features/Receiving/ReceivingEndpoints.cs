@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -8,17 +9,18 @@ public static class ReceivingEndpoints
 {
     public static IEndpointRouteBuilder MapReceivingEndpoints(this IEndpointRouteBuilder app)
     {
-        var schedule = app.MapGroup("/receiving-schedule").WithTags("Receiving").RequireAuthorization();
-        schedule.MapGet("", ListPlansAsync);
-        schedule.MapPost("", CreatePlanAsync);
-        schedule.MapPut("/status", ChangeStatusAsync);
-        schedule.MapPost("/{poNo}/shortage", RegisterShortageAsync);
-        schedule.MapGet("/export.csv", ExportPlansCsvAsync);
+        var schedule = app.MapGroup("/schedules/receiving").WithTags("Receiving").RequireAuthorization().RequireModule("receiving");
+        schedule.MapGet("", ListPlansAsync).RequirePermission("rcv_import.Open", "ht_receiving.Open");
+        schedule.MapPost("", CreatePlanAsync).RequirePermission("rcv_import.New");
+        schedule.MapPut("/status", ChangeStatusAsync).RequirePermission("rcv_import.StatusChange", "ht_receiving.Open");
+        schedule.MapPost("/{poNo}/shortage", RegisterShortageAsync).RequirePermission("rcv_import.Shortage", "ht_receiving.Open");
+        app.MapGet("/export/receiving-schedule", ExportPlansCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("receiving").RequirePermission("rcv_import.Export");
 
-        var result = app.MapGroup("/receiving-result").WithTags("Receiving").RequireAuthorization();
-        result.MapGet("", ListResultsAsync);
-        result.MapPost("", CreateResultAsync);
-        result.MapGet("/export.csv", ExportResultsCsvAsync);
+        var result = app.MapGroup("/results/receiving").WithTags("Receiving").RequireAuthorization().RequireModule("receiving");
+        var write = app.MapGroup("/receiving-result").WithTags("Receiving").RequireAuthorization().RequireModule("receiving");
+        result.MapGet("", ListResultsAsync).RequirePermission("rcv_result.Open", "ht_receiving.Open");
+        write.MapPost("", CreateResultAsync).RequirePermission("ht_receiving.Open");
+        app.MapGet("/export/receiving-result", ExportResultsCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("receiving").RequirePermission("rcv_result.Export");
         return app;
     }
 

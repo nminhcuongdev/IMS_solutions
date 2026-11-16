@@ -32,4 +32,4 @@ export const createItemGroup = (body: ItemGroupWrite) => apiCall<ItemGroup>(P, {
 export const updateItemGroup = (code: string, body: ItemGroupWrite) =>
   apiCall<ItemGroup>(`${P}/${encodeURIComponent(code)}`, { method: "PUT", body });
 export const deleteItemGroup = (code: string) => apiCall<void>(`${P}/${encodeURIComponent(code)}`, { method: "DELETE" });
-export const exportItemGroupsCsv = () => apiDownload(`${P}/export.csv`);
+export const exportItemGroupsCsv = () => apiDownload("/export/item-groups");

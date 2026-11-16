@@ -37,5 +37,5 @@ export const exportLanguageDataCsv = (q: LanguageQuery = {}) => {
   if (q.deviceScope) p.set("deviceScope", q.deviceScope);
   if (q.sort) p.set("sort", q.sort);
   const qs = p.toString();
-  return apiDownload("/language-data/export.csv" + (qs ? `?${qs}` : ""));
+  return apiDownload("/export/language-data" + (qs ? `?${qs}` : ""));
 };

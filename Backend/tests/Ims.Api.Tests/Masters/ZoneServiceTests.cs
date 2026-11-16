@@ -71,7 +71,7 @@ public class ZoneServiceTests
 
         var res = await new ZoneService(t.Db).CreateAsync(body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class ZoneServiceTests
 
         ResultAssert.NotFound(badFactory);
 
-        ResultAssert.BadRequest(blankName, "VAL-002");
+        ResultAssert.BadRequest(blankName, "VAL-001");
     }
 
     [Fact]

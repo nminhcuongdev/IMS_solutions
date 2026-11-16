@@ -14,6 +14,7 @@ data class ProductionOrder(
     val productionLotNo: String? = null,
     val outputLotNo: String? = null,
     val storageLocationCode: String = "",
+    val factoryCode: String? = null,
     val plannedStartDate: String = "",
     val statusCode: Int = 0,
 )

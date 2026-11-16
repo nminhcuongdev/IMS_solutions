@@ -36,7 +36,7 @@ import com.imssolutions.ht.ui.theme.BrandBlueDark
 fun HtHeader(
     title: String,
     onBack: (() -> Unit)? = null,
-    lang: HtLang = HtLang.VI,
+    lang: HtLang = HtLang.EN,
     onLang: ((HtLang) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().background(BrandBlue).statusBarsPadding()) {
@@ -50,7 +50,7 @@ fun HtHeader(
         if (onBack != null) {
             Icon(
                 Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Quay lại",
+                contentDescription = "Back",
                 tint = Color.White,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))

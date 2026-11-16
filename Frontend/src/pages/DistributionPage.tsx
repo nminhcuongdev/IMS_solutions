@@ -134,7 +134,7 @@ export function DistributionPage() {
           <span className="dst-sub">{tzLabel()}</span>
         </div>
         <div className="search-btns">
-          <button className="btn btn-primary" onClick={() => void refreshAll()}>
+          <button className="btn btn-primary" data-role="search" onClick={() => void refreshAll()}>
             <img className="icn-img" src={BTN_ICON.search} alt="" /> <span>{t("search", "Search")}</span>
           </button>
           <button className="btn btn-special" onClick={() => need() && setWizard(true)}>

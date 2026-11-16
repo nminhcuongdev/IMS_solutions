@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -7,13 +8,10 @@ public static class TraceabilityEndpoints
 {
     public static IEndpointRouteBuilder MapTraceabilityEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/traceability").WithTags("Traceability").RequireAuthorization();
-        group.MapGet("/lots", LotsAsync);
-        group.MapGet("/backward", BackwardAsync);
-        group.MapGet("/forward", ForwardAsync);
-        group.MapGet("/events", EventsAsync);
-        group.MapGet("/balance", BalanceAsync);
-        app.MapGet("/export/traceability", ExportAsync).WithTags("Traceability").RequireAuthorization();
+        var group = app.MapGroup("/traceability").WithTags("Traceability").RequireAuthorization().RequireModule("production");
+        group.MapGet("/lots", LotsAsync).RequirePermission("trace_back.Open", "trace_fwd.Open");
+        group.MapGet("", TraceAsync).RequirePermission("trace_back.Open", "trace_fwd.Open");
+        app.MapGet("/export/traceability", ExportAsync).WithTags("Traceability").RequireAuthorization().RequireModule("production").RequirePermission("trace_back.Export", "trace_fwd.Export");
         return app;
     }
 
@@ -21,21 +19,10 @@ public static class TraceabilityEndpoints
         [AsParameters] TraceQueryDto query, CancellationToken ct) =>
         (await service.LotsAsync(query, ct)).ToHttpResult();
 
-    private static async Task<IResult> BackwardAsync([FromServices] ITraceabilityService service,
-        [FromQuery] string itemCode, [FromQuery] string lotNo, CancellationToken ct) =>
-        (await service.BackwardAsync(itemCode, lotNo, ct)).ToHttpResult();
-
-    private static async Task<IResult> ForwardAsync([FromServices] ITraceabilityService service,
-        [FromQuery] string itemCode, [FromQuery] string lotNo, CancellationToken ct) =>
-        (await service.ForwardAsync(itemCode, lotNo, ct)).ToHttpResult();
-
-    private static async Task<IResult> EventsAsync([FromServices] ITraceabilityService service,
-        [FromQuery] string itemCode, [FromQuery] string lotNo, CancellationToken ct) =>
-        (await service.EventsAsync(itemCode, lotNo, ct)).ToHttpResult();
-
-    private static async Task<IResult> BalanceAsync([FromServices] ITraceabilityService service,
-        [FromQuery] string itemCode, [FromQuery] string lotNo, CancellationToken ct) =>
-        (await service.BalanceAsync(itemCode, lotNo, ct)).ToHttpResult();
+    private static async Task<IResult> TraceAsync([FromServices] ITraceabilityService service, CancellationToken ct,
+        [FromQuery] string? direction = null, [FromQuery] string? itemCode = null, [FromQuery] string? lotNo = null,
+        [FromQuery] string? include = null) =>
+        (await service.TraceAsync(direction, itemCode, lotNo, include, ct)).ToHttpResult();
 
     private static async Task<IResult> ExportAsync([FromServices] ITraceabilityService service,
         [FromQuery] string direction, [FromQuery] string itemCode, [FromQuery] string lotNo,

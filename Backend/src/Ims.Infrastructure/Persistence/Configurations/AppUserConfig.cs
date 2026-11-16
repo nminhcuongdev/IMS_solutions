@@ -20,5 +20,6 @@ public class AppUserConfig : IEntityTypeConfiguration<AppUser>
         b.MapRemarks();
         b.MapAudit();
         b.MapSoftDelete();
+        b.HasOne<Ims.Domain.System.Role>().WithMany().HasForeignKey(x => x.RoleCode).OnDelete(DeleteBehavior.Restrict);
     }
 }

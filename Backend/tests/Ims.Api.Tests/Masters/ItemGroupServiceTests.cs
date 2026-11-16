@@ -49,7 +49,7 @@ public class ItemGroupServiceTests
 
         var res = await new ItemGroupService(t.Db).CreateAsync(body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Theory]
@@ -76,7 +76,7 @@ public class ItemGroupServiceTests
         var blankName = await new ItemGroupService(t.Db).CreateAsync(Valid(name: " "), default);
 
         ResultAssert.BadRequest(blankCode, "VAL-001");
-        ResultAssert.BadRequest(blankName, "VAL-002");
+        ResultAssert.BadRequest(blankName, "VAL-001");
     }
 
 
@@ -136,7 +136,7 @@ public class ItemGroupServiceTests
         var badCategory = await new ItemGroupService(t.Db).UpdateAsync("IG-01", Valid(category: 9), default);
         var missingRow = await new ItemGroupService(t.Db).UpdateAsync("NOPE", Valid(), default);
 
-        ResultAssert.BadRequest(badCategory, "VAL-002");
+        ResultAssert.BadRequest(badCategory, "VAL-001");
         ResultAssert.NotFound(missingRow);
     }
 

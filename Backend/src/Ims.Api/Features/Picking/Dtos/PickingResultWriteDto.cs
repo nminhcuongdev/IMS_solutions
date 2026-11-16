@@ -6,4 +6,5 @@ public sealed record PickingResultWriteDto(
     string? SoNo = null,
     string? SerialNo = null,
     string? LocationCode = null,
-    string? LotNo = null);
+    string? LotNo = null,
+    string? RequestId = null);

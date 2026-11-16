@@ -51,7 +51,7 @@ public class TransferTests
 
         var r = await new InventoryService(t.Db).TransferStockAsync(new StockTransferDto("IT-01", "0000000001", "W1_ZA"), InventoryTestData.User(), default);
 
-        ResultAssert.BadRequest(r, "LOC-001");
+        ResultAssert.BadRequest(r, "VAL-001");
         Assert.Empty(t.Db.LocationTransfers);
     }
 
@@ -73,7 +73,7 @@ public class TransferTests
 
         var r = await new InventoryService(t.Db).TransferStockAsync(new StockTransferDto("IT-01", "0000000001", "  "), InventoryTestData.User(), default);
 
-        ResultAssert.BadRequest(r, "LOC-001");
+        ResultAssert.BadRequest(r, "VAL-001");
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class TransferTests
 
         var r = await new InventoryService(t.Db).TransferStockAsync(new StockTransferDto("IT-01", "0000000001", "W2"), InventoryTestData.User(), default);
 
-        ResultAssert.BadRequest(r, "LOC-001");
+        ResultAssert.BadRequest(r, "VAL-001");
         Assert.Equal("W1_ZA", (await t.Db.Stocks.AsNoTracking().SingleAsync()).LocationCode);
     }
 }

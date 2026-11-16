@@ -1,4 +1,4 @@
-using Ims.Api.Features.Alerts;
+﻿using Ims.Api.Features.Alerts;
 using Ims.Api.Features.Auth;
 using Ims.Api.Features.Defaults;
 using Ims.Api.Features.Devices;
@@ -15,6 +15,7 @@ using Ims.Api.Features.Locations;
 using Ims.Api.Features.Menu;
 using Ims.Api.Features.Partners;
 using Ims.Api.Features.Permissions;
+using Ims.Api.Features.Roles;
 using Ims.Api.Features.Picking;
 using Ims.Api.Features.Print;
 using Ims.Api.Features.Processes;
@@ -38,6 +39,7 @@ public static class FeatureServiceRegistration
     public static IServiceCollection AddFeatureServices(this IServiceCollection services)
     {
         services.AddScoped<IAlertService, AlertService>();
+        services.AddSingleton<Ims.Api.Contracts.IClock, Ims.Api.Contracts.LocalClock>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IDefaultValueService, DefaultValueService>();
         services.AddScoped<IDeviceService, DeviceService>();
@@ -56,12 +58,13 @@ public static class FeatureServiceRegistration
         services.AddScoped<IItemService, ItemService>();
         services.AddScoped<IItemGroupService, ItemGroupService>();
         services.AddScoped<ILanguageDataService, LanguageDataService>();
+        services.AddSingleton<IMessageCatalog, MessageCatalog>();
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IMenuService, MenuService>();
         services.AddScoped<IPartnerService, PartnerService>();
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<PermissionEvaluator>();
-        services.AddScoped<ProductionPermissionFilter>();
+        services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IPickingService, PickingService>();
         services.AddScoped<IPrintService, PrintService>();
         services.AddScoped<IProcessService, ProcessService>();

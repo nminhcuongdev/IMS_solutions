@@ -9,4 +9,6 @@ public sealed record PrintHistoryWriteDto(
     int PackageCount = 1,
     string? Spec = null,
     DateOnly? ScheduledDate = null,
-    bool Reprint = false);
+    bool Reprint = false,
+    Dictionary<string, string>? PrintData = null,
+    string? LayoutFile = null);

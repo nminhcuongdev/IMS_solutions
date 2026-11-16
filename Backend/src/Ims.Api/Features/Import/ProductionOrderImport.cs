@@ -67,7 +67,7 @@ internal sealed class ProductionOrderImport(ImsDbContext db)
             var location = await db.Locations.AsNoTracking().FirstOrDefaultAsync(x => x.LocationCode == locationCode && x.IsActive && !x.IsDeleted, ct);
             if (factory is null || product is null || location is null) { Add(ErrorCatalog.NotFound(factory is null ? V(2) : product is null ? V(3) : V(8))); continue; }
             var productGroup = await db.ItemGroups.AsNoTracking().FirstAsync(x => x.ItemGroupCode == product.ItemGroupCode, ct);
-            if (productGroup.Category is not (ItemGroupCategory.FinishedGoods or ItemGroupCategory.SemiFinished)) { Add(ErrorCatalog.Val009()); continue; }
+            if (productGroup.Category is not (ItemGroupCategory.FinishedGoods or ItemGroupCategory.SemiFinished or ItemGroupCategory.WorkInProgress)) { Add(ErrorCatalog.Val009()); continue; }
             if (!product.IsLotManaged) { Add(ErrorCatalog.Val010()); continue; }
             if (!string.Equals(product.UomCode, V(5), StringComparison.OrdinalIgnoreCase)) { Add(ErrorCatalog.Val008()); continue; }
             var zoneFactory = await db.Zones.Where(x => x.ZoneCode == location.ZoneCode).Select(x => x.FactoryCode).FirstOrDefaultAsync(ct);
@@ -120,7 +120,7 @@ internal sealed class ProductionOrderImport(ImsDbContext db)
             var material = await db.Items.AsNoTracking().FirstOrDefaultAsync(x => x.ItemCode == materialCode && x.IsActive && !x.IsDeleted, ct);
             if (process is null || material is null) { Add(ErrorCatalog.NotFound(process is null ? V(12) : V(13))); continue; }
             var materialGroup = await db.ItemGroups.AsNoTracking().FirstAsync(x => x.ItemGroupCode == material.ItemGroupCode, ct);
-            if (materialGroup.Category is not (ItemGroupCategory.RawMaterials or ItemGroupCategory.SemiFinished or ItemGroupCategory.PurchasedParts or ItemGroupCategory.AuxiliaryMaterials))
+            if (materialGroup.Category is not (ItemGroupCategory.RawMaterials or ItemGroupCategory.SemiFinished or ItemGroupCategory.WorkInProgress or ItemGroupCategory.PurchasedParts or ItemGroupCategory.AuxiliaryMaterials))
             { Add(ErrorCatalog.Val009()); continue; }
             if (!string.Equals(material.UomCode, V(15), StringComparison.OrdinalIgnoreCase)) { Add(ErrorCatalog.Val008()); continue; }
             var scheduleDate = startDate;

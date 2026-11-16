@@ -31,8 +31,8 @@ internal fun stocktakingScanRefusal(
     next: Int,
     itemCode: String,
 ): Pair<String, String>? = when {
-    group == null -> "LOC-003" to "Sổ sách không ghi $itemCode ở ô kệ này."
-    next > group.plannedLabels -> "QTY-002" to "Sổ sách chỉ ghi ${group.plannedLabels} kiện ở ô kệ này."
+    group == null -> "LOC-003" to "The books do not list $itemCode at this shelf."
+    next > group.plannedLabels -> "QTY-002" to "The books list only ${group.plannedLabels} packages at this shelf."
     else -> null
 }
 
@@ -54,9 +54,9 @@ class StocktakingViewModel : ViewModel() {
                             it.copy(
                                 busy = false, session = s, sessionChecked = true,
                                 error = if (s == null) {
-                                    "STK-001" to "Chưa bắt đầu kiểm kê. Hãy bắt đầu trên PC."
+                                    "STK-001" to "Stock-taking has not been started. Please start on PC."
                                 } else {
-                                    "STK-004" to "Kiểm kê đã hoàn thành. Không thể gửi kết quả."
+                                    "STK-004" to "Stock-taking is already completed. Cannot send results."
                                 },
                             )
                         }
@@ -105,7 +105,7 @@ class StocktakingViewModel : ViewModel() {
         if (!s.open || s.busy) return
         val shelf = stocktakingShelfOf(raw)
         if (shelf == null) {
-            _state.update { it.copy(error = "LOC-001" to "Vui lòng quét tem vị trí.") }
+            _state.update { it.copy(error = "LOC-001" to "Please scan the location label.") }
             return
         }
         selectLocation(shelf)
@@ -116,7 +116,7 @@ class StocktakingViewModel : ViewModel() {
         if (_state.value.busy) return
         val loc = _state.value.locationCode
         if (loc.isNullOrBlank()) {
-            _state.update { it.copy(error = "LOC-001" to "Chưa chọn vị trí.") }
+            _state.update { it.copy(error = "LOC-001" to "Please enter a Location.") }
             return
         }
         _state.update { it.copy(busy = true, error = null) }
@@ -139,7 +139,7 @@ class StocktakingViewModel : ViewModel() {
                 .onSuccess { gs -> _state.update { it.copy(groups = gs) } }
                 .onFailure { e ->
                     val p = e.toPair()
-                    if (p.first == "LOC-003") _state.update { it.copy(groups = emptyList()) }
+                    if (p.first == "LOC-003" || p.first == "SCN-003") _state.update { it.copy(groups = emptyList()) }
                     else _state.update { it.copy(error = p) }
                 }
         }
@@ -161,23 +161,23 @@ class StocktakingViewModel : ViewModel() {
         val payload = when (val r = QrPayload.parse(raw)) {
             is QrScan.Ok -> r.payload
             is QrScan.Invalid -> {
-                _state.update { it.copy(error = "SCN-001" to "Mã quét không đúng định dạng.") }
+                _state.update { it.copy(error = "SCN-001" to "The scanned code is not in a valid format.") }
                 return
             }
         }
         val itemCode = payload.itemCode?.trim().orEmpty()
         if (itemCode.isEmpty()) {
-            _state.update { it.copy(error = "SCN-006" to "Nhãn không có mã hàng.") }
+            _state.update { it.copy(error = "SCN-006" to "The label has no item code.") }
             return
         }
         if (!itemCode.equals(g.itemCode, ignoreCase = true)) {
-            _state.update { it.copy(error = "SCN-006" to "Nhãn $itemCode không thuộc dòng đang đếm.") }
+            _state.update { it.copy(error = "SCN-006" to "Label $itemCode does not belong to the line being counted.") }
             return
         }
         val lot = payload.lotNo?.trim().orEmpty()
         val want = g.lotNo?.trim().orEmpty()
         if (want.isNotEmpty() && lot.isNotEmpty() && !lot.equals(want, ignoreCase = true)) {
-            _state.update { it.copy(error = "SCN-006" to "Lô $lot không khớp lô $want.") }
+            _state.update { it.copy(error = "SCN-006" to "Lot $lot does not match lot $want.") }
             return
         }
 
@@ -198,7 +198,7 @@ class StocktakingViewModel : ViewModel() {
         val payload = when (val r = QrPayload.parse(raw)) {
             is QrScan.Ok -> r.payload
             is QrScan.Invalid -> {
-                _state.update { it.copy(error = "SCN-001" to "Mã quét không đúng định dạng.") }
+                _state.update { it.copy(error = "SCN-001" to "The scanned code is not in a valid format.") }
                 return
             }
         }
@@ -208,7 +208,7 @@ class StocktakingViewModel : ViewModel() {
         }
         val itemCode = payload.itemCode?.trim().orEmpty()
         if (itemCode.isEmpty()) {
-            _state.update { it.copy(error = "SCN-006" to "Nhãn không có mã hàng.") }
+            _state.update { it.copy(error = "SCN-006" to "The label has no item code.") }
             return
         }
         val lot = payload.lotNo?.trim()?.takeIf { it.isNotBlank() }
@@ -232,7 +232,7 @@ class StocktakingViewModel : ViewModel() {
                             busy = false,
                             groups = st.groups.map { if (it.key == updated.key) updated else it },
                             toast = HtMsg(
-                                "htStSavedN", "Đã ghi {0}/{1} kiện cho {2}.",
+                                "htStSavedN", "Saved {0}/{1} packages for {2}.",
                                 updated.scannedLabels, updated.plannedLabels, updated.itemCode,
                             ),
                         )
@@ -255,12 +255,12 @@ class StocktakingViewModel : ViewModel() {
         val loc = s.locationCode ?: return
         val n = s.counted.trim().toIntOrNull()
         if (n == null || n < 0) {
-            _state.update { it.copy(error = "QTY-001" to "Vui lòng nhập số lượng hợp lệ (từ 0 trở lên).") }
+            _state.update { it.copy(error = "QTY-001" to "Please enter a valid quantity (0 or more).") }
             return
         }
         if (n > g.plannedLabels) {
             _state.update {
-                it.copy(error = "QTY-002" to "Sổ sách chỉ ghi ${g.plannedLabels} kiện ở ô kệ này.")
+                it.copy(error = "QTY-002" to "The books list only ${g.plannedLabels} packages at this shelf.")
             }
             return
         }
@@ -275,7 +275,7 @@ class StocktakingViewModel : ViewModel() {
                             saved = true,
                             groups = st.groups.map { if (it.key == updated.key) updated else it },
                             toast = HtMsg(
-                                "htStSavedN", "Đã ghi {0}/{1} kiện cho {2}.",
+                                "htStSavedN", "Saved {0}/{1} packages for {2}.",
                                 updated.scannedLabels, updated.plannedLabels, updated.itemCode,
                             ),
                         )

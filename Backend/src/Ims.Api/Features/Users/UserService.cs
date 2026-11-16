@@ -43,8 +43,8 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         query = Sort.Apply(query, sort);
         var total = await query.CountAsync(ct);
         var pg = NormalizePage(page); var sz = NormalizePageSize(pageSize);
-        var rows = await query.Skip((pg - 1) * sz).Take(sz).Select(u => Map(u)).ToListAsync(ct);
-        return Outcome.Ok(new ApiListSuccess<UserDto>(rows, new PageMeta(total, pg, sz)));
+        var rows = await query.Skip((pg - 1) * sz).Take(sz).Select(u => new { User = u, RoleName = db.Roles.Where(r => r.RoleCode == u.RoleCode).Select(r => r.RoleName).FirstOrDefault() }).ToListAsync(ct);
+        return Outcome.Ok(new ApiListSuccess<UserDto>(rows.Select(r => Map(r.User, r.RoleName)).ToList(), new PageMeta(total, pg, sz)));
     }
 
     public async Task<ServiceResult> GetAsync(string code, CancellationToken ct)
@@ -52,7 +52,7 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         var u = await db.AppUsers.AsNoTracking().FirstOrDefaultAsync(x => x.UserCode == code && !x.IsDeleted, ct);
         return u is null
             ? Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("User")))
-            : Outcome.Ok(new ApiSuccess<UserDto>(Map(u)));
+            : Outcome.Ok(new ApiSuccess<UserDto>(Map(u, await RoleNameAsync(u.RoleCode, ct))));
     }
 
     public async Task<ServiceResult> CreateAsync(UserWriteDto body, CancellationToken ct)
@@ -64,9 +64,9 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         var code = body.UserCode.Trim();
         if (await db.AppUsers.AnyAsync(u => u.UserCode == code, ct))
             return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        var roleCode = body.RoleCode.Trim();
+        var roleCode = (body.RoleCode ?? "").Trim();
         if (!await db.Roles.AnyAsync(r => r.RoleCode == roleCode && !r.IsDeleted, ct))
-            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Role")));
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("thAuthority", "Authority")));
         if (!string.IsNullOrWhiteSpace(body.FactoryCode)
             && !await db.Factories.AnyAsync(f => f.FactoryCode == body.FactoryCode && !f.IsDeleted, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Factory")));
@@ -89,7 +89,7 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         u.PasswordHash = hasher.HashPassword(u, body.Password);
         db.AppUsers.Add(u);
         await db.SaveChangesAsync(ct);
-        return Outcome.Created($"/masters/users/{u.UserCode}", new ApiSuccess<UserDto>(Map(u)));
+        return Outcome.Created($"/masters/users/{u.UserCode}", new ApiSuccess<UserDto>(Map(u, await RoleNameAsync(u.RoleCode, ct))));
     }
 
     public async Task<ServiceResult> UpdateAsync(string code, UserWriteDto body, CancellationToken ct)
@@ -97,9 +97,9 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         var u = await db.AppUsers.FirstOrDefaultAsync(x => x.UserCode == code && !x.IsDeleted, ct);
         if (u is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("User")));
         if (ValidateName(body.UserName) is { } e) return e;
-        var roleCode = body.RoleCode.Trim();
+        var roleCode = (body.RoleCode ?? "").Trim();
         if (!await db.Roles.AnyAsync(r => r.RoleCode == roleCode && !r.IsDeleted, ct))
-            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Role")));
+            return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("thAuthority", "Authority")));
         if (!string.IsNullOrWhiteSpace(body.FactoryCode)
             && !await db.Factories.AnyAsync(f => f.FactoryCode == body.FactoryCode && !f.IsDeleted, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Factory")));
@@ -118,7 +118,7 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         if (!string.IsNullOrWhiteSpace(body.Password))
             u.PasswordHash = hasher.HashPassword(u, body.Password);
         await db.SaveChangesAsync(ct);
-        return Outcome.Ok(new ApiSuccess<UserDto>(Map(u)));
+        return Outcome.Ok(new ApiSuccess<UserDto>(Map(u, await RoleNameAsync(u.RoleCode, ct))));
     }
 
     public async Task<ServiceResult> DeleteAsync(string code, CancellationToken ct)
@@ -133,11 +133,12 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
     public async Task<ServiceResult> ExportCsvAsync(CancellationToken ct)
     {
         var rows = await db.AppUsers.AsNoTracking().Where(u => !u.IsDeleted).OrderBy(u => u.UserCode).ToListAsync(ct);
+        var roleNames = await db.Roles.AsNoTracking().ToDictionaryAsync(r => r.RoleCode, r => r.RoleName, StringComparer.OrdinalIgnoreCase, ct);
         var sb = new StringBuilder();
-        sb.AppendLine("user_code,user_name,role_code,factory_code,default_language,is_active,remark_1,remark_2,remark_3,remark_4,remark_5");
+        sb.AppendLine("user_code,user_name,role_code,role_name,factory_code,default_language,is_active,remark_1,remark_2,remark_3,remark_4,remark_5");
         foreach (var u in rows)
             sb.Append(Csv(u.UserCode)).Append(',').Append(Csv(u.UserName)).Append(',')
-              .Append(Csv(u.RoleCode)).Append(',').Append(Csv(u.FactoryCode)).Append(',')
+              .Append(Csv(u.RoleCode)).Append(',').Append(Csv(roleNames.GetValueOrDefault(u.RoleCode))).Append(',').Append(Csv(u.FactoryCode)).Append(',')
               .Append(Csv(u.DefaultLanguage)).Append(',').Append(u.IsActive ? "1" : "0").Append(',')
               .Append(Csv(u.Remark1)).Append(',').Append(Csv(u.Remark2)).Append(',')
               .Append(Csv(u.Remark3)).Append(',').Append(Csv(u.Remark4)).Append(',')
@@ -145,8 +146,11 @@ internal sealed class UserService(ImsDbContext db, IPasswordHasher<AppUser> hash
         return CsvFile(sb, "users.csv");
     }
 
-    internal static UserDto Map(AppUser u) => new(
-        u.UserCode, u.UserName, u.RoleCode, u.FactoryCode, u.DefaultLanguage, u.IsActive,
+    private Task<string?> RoleNameAsync(string roleCode, CancellationToken ct) =>
+        db.Roles.AsNoTracking().Where(r => r.RoleCode == roleCode).Select(r => r.RoleName).FirstOrDefaultAsync(ct);
+
+    internal static UserDto Map(AppUser u, string? roleName = null) => new(
+        u.UserCode, u.UserName, u.RoleCode, roleName, u.FactoryCode, u.DefaultLanguage, u.IsActive,
         u.Remark1, u.Remark2, u.Remark3, u.Remark4, u.Remark5,
         u.CreatedAt, u.UpdatedAt);
 }

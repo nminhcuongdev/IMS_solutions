@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Contracts;
@@ -11,7 +12,7 @@ public static class DistributionEndpoints
 
     public static IEndpointRouteBuilder MapDistributionEndpoints(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/distribution").WithTags("Distribution").RequireAuthorization();
+        var g = app.MapGroup("/distribution").WithTags("Distribution").RequireAuthorization().RequirePermission("dist_status.Open");
         g.MapGet("/packages", ListPackagesAsync);
         g.MapPost("/packages", UploadAsync).DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(UploadCeiling))
@@ -26,7 +27,7 @@ public static class DistributionEndpoints
         g.MapPost("/rules/{id:int}/resume", ResumeAsync);
         g.MapPost("/rules/{id:int}/retry", RetryAsync);
         g.MapDelete("/rules/{id:int}", DeleteRuleAsync);
-        g.MapGet("/devices", ListDevicesAsync);
+        g.MapGet("/devices", ListDevicesAsync).RequirePermission("dist_status.Open", "m_device.Open");
         g.MapGet("/devices/{code}/history", HistoryAsync);
         g.MapGet("/unknown-devices", UnknownAsync);
         g.MapGet("/audit", AuditAsync);

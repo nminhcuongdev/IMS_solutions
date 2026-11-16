@@ -24,6 +24,7 @@ app.UseCors(CorsExtensions.FrontendPolicy);
 app.UseAuthentication();
 app.UseMiddleware<AuthenticatedAreaMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<Ims.Api.Features.Permissions.AccessMiddleware>();
 
 app.MapImsEndpoints();
 

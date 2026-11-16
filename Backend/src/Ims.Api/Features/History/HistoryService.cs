@@ -7,7 +7,7 @@ using static Ims.Api.Contracts.FieldHelpers;
 
 namespace Ims.Api.Features.History;
 
-internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engine, Print.IPrintTargetResolver targets) : IHistoryService
+internal sealed partial class HistoryService(ImsDbContext db, Print.IMlEngineClient engine, Print.IPrintTargetResolver targets) : IHistoryService
 {
     private readonly SortMap<Domain.History.PrintHistory> PrintSort =
         new SortMap<Domain.History.PrintHistory>()
@@ -103,7 +103,8 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
                h.No, h.CreatedAt, h.Category, h.DocNo, h.ScheduledDate,
                h.ItemCode, i != null ? i.ItemName : null, h.Qty, h.UomCode, h.PackageCount,
                h.Spec, h.Status, s != null ? s.StatusNameLang1 : null, h.CreatedBy,
-               u != null ? u.UserName : null);
+               u != null ? u.UserName : null,
+               h.LayoutFile != null || ReprintableCategories.Contains(h.Category), h.ReprintOfNo);
 
     public async Task<ServiceResult> ListPrintAsync(
         CancellationToken ct, DateOnly? dateFrom = null, DateOnly? dateTo = null, string? category = null,
@@ -121,7 +122,8 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
         PrintHistoryWriteDto body, ClaimsPrincipal user, CancellationToken ct)
     {
         var category = NullIfBlank(body.Category)?.Trim();
-        if (category is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001()));
+        if (category is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("thCategory", "Category")));
+        if (!RecordedCategories.Contains(category)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val005()));
         if (body.Qty is not { } qty || qty <= 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
@@ -147,6 +149,8 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
             Spec = NullIfBlank(body.Spec)?.Trim(),
             Status = body.Reprint ? ReprintedStatus : PrintedStatus,
             CreatedBy = user.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+            PrintData = Snapshot(body.PrintData, body.Reprint),
+            LayoutFile = NullIfBlank(body.LayoutFile)?.Trim(),
         };
         db.PrintHistories.Add(row);
         await db.SaveChangesAsync(ct);
@@ -156,50 +160,6 @@ internal sealed class HistoryService(ImsDbContext db, Print.IMlEngineClient engi
         return Outcome.Created($"/print-history?q={row.DocNo}", new ApiSuccess<PrintHistoryDto>(dto!));
     }
 
-    public async Task<ServiceResult> ReprintAsync(
-        long no, PrintReprintRequest body, ClaimsPrincipal user, CancellationToken ct)
-    {
-        var source = await db.PrintHistories.AsNoTracking().FirstOrDefaultAsync(h => h.No == no, ct);
-        if (source is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Print history")));
-        if (body.Count < 1) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
-
-        var baseCategory = source.Category.EndsWith(ReprintSuffix, StringComparison.Ordinal)
-            ? source.Category[..^ReprintSuffix.Length]
-            : source.Category;
-        var (target, refused) = await targets.ResolveAsync(
-            targets.LayoutKeyFor(baseCategory), body.DeviceCode, ct);
-        if (refused is not null) return refused;
-
-        try
-        {
-            await engine.PrintAsync(target!.Value.LayoutFile, target.Value.Setting, body.Fields, body.Count, ct);
-        }
-        catch (Exception e) when (e is Print.MlEngineException or HttpRequestException or TaskCanceledException)
-        {
-            return Outcome.Json(new ApiError(ErrorCatalog.Prn002()), statusCode: 500);
-        }
-
-        var row = new Domain.History.PrintHistory
-        {
-            Category = baseCategory + ReprintSuffix,
-            CreatedAt = DateTime.Now,
-            DocNo = source.DocNo,
-            ScheduledDate = source.ScheduledDate,
-            ItemCode = source.ItemCode,
-            Qty = source.Qty,
-            UomCode = source.UomCode,
-            PackageCount = body.Count,
-            Spec = body.DeviceCode.Trim(),
-            Status = ReprintedStatus,
-            CreatedBy = user.FindFirst(ClaimTypes.NameIdentifier)?.Value,
-        };
-        db.PrintHistories.Add(row);
-        await db.SaveChangesAsync(ct);
-
-        var dto = await PrintProjected(db, db.PrintHistories.AsNoTracking().Where(h => h.No == row.No))
-            .FirstOrDefaultAsync(ct);
-        return Outcome.Created($"/print-history?q={row.DocNo}", new ApiSuccess<PrintHistoryDto>(dto!));
-    }
 
     private const string ReprintSuffix = "Reprint";
 

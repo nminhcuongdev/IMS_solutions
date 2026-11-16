@@ -2,14 +2,18 @@ import { ApiCallError, type ApiError, type ApiListSuccess, type ApiSuccess } fro
 
 function resolveApiBase(): string {
   const explicit = (import.meta.env.VITE_API_BASE as string | undefined)?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
+  if (explicit) {
+    const clean = explicit.replace(/\/+$/, "");
+    return clean.startsWith("/") ? `${window.location.origin}${clean}` : clean;
+  }
 
   const port = (import.meta.env.VITE_API_PORT as string | undefined)?.trim() || "8091";
   const { protocol, hostname } = window.location;
   return `${protocol}//${hostname}:${port}`;
 }
 
-const BASE = resolveApiBase();
+export const API_BASE = resolveApiBase();
+const BASE = API_BASE;
 const TOKEN_KEY = "ims.token";
 
 let onUnauthorized: (() => void) | null = null;
@@ -92,7 +96,7 @@ export async function apiDownload(path: string): Promise<{ blob: Blob; filename:
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]) {
-  const url = new URL(path, BASE);
+  const url = new URL(`${BASE}${path.startsWith("/") ? path : `/${path}`}`);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v === undefined || v === null || v === "") continue;

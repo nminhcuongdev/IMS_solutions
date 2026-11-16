@@ -12,7 +12,8 @@ public class PermissionConfig : IEntityTypeConfiguration<Permission>
         b.HasKey(x => x.PermissionCode);
         b.Property(x => x.PermissionCode).HasColumnName("permission_code").Code(30);
         b.Property(x => x.FunctionCode).HasColumnName("function_code").Code(30);
-        b.Property(x => x.Action).HasColumnName("action").Code(30);
+        b.Property(x => x.ActionType).HasColumnName("action_type").Code(30);
+        b.HasIndex(x => new { x.FunctionCode, x.ActionType }).IsUnique();
         b.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
         b.MapAudit();
         b.MapSoftDelete();

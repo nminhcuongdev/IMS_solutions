@@ -90,14 +90,14 @@ public class TraceabilityServiceTests
         t.Db.Processes.Add(new Ims.Domain.Masters.Process { ProcessCode = "CUT", ProcessName = "Cut", CreatedAt = now });
         t.Db.ProductionOrders.Add(new ProductionOrder { ProductionOrderNo = "MO1", FactoryCode = "FAC-01", OutputItemCode = "FG1", StorageLocationCode = "W1_ZA", OutputLotNo = "FGLOT", PlannedQty = 1, UomCode = "pcs", CreatedBy = "admin" });
         t.Db.ProductionOrderLines.Add(new ProductionOrderLine { ProductionOrderNo = "MO1", LineNo = 1, ProcessCode = "CUT", ItemCode = "IT-01", PlannedQty = 2, UomCode = "pcs", CreatedBy = "admin" });
-        var consumption = new ProductionConsumption { RequestId = "c1", ProductionOrderNo = "MO1", LineNo = 1, ItemCode = "IT-01", LotNo = "LOT-A", SerialNo = "SN-1", Qty = 2, LocationCode = "W1_ZA", FactoryCode = "FAC-01", CreatedBy = "admin", CreatedAt = now };
-        t.Db.ProductionConsumptions.Add(consumption);
-        t.Db.ProductionOutputs.Add(new ProductionOutput { RequestId = "o1", ProductionOrderNo = "MO1", ItemCode = "FG1", LotNo = "FGLOT", SerialNo = "PRD-1-1", Qty = 1, LocationCode = "W1_ZA", CreatedBy = "admin", CreatedAt = now });
+        var consumption = new ProductionResult { ResultType = ProductionResultType.Consume, RequestId = "c1", ProductionOrderNo = "MO1", LineNo = 1, ItemCode = "IT-01", LotNo = "LOT-A", SerialNo = "SN-1", Qty = 2, LocationCode = "W1_ZA", FactoryCode = "FAC-01", CreatedBy = "admin", CreatedAt = now };
+        t.Db.ProductionResults.Add(consumption);
+        t.Db.ProductionResults.Add(new ProductionResult { ResultType = ProductionResultType.Output, FactoryCode = "FAC-01", RequestId = "o1", ProductionOrderNo = "MO1", ItemCode = "FG1", LotNo = "FGLOT", SerialNo = "PRD-1-1", Qty = 1, LocationCode = "W1_ZA", CreatedBy = "admin", CreatedAt = now });
         t.Db.Stocks.Add(new Stock { ItemCode = "FG1", SerialNo = "PRD-1-1", FactoryCode = "FAC-01", LocationCode = "W1_ZA", LotNo = "FGLOT", StockQty = 1, AvailableQty = 1, UpdatedAt = now });
         t.Db.Stocks.Single(x => x.ItemCode == "IT-01").StockQty = 5;
         t.Db.Stocks.Single(x => x.ItemCode == "IT-01").Recalculate();
         await t.Db.SaveChangesAsync();
-        t.Db.ProductionReturns.Add(new ProductionReturn { RequestId = "r1", ProductionOrderNo = "MO1", LineNo = 1, ConsumptionNo = consumption.No, ItemCode = "IT-01", LotNo = "LOT-A", SerialNo = "SN-1", Qty = 1, LocationCode = "W1_ZA", FactoryCode = "FAC-01", CreatedBy = "admin", CreatedAt = now });
+        t.Db.ProductionResults.Add(new ProductionResult { ResultType = ProductionResultType.Return, RequestId = "r1", ProductionOrderNo = "MO1", LineNo = 1, ItemCode = "IT-01", LotNo = "LOT-A", SerialNo = "SN-1", Qty = 1, LocationCode = "W1_ZA", FactoryCode = "FAC-01", CreatedBy = "admin", CreatedAt = now });
         await t.Db.SaveChangesAsync();
         var service = new TraceabilityService(t.Db);
         var forward = ResultAssert.Ok<ApiSuccess<TraceResultDto>>(await service.ForwardAsync("IT-01", "LOT-A", default)).Data!;

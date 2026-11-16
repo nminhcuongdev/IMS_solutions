@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,9 +9,9 @@ public static class LanguageDataEndpoints
     public static IEndpointRouteBuilder MapLanguageDataEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/language-data").WithTags("Language Data").RequireAuthorization();
-        g.MapGet("", ListAsync);
-        g.MapPut("", SaveAsync);
-        g.MapGet("/export.csv", ExportCsvAsync);
+        g.MapGet("", ListAsync).RequirePermission("lang_data.Open");
+        g.MapPut("", SaveAsync).RequirePermission("lang_data.Open");
+        app.MapGet("/export/language-data", ExportCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("lang_data.Export");
         g.MapGet("/labels", LabelsAsync).AllowAnonymous();
         app.MapGet("/languages", LanguagesAsync).WithTags("Language Data").AllowAnonymous();
         return app;

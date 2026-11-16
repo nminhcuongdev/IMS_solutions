@@ -67,3 +67,46 @@ data class StockScanReadResultDto(
     val scanned: Int = 0,
     val total: Int = 0,
 )
+
+@Serializable
+data class EpcLookupRequest(
+    val epcs: List<String>,
+)
+
+@Serializable
+data class RegisteredEpcDto(
+    val epc: String = "",
+    val itemCode: String? = null,
+    val itemName: String? = null,
+)
+
+@Serializable
+data class EpcPrefixDto(
+    val prefix: String = "",
+    val itemCode: String? = null,
+    val itemName: String? = null,
+)
+
+@Serializable
+data class EpcLookupResultDto(
+    val registered: List<RegisteredEpcDto> = emptyList(),
+    val prefixes: List<EpcPrefixDto> = emptyList(),
+)
+
+@Serializable
+data class EpcRegisterGroup(
+    val itemCode: String,
+    val itemName: String,
+    val epcs: List<String>,
+)
+
+@Serializable
+data class EpcRegisterRequest(
+    val groups: List<EpcRegisterGroup>,
+)
+
+@Serializable
+data class EpcRegisterResultDto(
+    val registered: Int = 0,
+    val parts: Int = 0,
+)

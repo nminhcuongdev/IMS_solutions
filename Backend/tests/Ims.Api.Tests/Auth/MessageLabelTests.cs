@@ -10,15 +10,15 @@ public class MessageLabelTests
 {
     private static readonly string[] EmittedCodes =
     {
-        "VAL-001", "VAL-002", "VAL-005", "SEL-002", "SEL-006", "QTY-001", "RSN-001",
-        "DUP-001", "DUP-002", "LOT-001", "LOT-002", "LOC-001", "SCN-006",
+        "VAL-001", "VAL-001", "VAL-005", "SEL-004", "SEL-006", "QTY-001", "RSN-001",
+        "DUP-001", "DUP-002", "VAL-001", "SCN-003", "VAL-001", "SCN-005",
         "AUTH-001", "AUTH-003", "AUTH-004", "AUTH-005", "SYS-004", "SYS-404",
     };
 
     private static readonly string[] DeviceCodes =
     {
         "AUTH-001", "AUTH-002", "NET-002", "PRN-001", "SCN-001", "SCN-005", "SCN-007",
-        "STK-005", "VAL-004", "QTY-001", "RSN-001", "LOC-001", "LOT-001", "SYS-404",
+        "STK-005", "VAL-004", "QTY-001", "RSN-001", "VAL-001", "VAL-001", "SYS-404",
     };
 
     public static TheoryData<string> AllCodes()
@@ -70,7 +70,7 @@ public class MessageLabelTests
     {
         Assert.Equal("QTY-001", ErrorCatalog.Qty001().Code);
         Assert.Equal("RSN-001", ErrorCatalog.Rsn001().Code);
-        Assert.Equal("LOC-001", ErrorCatalog.Loc001().Code);
+        Assert.Equal("VAL-001", ErrorCatalog.Loc001().Code);
         Assert.Equal("DUP-001", ErrorCatalog.Dup001().Code);
         Assert.Equal("VAL-001", ErrorCatalog.Val001().Code);
         Assert.Equal("SYS-404", ErrorCatalog.NotFound("Stock").Code);

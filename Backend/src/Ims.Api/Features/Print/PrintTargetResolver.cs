@@ -11,6 +11,7 @@ internal sealed class PrintTargetResolver(ImsDbContext db) : IPrintTargetResolve
         ["ReceivingQR"] = "Layout_IMS/ReceivingQR_24dpmm.mllayx",
         ["ReturnsQR"] = "Layout_IMS/ReturnsQR_24dpmm.mllayx",
         ["ShippingQR"] = "Layout_IMS/ShippingQR_24dpmm.mllayx",
+        ["ProductionQR"] = "Layout_IMS/ProductionQR_24dpmm.mllayx",
     };
 
     public string LayoutKeyFor(string category) => category switch
@@ -18,6 +19,7 @@ internal sealed class PrintTargetResolver(ImsDbContext db) : IPrintTargetResolve
         "Receiving" => "ReceivingQR",
         "Returns" => "ReturnsQR",
         "Shipping" => "ShippingQR",
+        "Production" => "ProductionQR",
         _ => "",
     };
 

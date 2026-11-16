@@ -5,16 +5,17 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class HtLang(val code: String, val name: String, val icon: String? = null) {
     companion object {
+        val EN = HtLang("en", "English")
         val VI = HtLang("vi", "Tiếng Việt")
 
-        val BUILT_IN = listOf(HtLang("en", "English"), HtLang("ja", "日本語"), VI)
+        val BUILT_IN = listOf(EN, HtLang("ja", "日本語"), VI)
 
         fun of(code: String?, list: List<HtLang>): HtLang {
             val wanted = code?.trim().orEmpty()
             return list.firstOrNull { it.code.equals(wanted, ignoreCase = true) }
-                ?: list.firstOrNull { it.code == VI.code }
+                ?: list.firstOrNull { it.code == EN.code }
                 ?: list.firstOrNull()
-                ?: VI
+                ?: EN
         }
     }
 }

@@ -1,3 +1,4 @@
+import { useScreenCan } from "@/auth/PermissionContext";
 import { fmtDateTime } from "@/lib/dateFormat";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -22,13 +23,14 @@ const COLS = 13;
 
 const ACTIONS = [
   "Receiving", "Shipping", "Picking", "Returns",
-  "Adjust", "Hold", "HoldRelease", "Disposal",
-  "Consume", "Produce", "ProdReturn", "ProdPick", "ProdReceipt", "ProdLabel",
+  "Adjust", "Hold", "HoldRelease", "Disposal", "RestoreDisposal", "StocktakeDiff", "StocktakeMove",
+  "Consume", "Produce", "ProdReturn", "ProdReverse", "ProdPick", "ProdReceipt", "ProdLabel",
 ] as const;
 
 const ACTION_FALLBACK: Record<string, string> = {
   Receiving: "Receiving", Shipping: "Shipping", Picking: "Picking", Returns: "Returns",
   Adjust: "Adjust", Hold: "Hold", HoldRelease: "Release Hold", Disposal: "Disposal",
+  RestoreDisposal: "Restore Disposal", StocktakeDiff: "Stocktaking difference", StocktakeMove: "Stocktaking move", ProdReverse: "Production: Reversal",
   Consume: "Production: Material input", Produce: "Production: Completion", ProdReturn: "Production: Return", ProdPick: "Production: Picking", ProdReceipt: "Production: Material receipt", ProdLabel: "Production: Label issue",
 };
 
@@ -41,6 +43,10 @@ const ACTION_BADGE: Record<string, string> = {
   Hold: "badge-ng",
   HoldRelease: "badge-ok",
   Disposal: "badge-ng",
+  RestoreDisposal: "badge-ok",
+  StocktakeDiff: "badge-warn",
+  StocktakeMove: "badge-info",
+  ProdReverse: "badge-warn",
   Consume: "badge-warn", Produce: "badge-ok", ProdReturn: "badge-info", ProdPick: "badge-info", ProdReceipt: "badge-info", ProdLabel: "badge-info",
 };
 
@@ -52,7 +58,7 @@ const ACTION_KEY: Record<string, string> = {
 const dash = (v: string | number | null | undefined) =>
   v === null || v === undefined || v === "" ? "—" : String(v);
 
-export function WorkHistoryPage() {
+export function WorkHistoryPage() { const can = useScreenCan();
   const t = useT();
   const toast = useToast();
   const [page, setPage] = useUrlNumber("page", 1);
@@ -164,12 +170,12 @@ export function WorkHistoryPage() {
 
         <div className="search-btns">
           <SearchButton onClick={search} />
-          <button className="btn btn-special" disabled={selected.size === 0 || busy}
+          {can("RestoreDisposal") && <button className="btn btn-special" disabled={selected.size === 0 || busy}
             title={t("restoreSkipNote", "Only Disposal rows not yet restored are put back.")}
             onClick={onRestore}>
             <svg className="ic" viewBox="0 0 24 24"><path d="M12 5V2L7 7l5 5V9a5 5 0 1 1-5 5H5a7 7 0 1 0 7-9z" /></svg>
             {" "}<span>{t("btnRestoreDisposal", "Restore to Inventory")}</span>
-          </button>
+          </button>}
           <CsvButton onClick={onExport} />
         </div>
       </div>

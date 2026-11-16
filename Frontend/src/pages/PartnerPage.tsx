@@ -57,7 +57,7 @@ export function PartnerPage() {
 
   return (
     <div className="pg on">
-      <CommonToolbar
+      <CommonToolbar fn="m_partner"
         searchDraft={qDraft} onSearchDraftChange={setQDraft}
         onSearch={() => setPage(1)}
         onNew={() => { setModal("new"); setTarget(null); }}

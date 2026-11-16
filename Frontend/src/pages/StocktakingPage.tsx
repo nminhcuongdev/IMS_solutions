@@ -1,3 +1,4 @@
+import { useScreenCan } from "@/auth/PermissionContext";
 import { CsvButton, SearchButton } from "@/lib/Buttons";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
@@ -31,7 +32,7 @@ const dash = (v: string | number | null | undefined) =>
 const stamp = (v: string | null) =>
   v ? new Date(v).toLocaleString("sv-SE").replace("T", " ").slice(0, 19).replace(/-/g, "/") : "—";
 
-export function StocktakingPage() {
+export function StocktakingPage() { const can = useScreenCan();
   const t = useT();
   const toast = useToast();
   const [page, setPage] = useUrlNumber("page", 1);
@@ -220,12 +221,12 @@ export function StocktakingPage() {
           </span>
         </div>
         <div className="ml-auto flex gap-1.5">
-          <button className="btn btn-success" disabled={running || busy}
-            onClick={() => setStartModal(true)}>{t("slStart", "Start")}</button>
-          <button className="btn btn-special" disabled={s?.status !== ST_IN_PROGRESS || busy}
-            onClick={onComplete}>{t("slCompleteBtn", "Complete")}</button>
-          <button className="btn btn-primary" disabled={s?.status !== ST_COMPLETED || busy}
-            onClick={() => setFinalizeModal(true)}>{t("slFinalize", "Finalize")}</button>
+          {can("Start") && <button className="btn btn-success" disabled={running || busy}
+            onClick={() => setStartModal(true)}>{t("slStart", "Start")}</button>}
+          {can("Complete") && <button className="btn btn-special" disabled={s?.status !== ST_IN_PROGRESS || busy}
+            onClick={onComplete}>{t("slCompleteBtn", "Complete")}</button>}
+          {can("Finalize") && <button className="btn btn-primary" disabled={s?.status !== ST_COMPLETED || busy}
+            onClick={() => setFinalizeModal(true)}>{t("slFinalize", "Finalize")}</button>}
         </div>
       </div>
 
@@ -335,7 +336,7 @@ export function StocktakingPage() {
                   <td>{dash(r.unit)}</td>
                   <td>{r.locationCode}</td>
                   <td>{dash(r.lotNo)}</td>
-                  <td className="text-left">{t(r.statusLabelKey, "Normal")}</td>
+                  <td className="text-left">{t(r.statusLabelKey, "Normal")}{r.movedAfterStart ? ` · ${t("slMovedDuring", "Moved during stocktaking")}` : ""}</td>
                   <td className="text-left">
                     {r.isScanned ? t("slScannedYes", "Scanned") : t("slFilterNotScanned", "Not Yet Scanned")}
                   </td>

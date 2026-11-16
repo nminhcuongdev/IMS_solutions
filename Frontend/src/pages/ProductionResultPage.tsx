@@ -1,5 +1,5 @@
+import { useScreenCan } from "@/auth/PermissionContext";
 import { useState } from "react";
-import { getCurrentPermissions } from "@/api/permissions";
 import { exportProductionResults, getProductionOrder, getProductionWorks, listProductionResults, reverseProduction, type ProductionFg, type ProductionWork } from "@/api/production";
 import { getTrace, type TraceNode } from "@/api/traceability";
 import { listReasons } from "@/api/reasons";
@@ -19,7 +19,7 @@ const typeKeys: Record<string, [string, string]> = { picking: ["prdTypePick", "M
 
 const serialText = (f: ProductionFg) => f.serialFrom ? (f.serialCount > 1 ? `${f.serialFrom} … ${f.serialTo} (${f.serialCount})` : `${f.serialFrom} (1)`) : String(f.serialCount);
 
-export function ProductionResultPage() {
+export function ProductionResultPage() { const can = useScreenCan();
   const t = useT(); const toast = useToast();
   const [view, setView] = useState<"fg" | "work">("fg");
   const [draft, setDraft] = useState({ type: "", orderNo: "", itemCode: "", itemName: "", lotNo: "", from: "", to: "" });
@@ -29,8 +29,7 @@ export function ProductionResultPage() {
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(50);
   const [selected, setSelected] = useState<ProductionFg | ProductionWork | null>(null);
   const [detail, setDetail] = useState<ProductionFg | null>(null); const [reverseOpen, setReverseOpen] = useState(false);
-  const { data: perms } = useFetch("currentPermissions", getCurrentPermissions);
-  const canReverse = !!perms && (perms.isSuperAdmin || perms.functions.some(f => f.functionCode === "prd_result" && f.actions.some(a => a.toLowerCase() === "reverse")));
+  const canReverse = can("Reverse");
   const filters = { view, type: view === "work" ? query.type : undefined, orderNo: query.orderNo, itemCode: query.itemCode, itemName: query.itemName, lotNo: query.lotNo, dateFrom: dates ? query.from : undefined, dateTo: dates ? query.to : undefined, showReversed, page, pageSize };
   const { data, loading, error, reload, refresh } = useFetch(qs("productionResult", filters), () => listProductionResults(filters));
   const rows = data?.data ?? [];

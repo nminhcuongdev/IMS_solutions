@@ -60,7 +60,7 @@ class ProductionRepository {
             ApiClient.call {
                 printLabel(
                     PrintLabelRequest(
-                        layoutKey = "ReceivingQR",
+                        layoutKey = "ProductionQR",
                         deviceCode = printerDeviceCode,
                         history = PrintHistoryRequest(
                             category = "Production",
@@ -71,15 +71,19 @@ class ProductionRepository {
                             spec = printerDeviceCode,
                         ),
                         fields = mapOf(
-                            "PONo" to order.productionOrderNo,
-                            "SupplierCode" to "",
-                            "SupplierName" to "",
+                            "ProductionOrderNo" to order.productionOrderNo,
+                            "ProductionLotNo" to (order.productionLotNo ?: ""),
                             "Item Code" to item.itemCode,
                             "Item Name" to (item.itemName ?: item.itemCode),
                             "Unit" to (item.uomCode ?: order.uomCode),
                             "ItemQty" to fmtQty(qty),
                             "Lot" to (lot ?: ""),
-                            "ScheduledDate" to order.plannedStartDate,
+                            "ProductionDate" to (out.createdAt.take(10)),
+                            "ExpiryDate" to (out.expiryDate?.take(10) ?: ""),
+                            "SerialNo" to (out.serialNo ?: ""),
+                            "StorageLocation" to (out.locationCode ?: order.storageLocationCode),
+                            "Factory" to (order.factoryCode ?: ""),
+                            "ReprintFlag" to "",
                             "QR" to LabelQr.product(
                                 gtin = item.barcode,
                                 lotNo = lot,
@@ -103,9 +107,10 @@ class ProductionRepository {
     suspend fun order(no: String): ProductionOrderDetail = ApiClient.call { productionOrder(no) }.data
         ?: throw ApiException("SYS-004", 500, "Empty production order")
 
-    suspend fun lines(no: String): List<ProductionLine> = ApiClient.call { productionLines(no) }.data.orEmpty()
+    suspend fun lines(no: String): List<ProductionLine> = ApiClient.call { productionOrder(no) }.data?.lines.orEmpty()
 
-    suspend fun works(no: String): ProductionWorks = ApiClient.call { productionWorks(no) }.data ?: ProductionWorks()
+    suspend fun works(no: String): ProductionWorks =
+        productionWorksOf(ApiClient.call { productionOrder(no) }.data?.works.orEmpty())
 
     suspend fun stock(itemCode: String): List<StockLine> = ApiClient.call {
         listStockLines(itemCode = itemCode, pageSize = 200)
@@ -124,7 +129,7 @@ class ProductionRepository {
     suspend fun receipt(no: String) {
         val identity = buildJsonObject { put("orderNo", no) }
         write(receiptKey, identity) { id ->
-            ApiClient.call { productionReceipt(no, buildJsonObject { put("requestId", id) }) }
+            ApiClient.call { productionReceipt(no, buildJsonObject { put("type", "receipt"); put("requestId", id) }) }
         }
     }
 
@@ -135,7 +140,7 @@ class ProductionRepository {
         }
         val saved = write(consumptionKey, identity) { id ->
             ApiClient.call { productionConsumption(no, buildJsonObject {
-                put("requestId", id); put("processCode", process); put("itemCode", item)
+                put("type", "consume"); put("requestId", id); put("processCode", process); put("itemCode", item)
                 put("lotNo", lot); put("qty", qty); put("lineNo", lineNo)
             }) }
         }
@@ -149,7 +154,7 @@ class ProductionRepository {
         val identity = buildJsonObject { put("orderNo", no); put("itemCode", item); put("lotNo", lot); put("qty", qty) }
         write(returnKey, identity) { id ->
             ApiClient.call { productionReturn(no, buildJsonObject {
-                put("requestId", id); put("itemCode", item); put("lotNo", lot); put("qty", qty)
+                put("type", "return"); put("requestId", id); put("itemCode", item); put("lotNo", lot); put("qty", qty)
             }) }
         }
     }
@@ -162,7 +167,7 @@ class ProductionRepository {
         val id = outputKey.idFor(identity)
         return try {
             val result = ApiClient.call { productionOutput(no, buildJsonObject {
-                put("requestId", id); put("qty", qty); put("complete", complete)
+                put("type", "output"); put("requestId", id); put("qty", qty); put("complete", complete)
                 put("expiryDate", expiryDate); put("lotNo", lotNo)
             }) }.data ?: throw ApiException("SYS-004", 500, "Empty production result")
             outputRequestId = id
@@ -178,7 +183,7 @@ class ProductionRepository {
         val identity = buildJsonObject { put("orderNo", no); put("outputRequestId", outputId) }
         write(labelKey, identity) { id ->
             ApiClient.call { productionLabel(no, buildJsonObject {
-                put("requestId", id); put("outputRequestId", outputId)
+                put("type", "label"); put("requestId", id); put("outputRequestId", outputId)
             }) }
         }
     }

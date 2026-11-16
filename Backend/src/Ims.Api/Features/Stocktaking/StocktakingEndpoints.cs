@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -8,17 +9,18 @@ public static class StocktakingEndpoints
 {
     public static IEndpointRouteBuilder MapStocktakingEndpoints(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/stocktaking").WithTags("Stocktaking").RequireAuthorization();
-        g.MapGet("/session", GetSessionAsync);
-        g.MapPost("/session/start", StartAsync);
-        g.MapPost("/session/complete", CompleteAsync);
-        g.MapPost("/session/finalize", FinalizeAsync);
-        g.MapGet("/labels", ListLabelsAsync);
-        g.MapGet("/labels/export.csv", ExportLabelsCsvAsync);
-        g.MapGet("/items", ListItemsAtLocationAsync);
-        g.MapPost("/result", SaveResultAsync);
-        g.MapGet("/history", ListHistoryAsync);
-        g.MapGet("/history/export.csv", ExportHistoryCsvAsync);
+        var g = app.MapGroup("/stocktaking").WithTags("Stocktaking").RequireAuthorization().RequireModule("stocktaking");
+        g.MapGet("/session", GetSessionAsync).RequirePermission("st_label.Open", "ht_stocktaking.Open");
+        g.MapPost("/session/start", StartAsync).RequirePermission("st_label.Start");
+        g.MapPost("/session/complete", CompleteAsync).RequirePermission("st_label.Complete");
+        g.MapPost("/session/finalize", FinalizeAsync).RequirePermission("st_label.Finalize");
+        g.MapGet("/labels", ListLabelsAsync).RequirePermission("st_label.Open");
+        app.MapGet("/export/stocktaking-labels", ExportLabelsCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("stocktaking").RequirePermission("st_label.Export");
+        g.MapGet("/items", ListItemsAtLocationAsync).RequirePermission("ht_stocktaking.Open", "st_label.Open");
+        g.MapPost("/result", SaveResultAsync).RequirePermission("ht_stocktaking.Open");
+        g.MapGet("/history", ListHistoryAsync).RequirePermission("st_ref.Open");
+        g.MapGet("/sessions", ListSessionsAsync).RequirePermission("st_ref.Open");
+        app.MapGet("/export/stocktaking-history", ExportHistoryCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("stocktaking").RequirePermission("st_ref.Export");
         return app;
     }
 
@@ -64,10 +66,15 @@ public static class StocktakingEndpoints
 
     private static async Task<IResult> ListHistoryAsync(
         [FromServices] IStocktakingService service, CancellationToken ct, [FromQuery] string? q = null,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] string? sort = null) =>
-        (await service.ListHistoryAsync(ct: ct, q: q, page: page, pageSize: pageSize, sort: sort)).ToHttpResult();
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] string? sort = null,
+        [FromQuery] long? sessionNo = null) =>
+        (await service.ListHistoryAsync(ct: ct, q: q, page: page, pageSize: pageSize, sort: sort, sessionNo: sessionNo)).ToHttpResult();
+
+    private static async Task<IResult> ListSessionsAsync([FromServices] IStocktakingService service, CancellationToken ct) =>
+        (await service.ListSessionsAsync(ct)).ToHttpResult();
 
     private static async Task<IResult> ExportHistoryCsvAsync(
-        [FromServices] IStocktakingService service, CancellationToken ct, [FromQuery] string? q = null) =>
-        (await service.ExportHistoryCsvAsync(ct: ct, q: q)).ToHttpResult();
+        [FromServices] IStocktakingService service, CancellationToken ct, [FromQuery] string? q = null,
+        [FromQuery] long? sessionNo = null) =>
+        (await service.ExportHistoryCsvAsync(ct: ct, q: q, sessionNo: sessionNo)).ToHttpResult();
 }

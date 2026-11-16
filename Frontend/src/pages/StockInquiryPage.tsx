@@ -1,3 +1,4 @@
+import { useScreenCan } from "@/auth/PermissionContext";
 import { fmtDate, fmtDateTime } from "@/lib/dateFormat";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -52,7 +53,7 @@ function stockLevelClass(r: StockRow): string {
 
 type Modal = "adjust" | "disposal" | null;
 
-export function StockInquiryPage() {
+export function StockInquiryPage() { const can = useScreenCan();
   const t = useT();
   const toast = useToast();
   const { flash, flashCls } = useRowFlash();
@@ -195,14 +196,14 @@ export function StockInquiryPage() {
 
         <div className="search-btns">
           <SearchButton onClick={search} />
-          <button className="btn btn-edit" disabled={showGrouped || !target}
+          {can("Adjust") && <button className="btn btn-edit" disabled={showGrouped || !target}
             onClick={() => setModal("adjust")}>
             <img className="icn-img" src={BTN_ICON.edit} alt="" /> <span>{t("invAdjust", "Adjust")}</span>
-          </button>
-          <button className="btn btn-delete" disabled={showGrouped || !target}
+          </button>}
+          {can("Disposal") && <button className="btn btn-delete" disabled={showGrouped || !target}
             onClick={() => setModal("disposal")}>
             <TrashIcon /> <span>{t("actionDisposal", "Disposal")}</span>
-          </button>
+          </button>}
           <CsvButton onClick={onExport} />
         </div>
       </div>

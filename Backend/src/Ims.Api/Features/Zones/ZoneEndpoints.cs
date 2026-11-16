@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,12 +9,12 @@ public static class ZoneEndpoints
     public static IEndpointRouteBuilder MapZoneEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/masters/zones").WithTags("Zones");
-        g.MapGet("", ListAsync);
-        g.MapGet("/{code}", GetAsync);
-        g.MapPost("", CreateAsync);
-        g.MapPut("/{code}", UpdateAsync);
-        g.MapDelete("/{code}", DeleteAsync);
-        g.MapGet("/export.csv", ExportCsvAsync);
+        g.MapGet("", ListAsync).RequireLookup();
+        g.MapGet("/{code}", GetAsync).RequireLookup();
+        g.MapPost("", CreateAsync).RequirePermission("m_zone.New", "m_zone.Copy");
+        g.MapPut("/{code}", UpdateAsync).RequirePermission("m_zone.Edit");
+        g.MapDelete("/{code}", DeleteAsync).RequirePermission("m_zone.Delete");
+        app.MapGet("/export/zones", ExportCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("m_zone.Export");
         return app;
     }
 

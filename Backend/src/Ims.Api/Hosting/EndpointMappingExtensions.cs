@@ -15,6 +15,7 @@ using Ims.Api.Features.Locations;
 using Ims.Api.Features.Menu;
 using Ims.Api.Features.Partners;
 using Ims.Api.Features.Permissions;
+using Ims.Api.Features.Roles;
 using Ims.Api.Features.Picking;
 using Ims.Api.Features.Print;
 using Ims.Api.Features.Processes;
@@ -42,7 +43,7 @@ internal static class EndpointMappingExtensions
         app.MapAuthEndpoints();
         app.MapDistributionDownloadEndpoints();
         var secured = app.MapGroup("");
-        secured.AddEndpointFilter<ProductionPermissionFilter>();
+
         secured.MapMenuEndpoints();
 
         secured.MapDefaultValueEndpoints();
@@ -61,6 +62,7 @@ internal static class EndpointMappingExtensions
 
         secured.MapSettingsEndpoints();
         secured.MapPermissionEndpoints();
+        secured.MapRoleEndpoints();
         secured.MapLanguageDataEndpoints();
         secured.MapHistoryEndpoints();
         secured.MapSuperAdminEndpoints();

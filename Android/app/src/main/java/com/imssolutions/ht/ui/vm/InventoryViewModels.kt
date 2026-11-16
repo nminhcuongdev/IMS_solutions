@@ -57,7 +57,7 @@ class StockListViewModel : ViewModel() {
     fun load() {
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.listItems() }
+            runCatching { repo.listAllItems() }
                 .onSuccess { r -> _state.update { it.copy(loading = false, items = r.data) } }
                 .onFailure { e -> _state.update { it.copy(loading = false, error = e.toPair()) } }
         }

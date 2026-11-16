@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fillBold, fillText } from "@/lib/fillLabel";
 import { createPrintHistory } from "@/api/history";
+import { snapshotOf } from "@/lib/printSnapshot";
 import { getItem, type Item } from "@/api/items";
 import type { ShippingPlanRow } from "@/api/shipping";
 import { useT } from "@/i18n/LanguageContext";
@@ -59,7 +60,7 @@ export function ShippingLabelModal({
     Lot: "",
     ProductionDate: "",
     ScheduledDate: row.scheduledDate ?? "",
-    ReprintFlag: reprint ? "R" : "",
+    ReprintFlag: reprint ? "REPRINT" : "",
     QR: buildShippingLabelQr({
       gtin: items[row.itemCode]?.barcode,
       qty: row.plannedQty,
@@ -86,6 +87,7 @@ export function ShippingLabelModal({
           category: "Shipping", docNo: row.slipNo, itemCode: row.itemCode,
           qty: row.plannedQty, uomCode: row.unit, packageCount: 1,
           spec: lan.deviceCode, scheduledDate: row.scheduledDate, reprint,
+          printData: snapshotOf(fieldsOf(row)), layoutFile: LAYOUT,
         });
         done += 1;
       }
@@ -118,7 +120,7 @@ export function ShippingLabelModal({
             </>
           )}
 
-          <LanPrinterField printers={lan.printers} deviceCode={lan.deviceCode} onChange={lan.setDeviceCode} />
+          <LanPrinterField printers={lan.printers} deviceCode={lan.deviceCode} onChange={lan.setDeviceCode} engineOnline={lan.engineOnline} onRecheck={lan.recheck} />
 
           <div className="text-[12px] text-slate-600 mt-1.5">
             {fillBold(t("labelSummaryPerRow", "Rows: {0} · Labels per row: {1}"), printable.length, 1)}
@@ -157,7 +159,7 @@ export function ShippingLabelModal({
           </button>
           <button className="btn btn-primary" onClick={onPrint}
             disabled={busy || !lan.setting || printable.length === 0}>
-            {busy ? "Đang in…" : t("btnPrint", "Print")}
+            {busy ? t("printing", "Printing…") : t("btnPrint", "Print")}
           </button>
         </div>
       </div>

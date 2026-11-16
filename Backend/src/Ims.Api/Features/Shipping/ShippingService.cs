@@ -283,7 +283,7 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         }
 
         plan.ActualQty = shipped;
-        plan.Status = ShippingStatus.Partial;
+        plan.Status = ShippingStatus.Shipped;
         plan.ReasonCode = reasonCode;
         plan.UpdatedAt = now;
         if (worker is not null) plan.UpdatedBy = worker;
@@ -415,12 +415,16 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         ShippingResultWriteDto body, ClaimsPrincipal user, CancellationToken ct)
     {
         if (ValidateCode(body.ItemCode) is { } e1) return e1;
+        var requestId = RequestReplays.Normalize(body.RequestId);
+        if (RequestReplays.Invalid(requestId) is { } badId) return badId;
+        if (await RequestReplays.FindAsync(db, requestId, ct) is { } replay) return replay;
         if (body.Qty is not { } qty || qty < 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
         var itemCode = body.ItemCode.Trim();
-        if (!await db.Items.AnyAsync(i => i.ItemCode == itemCode && !i.IsDeleted, ct))
-            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
+        var item = await db.Items.Where(i => i.ItemCode == itemCode && !i.IsDeleted)
+            .Select(i => new { i.IsLotManaged }).FirstOrDefaultAsync(ct);
+        if (item is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
 
         var locationCode = NullIfBlank(body.LocationCode)?.Trim();
         if (locationCode is not null
@@ -433,8 +437,9 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
                                             && r.ReasonCategoryValue == ReasonCategory.Shortage, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Reason")));
 
-        var lotNo = NullIfBlank(body.LotNo)?.Trim();
-        if (lotNo is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Lot001()));
+        var lot = Inventory.LotRules.Check(item.IsLotManaged, body.LotNo, required: qty > 0);
+        if (lot.Error is { } lotError) return Outcome.BadRequest(new ApiError(lotError));
+        var lotNo = lot.Lot;
 
         var slipNo = NullIfBlank(body.SlipNo)?.Trim();
         ShippingPlan? plan = null;
@@ -455,8 +460,6 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
 
             plan = open[0];
             if (qty > plan.Qty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
-            if (qty < plan.Qty && reasonCode is null)
-                return Outcome.BadRequest(new ApiError(ErrorCatalog.Rsn001()));
         }
 
         var delta = qty - (plan?.ActualQty ?? 0m);
@@ -464,6 +467,7 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
 
         var now = DateTime.Now;
         var worker = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
 
         var picks = plan is null
             ? null
@@ -537,8 +541,12 @@ internal sealed class ShippingService(ImsDbContext db) : IShippingService
         await db.SaveChangesAsync(ct);
 
         var dto = await LoadResultDtoAsync(db, row.No, ct);
-        return Outcome.Created($"/shipping-result?slipNo={row.SoNo}",
+        var result = Outcome.Created($"/shipping-result?slipNo={row.SoNo}",
             new ApiSuccess<ShippingResultDto>(dto!));
+        RequestReplays.Record(db, requestId, "shipping", result, worker);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     private async Task AddPickedShipmentLotsAsync(ShippingResult result, string soNo, string branchNo,

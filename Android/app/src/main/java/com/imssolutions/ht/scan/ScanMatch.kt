@@ -1,11 +1,11 @@
 package com.imssolutions.ht.scan
 
 enum class ScanError(val code: String, val message: String) {
-    SCN_001("SCN-001", "Mã vạch đã quét không hợp lệ."),
+    SCN_001("SCN-001", "The scanned barcode is not valid."),
 
-    SCN_005("SCN-005", "Không khớp với mặt hàng đã chỉ định."),
+    SCN_005("SCN-005", "Does not match the specified item."),
 
-    SCN_006("SCN-006", "Không khớp với lô đã chỉ định."),
+    SCN_006("SCN-006", "Does not match the specified lot."),
 }
 
 data class ScanLine(val itemCode: String, val lotNo: String?)

@@ -38,6 +38,8 @@ export interface TraceNode {
   inputQty?: number | null;
   returnedQty?: number | null;
   partnerName?: string | null;
+  suppliers?: string[] | null;
+  worker?: string | null;
 }
 
 export interface TraceBalance {
@@ -71,12 +73,19 @@ export interface TraceResult {
   nodes: TraceNode[];
   multipleSuppliers: boolean;
   balance: TraceBalance;
+  events?: TraceEvent[] | null;
 }
 
 export type TraceSearch = Record<string, string | number | undefined>;
 
 export const listTraceLots = (query: TraceSearch) => apiList<TraceLot>("/traceability/lots", { query });
-export const getTrace = (direction: TraceDirection, itemCode: string, lotNo: string) => apiCall<TraceResult>(`/traceability/${direction}`, { query: { itemCode, lotNo } });
-export const getTraceEvents = (itemCode: string, lotNo: string) => apiList<TraceEvent>("/traceability/events", { query: { itemCode, lotNo } });
-export const getTraceBalance = (itemCode: string, lotNo: string) => apiCall<TraceBalance>("/traceability/balance", { query: { itemCode, lotNo } });
+export const getTrace = (direction: TraceDirection, itemCode: string, lotNo: string, include?: string) =>
+  apiCall<TraceResult>("/traceability", { query: { direction, itemCode, lotNo, include } });
+export const getTraceEvents = (itemCode: string, lotNo: string) =>
+  getTrace("backward", itemCode, lotNo, "events,balance").then(r => {
+    const data = r.events ?? [];
+    return { success: true as const, data, meta: { total: data.length, page: 1, pageSize: data.length } };
+  });
+export const getTraceBalance = (itemCode: string, lotNo: string) =>
+  getTrace("backward", itemCode, lotNo, "balance").then(r => r.balance);
 export const exportTrace = (direction: TraceDirection, itemCode: string, lotNo: string) => apiDownload(`/export/traceability?${new URLSearchParams({ direction, itemCode, lotNo })}`);

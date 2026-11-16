@@ -6,6 +6,7 @@ public class FunctionLarge
     public string LargeName { get; set; } = null!;
     public int? DisplayOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsVisible { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

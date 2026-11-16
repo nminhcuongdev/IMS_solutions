@@ -13,7 +13,7 @@ const Ctx = createContext<Ask | null>(null);
 
 export function useConfirm(): Ask {
   const ask = useContext(Ctx);
-  if (!ask) throw new Error("useConfirm phải nằm trong <ConfirmProvider>");
+  if (!ask) throw new Error("useConfirm must be used inside <ConfirmProvider>");
   return ask;
 }
 

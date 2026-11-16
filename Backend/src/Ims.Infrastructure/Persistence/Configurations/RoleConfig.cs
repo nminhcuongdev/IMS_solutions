@@ -11,8 +11,9 @@ public class RoleConfig : IEntityTypeConfiguration<Role>
         b.ToTable("role");
         b.HasKey(x => x.RoleCode);
         b.Property(x => x.RoleCode).HasColumnName("role_code").Code(20);
-        b.Property(x => x.RoleName).HasColumnName("role_name").Text(50);
+        b.Property(x => x.RoleName).HasColumnName("role_name").Text(100);
         b.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        b.Property(x => x.IsBuiltin).HasColumnName("is_builtin").HasDefaultValue(false);
         b.MapAudit();
         b.MapSoftDelete();
     }

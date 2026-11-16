@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import type { MenuResponse, MenuGroup, MenuFunction } from "@/api/menu";
-import { FUNCTION_ICON, GROUP_ICON, BTN_ICON } from "./icons";
+import { FUNCTION_ICON, GROUP_ICON, BTN_ICON, FALLBACK_ICON } from "./icons";
 import { useT } from "@/i18n/LanguageContext";
 import { BrandLogo } from "./BrandLogo";
 import { FUNCTION_LABEL_KEY, groupLabelKey, NAV_LABEL_KEY } from "@/i18n/labelKeys";
@@ -157,7 +157,7 @@ function GroupRender({
   group: MenuGroup; collapsed: boolean; open: boolean; onToggle: () => void; showDividerBefore: boolean;
 }) {
   const t = useT();
-  const icon = GROUP_ICON[group.largeCode];
+  const icon = GROUP_ICON[group.largeCode] ?? FALLBACK_ICON;
   const isFlat = group.functions.length === 1;
   if (isFlat) {
     const f = group.functions[0];
@@ -203,7 +203,7 @@ function GroupRender({
 function FunctionLink({ f, collapsed, sub }: { f: MenuFunction; collapsed: boolean; sub: boolean }) {
   const t = useT();
   const to = ROUTE_MAP[f.functionCode] ?? `/wip/${f.functionCode}`;
-  const icon = FUNCTION_ICON[f.functionCode];
+  const icon = FUNCTION_ICON[f.functionCode] ?? FALLBACK_ICON;
   const label = f.functionCode === "dashboard"
     ? "Menu"
     : t(NAV_LABEL_KEY[f.functionCode] ?? FUNCTION_LABEL_KEY[f.functionCode] ?? f.functionCode, f.functionName);

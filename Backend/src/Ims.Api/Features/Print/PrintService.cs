@@ -55,7 +55,7 @@ internal sealed class PrintService(ImsDbContext db, IMlEngineClient engine, IPri
             return Outcome.Json(new ApiError(known ?? ErrorCatalog.Prn002()), statusCode: 500);
         }
 
-        return await history.CreatePrintAsync(h with { Spec = body.DeviceCode.Trim() }, user, ct);
+        return await history.CreatePrintAsync(h with { Spec = body.DeviceCode.Trim(), PrintData = body.Fields, LayoutFile = target.Value.LayoutFile }, user, ct);
     }
 
 }

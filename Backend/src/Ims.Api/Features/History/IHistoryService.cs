@@ -12,6 +12,10 @@ internal interface IHistoryService
 
     Task<ServiceResult> CreatePrintAsync(PrintHistoryWriteDto body, ClaimsPrincipal user, CancellationToken ct);
 
+    Task<ServiceResult> ReprintDataAsync(long no, CancellationToken ct);
+
+    Task<ServiceResult> ResultReprintAsync(string type, long no, PrintReprintRequest body, ClaimsPrincipal user, CancellationToken ct);
+
     Task<ServiceResult> ReprintAsync(long no, PrintReprintRequest body, ClaimsPrincipal user, CancellationToken ct);
 
     Task<ServiceResult> ExportPrintCsvAsync(

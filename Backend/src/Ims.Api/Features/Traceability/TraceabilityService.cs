@@ -6,7 +6,7 @@ using Ims.Infrastructure.Persistence;
 
 namespace Ims.Api.Features.Traceability;
 
-internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityService
+internal sealed partial class TraceabilityService(ImsDbContext db) : ITraceabilityService
 {
     public async Task<ServiceResult> LotsAsync(TraceQueryDto query, CancellationToken ct)
     {
@@ -26,6 +26,11 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                 .Where(x => (query.MaterialLotNo ?? query.LotNo) == null || x.LotNo?.Contains(query.MaterialLotNo ?? query.LotNo!, StringComparison.OrdinalIgnoreCase) == true)
                 .Where(x => query.OrderNo == null || x.ProductionOrderNo.Contains(query.OrderNo))
                 .Where(x => query.ProductionLotNo == null || orders.Any(o => o.ProductionOrderNo == x.ProductionOrderNo && o.ProductionLotNo?.Contains(query.ProductionLotNo, StringComparison.OrdinalIgnoreCase) == true))
+                .Where(x => query.ProductionDateFrom == null || DateOnly.FromDateTime(x.CreatedAt) >= query.ProductionDateFrom)
+                .Where(x => query.ProductionDateTo == null || DateOnly.FromDateTime(x.CreatedAt) <= query.ProductionDateTo)
+                .Where(x => query.PoNo == null || received.Any(r => r.ItemCode == x.ItemCode && r.LotNo == x.LotNo && r.PoNo == query.PoNo))
+                .Where(x => query.ReceivedFrom == null || received.Any(r => r.ItemCode == x.ItemCode && r.LotNo == x.LotNo && DateOnly.FromDateTime(r.CreatedAt) >= query.ReceivedFrom))
+                .Where(x => query.ReceivedTo == null || received.Any(r => r.ItemCode == x.ItemCode && r.LotNo == x.LotNo && DateOnly.FromDateTime(r.CreatedAt) <= query.ReceivedTo))
                 .GroupBy(x => new { x.ItemCode, x.LotNo, x.ProductionOrderNo })
                 .Select(g => new TraceLotDto(g.Key.ItemCode, g.Key.LotNo, items.GetValueOrDefault(g.Key.ItemCode),
                     g.Sum(x => x.Qty), null, null, null, null, null, g.Key.ProductionOrderNo,
@@ -111,7 +116,12 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                 ProductionLotNo = a.ProductionLotNo ?? b.ProductionLotNo,
                 ProductionDate = a.ProductionDate ?? b.ProductionDate,
                 Qty = Math.Max(a.Qty, b.Qty),
-            })).ToList();
+            }) with
+            {
+                Qty = g.Any(r => r.ReceivedAt != null && r.OrderNo == null)
+                    ? g.Where(r => r.ReceivedAt != null && r.OrderNo == null).Sum(r => r.Qty)
+                    : g.Max(r => r.Qty),
+            }).ToList();
         var ordered = OrderLots(rows, query.Sort);
         var page = Math.Max(1, query.Page ?? 1);
         var size = Math.Clamp(query.PageSize ?? 20, 1, 200);
@@ -136,6 +146,22 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             _ => descending ? rows.OrderByDescending(r => r.ItemCode) : rows.OrderBy(r => r.ItemCode),
         };
         return ordered.ThenBy(r => r.ItemCode).ThenBy(r => r.LotNo).ThenBy(r => r.PoNo).ThenBy(r => r.SoNo);
+    }
+
+    public async Task<ServiceResult> TraceAsync(string? direction, string? itemCode, string? lotNo, string? include, CancellationToken ct)
+    {
+        var dir = (direction ?? "").Trim().ToLowerInvariant();
+        if (dir is not ("backward" or "forward")) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldDirection", "Direction")));
+        if (string.IsNullOrWhiteSpace(itemCode)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldItemCode", "Item Code")));
+        if (string.IsNullOrWhiteSpace(lotNo)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldLotNo", "Lot No")));
+        var item = itemCode.Trim();
+        var lot = lotNo.Trim();
+        if (!await db.Items.AnyAsync(x => x.ItemCode == item, ct)) return Outcome.NotFound(new ApiError(ErrorCatalog.Sys404("Item")));
+        var result = await TraceAsync(item, lot, dir, ct);
+        var parts = (include ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (!parts.Contains("events", StringComparer.OrdinalIgnoreCase) || result.Body is not ApiSuccess<TraceResultDto> ok) return result;
+        var events = ((ApiListSuccess<TraceEventDto>)(await EventsAsync(item, lot, ct)).Body!).Data;
+        return Outcome.Ok(new ApiSuccess<TraceResultDto>(ok.Data! with { Events = events }));
     }
 
     public Task<ServiceResult> BackwardAsync(string itemCode, string lotNo, CancellationToken ct) =>
@@ -176,23 +202,23 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                 var processIndex = nodes.Count;
                 nodes.Add(new TraceNodeDto(1, 0, "process", itemCode, lotNo, 0, group.Key.ProductionOrderNo, null, null, process));
                 var inputQty = group.Sum(x => x.Qty);
-                var returnedQty = returns.Where(x => group.Select(c => c.No).Contains(x.ConsumptionNo)).Sum(x => x.Qty);
+                var returnedQty = returns.Where(x => group.Any(c => c.ProductionOrderNo == x.ProductionOrderNo && c.LineNo == x.LineNo && c.SerialNo == x.SerialNo)).Sum(x => x.Qty);
                 var expiry = group.Min(x => x.ExpiryDate);
                 var check = group.Any(x => x.ExpiryDate < DateOnly.FromDateTime(x.CreatedAt)) ? "expired"
                     : group.Any(x => x.ExpiryDate <= DateOnly.FromDateTime(x.CreatedAt.AddDays(30))) ? "near" : "ok";
                 var materialIndex = nodes.Count;
                 nodes.Add(new TraceNodeDto(2, processIndex, "material", group.Key.ItemCode, group.Key.LotNo,
                     inputQty - returnedQty, group.Key.ProductionOrderNo, null, group.Min(x => x.CreatedAt),
-                    process, inputQty, returnedQty, expiry, check));
+                    process, inputQty, returnedQty, expiry, check, Worker: group.OrderBy(x => x.CreatedAt).First().CreatedBy));
                 if (group.Key.LotNo is not null)
                     await AppendBackwardProductionAsync(nodes, group.Key.ItemCode, group.Key.LotNo, materialIndex, 3,
                         new HashSet<string> { $"{itemCode}|{lotNo}" }, ct);
             }
             nodes.AddRange(received.Select(r => new TraceNodeDto(1, 0, "receiving", itemCode, lotNo,
                 r.Qty, r.PoNo, plans.FirstOrDefault(p => p.PoNo == r.PoNo && p.PoBranchNo == r.PoBranchNo)?.PartnerCode,
-                r.CreatedAt)));
+                r.CreatedAt, Worker: r.CreatedBy)));
             nodes.AddRange(shipments.Select(s => new TraceNodeDto(1, 0, "shipping", itemCode, lotNo,
-                s.Qty, s.SoNo, s.Customer, s.CreatedAt)));
+                s.Qty, s.SoNo, s.Customer, s.CreatedAt, Worker: s.Worker)));
         }
         else
         {
@@ -204,7 +230,7 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             {
                 var process = lines.FirstOrDefault(x => x.ProductionOrderNo == group.Key.ProductionOrderNo && x.LineNo == group.Key.LineNo)?.ProcessCode;
                 var processIndex = nodes.Count;
-                var returnedQty = returns.Where(x => group.Select(c => c.No).Contains(x.ConsumptionNo)).Sum(x => x.Qty);
+                var returnedQty = returns.Where(x => group.Any(c => c.ProductionOrderNo == x.ProductionOrderNo && c.LineNo == x.LineNo && c.SerialNo == x.SerialNo)).Sum(x => x.Qty);
                 nodes.Add(new TraceNodeDto(1, 0, "process", itemCode, lotNo, group.Sum(x => x.Qty) - returnedQty,
                     group.Key.ProductionOrderNo, null, group.Min(x => x.CreatedAt), process,
                     group.Sum(x => x.Qty), returnedQty));
@@ -213,13 +239,13 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                 {
                     var outputIndex = nodes.Count;
                     nodes.Add(new TraceNodeDto(2, processIndex, "output", output.Key.ItemCode, output.Key.LotNo,
-                        output.Sum(x => x.Qty), group.Key.ProductionOrderNo, null, output.Min(x => x.CreatedAt)));
+                        output.Sum(x => x.Qty), group.Key.ProductionOrderNo, null, output.Min(x => x.CreatedAt), Worker: output.OrderBy(x => x.CreatedAt).First().CreatedBy));
                     await AppendForwardProductionAsync(nodes, output.Key.ItemCode, output.Key.LotNo, outputIndex, 3,
                         new HashSet<string> { $"{itemCode}|{lotNo}" }, ct);
                 }
             }
             nodes.AddRange(shipments.Select(s => new TraceNodeDto(1, 0, "shipping", itemCode, lotNo,
-                s.Qty, s.SoNo, s.Customer, s.CreatedAt)));
+                s.Qty, s.SoNo, s.Customer, s.CreatedAt, Worker: s.Worker)));
             if (received.Count > 0)
                 nodes[0] = nodes[0] with
                 {
@@ -228,10 +254,10 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                     OccurredAt = received[0].CreatedAt,
                 };
         }
+        var rawNodes = nodes.ToList();
         nodes = await DecorateAsync(nodes, ct);
         var balance = await CalculateBalanceAsync(itemCode, lotNo, received, shipments, ct);
-        var multiple = nodes.Where(n => n.Type == "receipt" && n.PartnerCode != null)
-            .Select(n => n.PartnerCode).Distinct().Take(2).Count() > 1;
+        var multiple = nodes[0].Suppliers is not null;
         var balances = new List<TraceBalanceDto> { balance };
         var linked = nodes.Where(x => x.LotNo != null && x.Type is "lot" or "lot-made")
             .Select(x => new { x.ItemCode, x.LotNo }).Distinct().Where(x => x.ItemCode != itemCode || x.LotNo != lotNo);
@@ -241,7 +267,8 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             var linkedShipped = (await LoadShipmentsAsync(ct)).Where(x => x.ItemCode == pair.ItemCode && x.LotNo == pair.LotNo).ToList();
             balances.Add(await CalculateBalanceAsync(pair.ItemCode, pair.LotNo!, linkedReceived, linkedShipped, ct));
         }
-        return Outcome.Ok(new ApiSuccess<TraceResultDto>(new TraceResultDto(itemCode, lotNo, nodes, multiple, balance, balances)));
+        var shaped = await WithSectionsAsync(new TraceResultDto(itemCode, lotNo, nodes, multiple, balance, balances), direction, rawNodes, produced, ct);
+        return Outcome.Ok(new ApiSuccess<TraceResultDto>(shaped));
     }
 
     private async Task<List<TraceNodeDto>> DecorateAsync(List<TraceNodeDto> nodes, CancellationToken ct)
@@ -253,8 +280,25 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
         var partners = await db.Partners.AsNoTracking().ToDictionaryAsync(x => x.PartnerCode, x => x.PartnerName, ct);
         var lotItems = nodes.Where(n => n.LotNo != null).Select(n => n.ItemCode).Distinct().ToList();
         var outputs = await db.ProductionOutputs.AsNoTracking()
-            .Where(x => lotItems.Contains(x.ItemCode) && x.ReversesNo == null)
-            .Select(x => new { x.ItemCode, x.LotNo, x.ProductionOrderNo }).ToListAsync(ct);
+            .Where(x => lotItems.Contains(x.ItemCode) && x.ReversesNo == null && !db.ProductionOutputs.Any(r => r.ReversesNo == x.No))
+            .OrderBy(x => x.CreatedAt)
+            .Select(x => new { x.ItemCode, x.LotNo, x.ProductionOrderNo, x.CreatedBy }).ToListAsync(ct);
+        var receipts = await db.ReceivingResults.AsNoTracking()
+            .Where(x => lotItems.Contains(x.ItemCode) && x.LotNo != null)
+            .OrderBy(x => x.CreatedAt).ThenBy(x => x.No)
+            .Select(x => new { x.ItemCode, x.LotNo, x.PoNo, x.PoBranchNo }).ToListAsync(ct);
+        var receiptPos = receipts.Select(x => x.PoNo).Distinct().ToList();
+        var plans = await db.ReceivingPlans.AsNoTracking().Where(p => receiptPos.Contains(p.PoNo))
+            .Select(p => new { p.PoNo, p.PoBranchNo, p.PartnerCode }).ToListAsync(ct);
+        IReadOnlyList<string>? SuppliersOf(string item, string? lot)
+        {
+            var found = receipts.Where(r => r.ItemCode == item && r.LotNo == lot)
+                .Select(r => (r.PoNo, Partner: plans.FirstOrDefault(p => p.PoNo == r.PoNo && p.PoBranchNo == r.PoBranchNo)?.PartnerCode))
+                .ToList();
+            if (found.Where(x => x.Partner != null).Select(x => x.Partner).Distinct().Count() < 2) return null;
+            return found.Select(x => $"{(x.Partner is null ? "—" : partners.GetValueOrDefault(x.Partner) ?? x.Partner)} ({x.PoNo})")
+                .Distinct().ToList();
+        }
         var orderNos = nodes.Where(n => n.DocumentNo != null).Select(n => n.DocumentNo!)
             .Concat(outputs.Select(x => x.ProductionOrderNo)).Distinct().ToList();
         var orders = await db.ProductionOrders.AsNoTracking().Where(x => orderNos.Contains(x.ProductionOrderNo))
@@ -304,6 +348,8 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                 ProductionLotNo = order?.ProductionLotNo,
                 ExpiryState = n.ExpiryCheck,
                 PartnerName = n.PartnerCode is { } pt ? partners.GetValueOrDefault(pt) : null,
+                Suppliers = type is "lot" or "lot-made" ? SuppliersOf(n.ItemCode, n.LotNo) : null,
+                Worker = n.Worker ?? (type == "lot-made" ? outputs.FirstOrDefault(x => x.ItemCode == n.ItemCode && x.LotNo == n.LotNo)?.CreatedBy : null),
             });
         }
         return result;
@@ -328,11 +374,11 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             var processIndex = nodes.Count;
             nodes.Add(new TraceNodeDto(depth, parent, "process", itemCode, lotNo, 0, group.Key.ProductionOrderNo, null, null, process));
             var inputQty = group.Sum(x => x.Qty);
-            var returnedQty = returns.Where(x => group.Select(c => c.No).Contains(x.ConsumptionNo)).Sum(x => x.Qty);
+            var returnedQty = returns.Where(x => group.Any(c => c.ProductionOrderNo == x.ProductionOrderNo && c.LineNo == x.LineNo && c.SerialNo == x.SerialNo)).Sum(x => x.Qty);
             var materialIndex = nodes.Count;
             nodes.Add(new TraceNodeDto(depth + 1, processIndex, "material", group.Key.ItemCode, group.Key.LotNo,
                 inputQty - returnedQty, group.Key.ProductionOrderNo, null, group.Min(x => x.CreatedAt), process,
-                inputQty, returnedQty, group.Min(x => x.ExpiryDate)));
+                inputQty, returnedQty, group.Min(x => x.ExpiryDate), Worker: group.OrderBy(x => x.CreatedAt).First().CreatedBy));
             if (group.Key.LotNo is not null)
                 await AppendBackwardProductionAsync(nodes, group.Key.ItemCode, group.Key.LotNo, materialIndex, depth + 2, seen, ct);
         }
@@ -342,7 +388,7 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             var plans = await db.ReceivingPlans.AsNoTracking().Where(p => p.ItemCode == itemCode).ToListAsync(ct);
             nodes.AddRange(receipts.Select(x => new TraceNodeDto(depth, parent, "receiving", itemCode, lotNo,
                 x.Qty, x.PoNo, plans.FirstOrDefault(p => p.PoNo == x.PoNo && p.PoBranchNo == x.PoBranchNo)?.PartnerCode,
-                x.CreatedAt)));
+                x.CreatedAt, Worker: x.CreatedBy)));
         }
         seen.Remove(key);
     }
@@ -363,7 +409,7 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
         foreach (var group in inputs.GroupBy(x => new { x.ProductionOrderNo, x.LineNo }))
         {
             var process = lines.FirstOrDefault(x => x.ProductionOrderNo == group.Key.ProductionOrderNo && x.LineNo == group.Key.LineNo)?.ProcessCode;
-            var returnedQty = returns.Where(x => group.Select(c => c.No).Contains(x.ConsumptionNo)).Sum(x => x.Qty);
+            var returnedQty = returns.Where(x => group.Any(c => c.ProductionOrderNo == x.ProductionOrderNo && c.LineNo == x.LineNo && c.SerialNo == x.SerialNo)).Sum(x => x.Qty);
             var processIndex = nodes.Count;
             nodes.Add(new TraceNodeDto(depth, parent, "process", itemCode, lotNo, group.Sum(x => x.Qty) - returnedQty,
                 group.Key.ProductionOrderNo, null, group.Min(x => x.CreatedAt), process, group.Sum(x => x.Qty), returnedQty));
@@ -372,13 +418,13 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             {
                 var outputIndex = nodes.Count;
                 nodes.Add(new TraceNodeDto(depth + 1, processIndex, "output", output.Key.ItemCode, output.Key.LotNo,
-                    output.Sum(x => x.Qty), group.Key.ProductionOrderNo, null, output.Min(x => x.CreatedAt)));
+                    output.Sum(x => x.Qty), group.Key.ProductionOrderNo, null, output.Min(x => x.CreatedAt), Worker: output.OrderBy(x => x.CreatedAt).First().CreatedBy));
                 await AppendForwardProductionAsync(nodes, output.Key.ItemCode, output.Key.LotNo, outputIndex, depth + 2, seen, ct);
             }
         }
         var shipments = (await LoadShipmentsAsync(ct)).Where(x => x.ItemCode == itemCode && x.LotNo == lotNo);
         nodes.AddRange(shipments.Select(x => new TraceNodeDto(depth, parent, "shipping", itemCode, lotNo,
-            x.Qty, x.SoNo, x.Customer, x.CreatedAt)));
+            x.Qty, x.SoNo, x.Customer, x.CreatedAt, Worker: x.Worker)));
         seen.Remove(key);
     }
 
@@ -390,9 +436,9 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             && h.ActionType != "Receiving" && h.ActionType != "Shipping" && h.ActionType != "Returns"
             && h.ActionType != "Consume" && h.ActionType != "Produce" && h.ActionType != "ProdReturn")
             .ToListAsync(ct);
-        var inputs = await db.ProductionConsumptions.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null && !db.ProductionConsumptions.Any(r => r.ReversesNo == x.No)).ToListAsync(ct);
-        var outputs = await db.ProductionOutputs.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null && !db.ProductionOutputs.Any(r => r.ReversesNo == x.No)).ToListAsync(ct);
-        var materialReturns = await db.ProductionReturns.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null && !db.ProductionReturns.Any(r => r.ReversesNo == x.No)).ToListAsync(ct);
+        var inputs = await db.ProductionConsumptions.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null).ToListAsync(ct);
+        var outputs = await db.ProductionOutputs.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null).ToListAsync(ct);
+        var materialReturns = await db.ProductionReturns.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null).ToListAsync(ct);
         var shipments = (await LoadShipmentsAsync(ct)).Where(s => s.ItemCode == itemCode && s.LotNo == lotNo);
         var events = receiving.Select(r => new TraceEventDto("receiving", r.Qty, r.PoNo, null, r.CreatedAt, null))
             .Concat(shipments.Select(s => new TraceEventDto("shipping", -s.Qty, s.SoNo, s.Customer, s.CreatedAt, s.SerialNo)))
@@ -422,18 +468,9 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
         var stock = await db.Stocks.AsNoTracking().Where(s => s.ItemCode == itemCode && s.LotNo == lotNo)
             .SumAsync(s => s.StockQty, ct);
         var adjustments = await db.InventoryHistories.AsNoTracking()
-            .Where(h => h.ItemCode == itemCode && h.LotNo == lotNo && h.ActionType == "Adjust")
+            .Where(h => h.ItemCode == itemCode && h.LotNo == lotNo
+                     && Ims.Domain.Inventory.InventoryAction.AdjustBalance.Contains(h.ActionType))
             .SumAsync(h => h.Qty, ct) ?? 0;
-        var reversedConsumption = await db.ProductionConsumptions.AsNoTracking()
-            .Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo != null)
-            .SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
-        var reversedOutput = await db.ProductionOutputs.AsNoTracking()
-            .Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo != null)
-            .SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
-        var reversedReturn = await db.ProductionReturns.AsNoTracking()
-            .Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo != null)
-            .SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
-        adjustments += -reversedConsumption + reversedOutput + reversedReturn;
         var produced = await db.ProductionOutputs.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null && !db.ProductionOutputs.Any(r => r.ReversesNo == x.No)).SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
         var consumed = await db.ProductionConsumptions.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null && !db.ProductionConsumptions.Any(r => r.ReversesNo == x.No)).SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
         var returnedInput = await db.ProductionReturns.AsNoTracking().Where(x => x.ItemCode == itemCode && x.LotNo == lotNo && x.ReversesNo == null && !db.ProductionReturns.Any(r => r.ReversesNo == x.No)).SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
@@ -464,17 +501,17 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                 .Append(n.InputQty?.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(n.ReturnedQty?.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(n.Qty.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(Csv(item?.UomCode)).Append(',').Append(Csv(n.ExpiryDate?.ToString())).Append(',')
+                .Append(Csv(item?.UomCode)).Append(',').Append(Csv(n.ExpiryDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))).Append(',')
                 .Append(Csv(n.ExpiryCheck)).Append(',')
-                .Append(Csv(n.Type == "receipt" ? n.OccurredAt?.ToString("yyyy-MM-dd") : null)).Append(',')
-                .Append(Csv(n.Type == "shipping" ? n.OccurredAt?.ToString("yyyy-MM-dd") : null)).Append(',')
+                .Append(Csv(n.Type == "receipt" ? n.OccurredAt?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null)).Append(',')
+                .Append(Csv(n.Type == "shipping" ? n.OccurredAt?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null)).Append(',')
                 .Append(Csv(n.Type == "receipt" ? n.PartnerCode : null)).Append(',')
                 .Append(Csv(n.Type == "shipping" ? n.PartnerCode : null)).Append(',')
-                .Append(Csv(n.OccurredAt?.ToString("yyyy-MM-dd HH:mm:ss"))).Append(',')
-                .Append(Csv(null)).Append(',').Append(Csv(null)).Append(',')
+                .Append(Csv(n.OccurredAt?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture))).Append(',')
+                .Append(Csv(n.Worker)).Append(',').Append(Csv(null)).Append(',')
                 .Append(Csv(i == 0 ? trace.Balance.ExpectedQty.ToString(CultureInfo.InvariantCulture) : null)).Append("\r\n");
         }
-        return Outcome.File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv; charset=utf-8", "traceability.csv");
+        return FieldHelpers.CsvFile(csv, "traceability.csv");
     }
 
     private static string Csv(string? value) => '"' + (value ?? "").Replace("\"", "\"\"") + '"';
@@ -500,7 +537,7 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
             if (allocated.Count > 0)
             {
                 rows.AddRange(allocated.Select(c => new TraceShipment(c.ItemCode, c.LotNo, c.SerialNo,
-                    c.Qty, result.SoNo, result.SoBranchNo, customer, result.CreatedAt, result.No)));
+                    c.Qty, result.SoNo, result.SoBranchNo, customer, result.CreatedAt, result.No, c.CreatedBy)));
                 continue;
             }
             var fallback = picked.Where(c => pickResults.TryGetValue(c.PickingResultNo, out var p)
@@ -522,12 +559,12 @@ internal sealed class TraceabilityService(ImsDbContext db) : ITraceabilityServic
                     skip = 0;
                     remaining -= qty;
                     rows.Add(new TraceShipment(lot.ItemCode, lot.LotNo, lot.SerialNo,
-                        qty, result.SoNo, result.SoBranchNo, customer, result.CreatedAt, result.No));
+                        qty, result.SoNo, result.SoBranchNo, customer, result.CreatedAt, result.No, lot.CreatedBy));
                 }
                 continue;
             }
             rows.Add(new TraceShipment(result.ItemCode, result.LotNo, null, delta,
-                result.SoNo, result.SoBranchNo, customer, result.CreatedAt, result.No));
+                result.SoNo, result.SoBranchNo, customer, result.CreatedAt, result.No, result.CreatedBy));
         }
         return rows;
     }

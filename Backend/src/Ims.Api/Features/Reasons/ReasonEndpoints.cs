@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,12 +9,12 @@ public static class ReasonEndpoints
     public static IEndpointRouteBuilder MapReasonEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/masters/reasons").WithTags("Reasons");
-        g.MapGet("", ListAsync);
-        g.MapGet("/{code}", GetAsync);
-        g.MapPost("", CreateAsync);
-        g.MapPut("/{code}", UpdateAsync);
-        g.MapDelete("/{code}", DeleteAsync);
-        g.MapGet("/export.csv", ExportCsvAsync);
+        g.MapGet("", ListAsync).RequireLookup();
+        g.MapGet("/{code}", GetAsync).RequireLookup();
+        g.MapPost("", CreateAsync).RequirePermission("m_reason.New", "m_reason.Copy");
+        g.MapPut("/{code}", UpdateAsync).RequirePermission("m_reason.Edit");
+        g.MapDelete("/{code}", DeleteAsync).RequirePermission("m_reason.Delete");
+        app.MapGet("/export/reasons", ExportCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("m_reason.Export");
         return app;
     }
 

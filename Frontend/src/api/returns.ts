@@ -62,22 +62,22 @@ type QueryRecord = Record<string, string | number | boolean | undefined | null>;
 export const listReturnsSchedule = (
   q: ReturnScheduleQuery = {},
 ): Promise<ApiListSuccess<ReturnPlanRow>> =>
-  apiList<ReturnPlanRow>("/returns-schedule", { query: q as QueryRecord });
+  apiList<ReturnPlanRow>("/schedules/returns", { query: q as QueryRecord });
 
 export const createReturnPlan = (body: ReturnPlanWrite) =>
-  apiCall<ReturnPlanRow>("/returns-schedule", { method: "POST", body });
+  apiCall<ReturnPlanRow>("/schedules/returns", { method: "POST", body });
 
 export const changeReturnStatus = (
   lines: { returnNo: string; serialNo: string }[], status: ReturnStatusAction,
 ) =>
-  apiCall<ReturnStatusChangeResult>("/returns-schedule/status", {
+  apiCall<ReturnStatusChangeResult>("/schedules/returns/status", {
     method: "PUT", body: { lines, status },
   });
 
 export const registerReturnShortage = (
   returnNo: string, shortageQty: number, reasonCode: string, serialNo?: string | null,
 ) =>
-  apiCall<ReturnPlanRow>(`/returns-schedule/${encodeURIComponent(returnNo)}/shortage`, {
+  apiCall<ReturnPlanRow>(`/schedules/returns/${encodeURIComponent(returnNo)}/shortage`, {
     method: "POST", body: { shortageQty, reasonCode, serialNo },
   });
 
@@ -92,4 +92,4 @@ function qsOf(q: Record<string, unknown>): string {
 }
 
 export const exportReturnsScheduleCsv = (q: ReturnScheduleQuery = {}) =>
-  apiDownload("/returns-schedule/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/returns-schedule" + qsOf({ ...q, page: undefined, pageSize: undefined }));

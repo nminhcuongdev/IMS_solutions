@@ -9,9 +9,7 @@ internal interface IProductionService
         string? itemCode = null, string? itemName = null, string? productionLotNo = null,
         string? fgLotNo = null, int? status = null, DateOnly? startDateFrom = null,
         DateOnly? startDateTo = null, int? page = null, int? pageSize = null, string? sort = null);
-    Task<ServiceResult> GetAsync(string orderNo, CancellationToken ct);
-    Task<ServiceResult> LinesAsync(string orderNo, CancellationToken ct);
-    Task<ServiceResult> WorksAsync(string orderNo, CancellationToken ct);
+    Task<ServiceResult> GetAsync(string orderNo, CancellationToken ct, string? processCode = null);
     Task<ServiceResult> StatusAsync(StatusWriteDto body, ClaimsPrincipal user, CancellationToken ct);
     Task<ServiceResult> PickingAsync(PickingWriteDto body, ClaimsPrincipal user, CancellationToken ct);
     Task<ServiceResult> ReceiptAsync(string orderNo, ReceiptWriteDto body, ClaimsPrincipal user, CancellationToken ct);
@@ -19,6 +17,8 @@ internal interface IProductionService
     Task<ServiceResult> ReturnAsync(string orderNo, ReturnWriteDto body, ClaimsPrincipal user, CancellationToken ct);
     Task<ServiceResult> OutputAsync(string orderNo, OutputWriteDto body, ClaimsPrincipal user, CancellationToken ct);
     Task<ServiceResult> LabelAsync(string orderNo, LabelWriteDto body, ClaimsPrincipal user, CancellationToken ct);
+    Task<ServiceResult> RegisterAsync(string orderNo, ProductionResultWriteDto body, ClaimsPrincipal user, CancellationToken ct);
+    Task<ServiceResult> ReverseAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct);
     Task<ServiceResult> ReverseConsumptionAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct);
     Task<ServiceResult> ReverseOutputAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct);
     Task<ServiceResult> ReverseReturnAsync(long no, ReverseWriteDto body, ClaimsPrincipal user, CancellationToken ct);

@@ -88,13 +88,13 @@ object ApiClient {
     }
 
     val api: ApiService
-        get() = service ?: error("ApiClient.init() chưa được gọi — xem ImsApp.onCreate()")
+        get() = service ?: error("ApiClient.init() has not been called; see ImsApp.onCreate()")
 
     val tokens: TokenStore
-        get() = tokenStore ?: error("ApiClient.init() chưa được gọi")
+        get() = tokenStore ?: error("ApiClient.init() has not been called")
 
     val updates: UpdateStore
-        get() = updateStore ?: error("ApiClient.init() chưa được gọi")
+        get() = updateStore ?: error("ApiClient.init() has not been called")
 
     suspend fun userCode(): String? = tokenStore?.session?.first()?.userCode?.takeIf { it.isNotBlank() }
 
@@ -104,7 +104,7 @@ object ApiClient {
         } catch (e: HttpException) {
             throw e.toApiException()
         } catch (e: IOException) {
-            throw ApiException("NET-002", 0, "Không kết nối được máy chủ. Kiểm tra Wi-Fi.")
+            throw ApiException("NET-002", 0, "Network connection lost. Check the Wi-Fi.")
         }
 
     private fun HttpException.toApiException(): ApiException {
@@ -113,7 +113,7 @@ object ApiClient {
             runCatching { json.decodeFromString<ApiErrorEnvelope>(raw) }
                 .getOrNull()?.error
                 ?.takeIf { it.code.isNotBlank() }
-                ?.let { return ApiException(it.code, it.httpStatus, it.message) }
+                ?.let { return ApiException(it.messageKey ?: it.code, it.httpStatus, it.args?.firstOrNull() ?: it.message) }
         }
         return ApiException("HTTP-${code()}", code(), message())
     }

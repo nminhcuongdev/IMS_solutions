@@ -86,7 +86,7 @@ public class LocationServiceTests
 
         var res = await new LocationService(t.Db).CreateAsync(body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class LocationServiceTests
 
         var res = await new LocationService(t.Db).CreateAsync(body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Theory]

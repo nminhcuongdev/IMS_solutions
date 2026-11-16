@@ -1,6 +1,7 @@
 package com.imssolutions.ht.ui.screen
 
 import com.imssolutions.ht.ui.t
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -21,22 +23,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import com.imssolutions.ht.data.ApiClient
-import com.imssolutions.ht.data.productionMenuKeys
+import com.imssolutions.ht.data.HT_CATEGORIES
+import com.imssolutions.ht.data.HtMenuAccess
+import com.imssolutions.ht.data.htCategoryEnabled
+import com.imssolutions.ht.data.htCategoryFeatures
+import com.imssolutions.ht.data.htCategoryVisible
+import com.imssolutions.ht.data.htMenuAccess
 import com.imssolutions.ht.ui.HtBodyBg
 import com.imssolutions.ht.ui.HtHeader
 import com.imssolutions.ht.ui.HtLang
 import com.imssolutions.ht.ui.HtBottomInset
 
-private val MENU = listOf(
-    MenuEntry("ht_receiving", "htReceiving", "Receiving", enabled = true),
-    MenuEntry("ht_returns", "htReturns", "Returns", enabled = true),
-    MenuEntry("ht_picking", "htPicking", "Picking", enabled = true),
-    MenuEntry("ht_production", "hpProduction", "Production", enabled = true),
-    MenuEntry("ht_shipping", "htShipping", "Shipping", enabled = true),
-    MenuEntry("ht_inventory", "htInventory", "Stock Inquiry", enabled = true),
-    MenuEntry("ht_transfer", "htTransfer", "Location Transfer", enabled = true),
-    MenuEntry("ht_stocktaking", "htStLabel", "Stocktaking", enabled = true),
-    MenuEntry("ht_disposal", "htDisposal", "Disposal", enabled = true),
+private val FEATURES = mapOf(
+    "ht_receiving" to ("htReceiving" to "Receiving"),
+    "ht_returns" to ("htReturns" to "Returns"),
+    "ht_picking" to ("htPicking" to "Picking"),
+    "ht_shipping" to ("htShipping" to "Shipping"),
+    "ht_inventory" to ("htInventory" to "Stock Inquiry"),
+    "ht_transfer" to ("htTransfer" to "Location Transfer"),
+    "ht_prd_receipt" to ("hpMatReceipt" to "Material Receipt"),
+    "ht_prd_input" to ("hpMatInput" to "Material Input"),
+    "ht_prd_return" to ("hpMatReturn" to "Material Return"),
+    "ht_prd_output" to ("hpProdComplete" to "Production Completion"),
+    "ht_disposal" to ("htDisposal" to "Disposal"),
+    "ht_stocktaking" to ("htStLabel" to "Stocktaking"),
 )
 
 @Composable
@@ -59,19 +69,28 @@ fun MenuScreen(
     val scope = rememberCoroutineScope()
     val session by ApiClient.tokens.session.collectAsState(initial = null)
     var confirming by remember { mutableStateOf(false) }
-    var productionOpen by remember { mutableStateOf(false) }
-    var productionKeys by remember { mutableStateOf(emptySet<String>()) }
+    var categoryKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var access by remember { mutableStateOf(HtMenuAccess(emptySet(), emptySet())) }
+    var loadFailed by remember { mutableStateOf(false) }
+    var reload by remember { mutableIntStateOf(0) }
+    val category = HT_CATEGORIES.firstOrNull { it.key == categoryKey }
 
-    LaunchedEffect(session?.userCode) {
-        productionKeys = emptySet()
-        if (session != null) productionKeys = runCatching {
-            productionMenuKeys(ApiClient.call { myPermissions() }.data)
-        }.getOrDefault(emptySet())
+    LaunchedEffect(session?.userCode, categoryKey, reload) {
+        if (session == null) return@LaunchedEffect
+        runCatching { ApiClient.call { myPermissions() }.data }
+            .onSuccess { access = htMenuAccess(it); loadFailed = false }
+            .onFailure { access = HtMenuAccess(emptySet(), access.visible); loadFailed = true }
     }
 
+    BackHandler(enabled = category != null) { categoryKey = null }
+
     Column(Modifier.fillMaxSize().background(HtBodyBg)) {
-        HtHeader(title = if (productionOpen) t("hpProduction", "Production") else t("htMenu", "Menu"),
-            onBack = if (productionOpen) { { productionOpen = false } } else null, lang = lang, onLang = onLang)
+        HtHeader(
+            title = category?.let { t(it.labelKey, it.title) } ?: t("htMenu", "Menu"),
+            onBack = if (category != null) { { categoryKey = null } } else null,
+            lang = lang,
+            onLang = onLang,
+        )
 
         Column(
             Modifier
@@ -80,71 +99,50 @@ fun MenuScreen(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (pendingUpdate != null && !productionOpen) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFFFF3CD))
-                        .clickable(onClick = onOpenUpdate)
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        t("htUpdPending", "Có phiên bản mới {0}. Chạm để cập nhật.", pendingUpdate),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF856404),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+            if (pendingUpdate != null && category == null) {
+                Banner(t("htUpdPending", "Version {0} is available. Tap to update.", pendingUpdate), onOpenUpdate)
             }
-            val entries = if (productionOpen) listOf(
-                MenuEntry("ht_prd_receipt", "hpMatReceipt", "Material Receipt", true),
-                MenuEntry("ht_prd_input", "hpMatInput", "Material Input", true),
-                MenuEntry("ht_prd_return", "hpMatReturn", "Material Return", true),
-                MenuEntry("ht_prd_output", "hpProdComplete", "Production Completion", true),
-            ).filter { it.navKey in productionKeys } else MENU.filter { it.navKey != "ht_production" || productionKeys.isNotEmpty() }
-            entries.forEach { e ->
-                MenuItemRow(e) {
-                    when (e.navKey) {
-                        "ht_production" -> productionOpen = true
-                        "ht_prd_receipt" -> onProduction("receipt")
-                        "ht_prd_input" -> onProduction("input")
-                        "ht_prd_return" -> onProduction("return")
-                        "ht_prd_output" -> onProduction("output")
-                        "ht_receiving" -> onReceiving()
-                        "ht_returns" -> onReturns()
-                        "ht_picking" -> onPicking()
-                        "ht_shipping" -> onShipping()
-                        "ht_inventory" -> onInventory()
-                        "ht_disposal" -> onDisposal()
-                        "ht_transfer" -> onTransfer()
-                        "ht_stocktaking" -> onStocktaking()
+            if (loadFailed) {
+                Banner(t("htPermLoadFailed", "Permissions could not be loaded. Tap to retry."), { reload++ })
+            }
+            if (category == null) {
+                HT_CATEGORIES.filter { htCategoryVisible(it, access) || loadFailed }.forEach { c ->
+                    MenuItemRow(t(c.labelKey, c.title), enabled = htCategoryEnabled(c, access)) { categoryKey = c.key }
+                }
+            } else {
+                htCategoryFeatures(category, access).ifEmpty { if (loadFailed) category.features else emptyList() }.forEach { code ->
+                    val (key, title) = FEATURES.getValue(code)
+                    MenuItemRow(t(key, title), enabled = code in access.allowed) {
+                        when (code) {
+                            "ht_prd_receipt" -> onProduction("receipt")
+                            "ht_prd_input" -> onProduction("input")
+                            "ht_prd_return" -> onProduction("return")
+                            "ht_prd_output" -> onProduction("output")
+                            "ht_receiving" -> onReceiving()
+                            "ht_returns" -> onReturns()
+                            "ht_picking" -> onPicking()
+                            "ht_shipping" -> onShipping()
+                            "ht_inventory" -> onInventory()
+                            "ht_disposal" -> onDisposal()
+                            "ht_transfer" -> onTransfer()
+                            "ht_stocktaking" -> onStocktaking()
+                        }
                     }
                 }
             }
+        }
 
-            Spacer(Modifier.height(4.dp))
+        if (category == null) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(12.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        session?.userName ?: "—",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        session?.userCode ?: "",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(session?.userName ?: "—", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(session?.userCode ?: "", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = { confirming = true }) {
                     Text(t("logout", "Logout"), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
@@ -158,8 +156,8 @@ fun MenuScreen(
     if (confirming) {
         AlertDialog(
             onDismissRequest = { confirming = false },
-            title = { Text(t("logout", "Đăng xuất") + "?") },
-            text = { Text(t("htLogoutConfirm", "Bạn sẽ phải nhập lại User ID và mật khẩu.")) },
+            title = { Text(t("logout", "Logout") + "?") },
+            text = { Text(t("htLogoutConfirm", "You will have to enter your User ID and password again.")) },
             confirmButton = {
                 Button(onClick = {
                     confirming = false
@@ -168,33 +166,44 @@ fun MenuScreen(
                         ApiClient.tokens.clear()
                         onLoggedOut()
                     }
-                }) { Text(t("logout", "Đăng xuất")) }
+                }) { Text(t("logout", "Logout")) }
             },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text(t("htCancel", "Huỷ")) } },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(t("htCancel", "Cancel")) } },
         )
     }
 }
 
 @Composable
-private fun MenuItemRow(e: MenuEntry, onClick: () -> Unit) {
+private fun Banner(text: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFFFF3CD))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF856404), modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun MenuItemRow(title: String, enabled: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .then(if (e.enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .alpha(if (e.enabled) 1f else 0.45f)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .alpha(if (enabled) 1f else 0.45f)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(t(e.labelKey, e.title), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            if (!e.enabled) {
-                Text(
-                    t("htNotImplemented", "Chưa phát triển"),
-                    fontSize = 10.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            if (!enabled) {
+                Text(t("htNoPermission", "No permission"), fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Icon(

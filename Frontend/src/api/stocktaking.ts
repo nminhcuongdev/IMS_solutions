@@ -36,6 +36,7 @@ export interface StocktakingLabelRow {
   expiryDate: string | null;
   isExpired: boolean;
   updatedAt: string | null;
+  movedAfterStart?: boolean;
 }
 
 export interface StocktakingGroupRow {
@@ -62,6 +63,7 @@ export interface StocktakingHistoryRow {
   missingQty: number;
   unit: string | null;
   badgeKey: string;
+  stocktakingSessionNo: number;
 }
 
 export interface LabelQuery {
@@ -100,7 +102,16 @@ export const listStocktakingLabels = (q: LabelQuery = {}) =>
 export const listStocktakingGroups = (q: LabelQuery = {}) =>
   apiList<StocktakingGroupRow>("/stocktaking/labels", { query: { ...q, view: "model" } as QueryRecord });
 
-export const listStocktakingHistory = (q: { q?: string; page?: number; pageSize?: number; sort?: string } = {}) =>
+export interface StocktakingSessionOption {
+  no: number;
+  sessionName: string;
+  completedAt: string | null;
+}
+
+export const listStocktakingSessions = () =>
+  apiCall<StocktakingSessionOption[]>("/stocktaking/sessions");
+
+export const listStocktakingHistory = (q: { q?: string; sessionNo?: number; page?: number; pageSize?: number; sort?: string } = {}) =>
   apiList<StocktakingHistoryRow>("/stocktaking/history", { query: q as QueryRecord });
 
 function qsOf(q: Record<string, unknown>): string {
@@ -114,7 +125,7 @@ function qsOf(q: Record<string, unknown>): string {
 }
 
 export const exportStocktakingLabelsCsv = (q: LabelQuery = {}) =>
-  apiDownload("/stocktaking/labels/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/stocktaking-labels" + qsOf({ ...q, page: undefined, pageSize: undefined }));
 
-export const exportStocktakingHistoryCsv = (q: { q?: string } = {}) =>
-  apiDownload("/stocktaking/history/export.csv" + qsOf(q));
+export const exportStocktakingHistoryCsv = (q: { q?: string; sessionNo?: number } = {}) =>
+  apiDownload("/export/stocktaking-history" + qsOf(q));

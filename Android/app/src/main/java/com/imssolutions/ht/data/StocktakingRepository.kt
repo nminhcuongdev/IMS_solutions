@@ -2,6 +2,8 @@ package com.imssolutions.ht.data
 
 class StocktakingRepository {
 
+    private val retryKey = RetryKey()
+
     suspend fun session(): StocktakingSession? = ApiClient.call { stocktakingSession() }.data
 
     suspend fun itemsAt(locationCode: String): List<StocktakingGroup> =
@@ -12,16 +14,17 @@ class StocktakingRepository {
         itemCode: String,
         lotNo: String?,
         countedLabels: Int,
-    ): StocktakingGroup = ApiClient.call {
-        saveStocktakingResult(
-            StocktakingResultRequest(
-                locationCode = locationCode,
-                itemCode = itemCode,
-                lotNo = lotNo?.trim()?.takeIf { it.isNotBlank() },
-                countedLabels = countedLabels,
-            ),
+    ): StocktakingGroup {
+        val request = StocktakingResultRequest(
+            locationCode = locationCode,
+            itemCode = itemCode,
+            lotNo = lotNo?.trim()?.takeIf { it.isNotBlank() },
+            countedLabels = countedLabels,
         )
-    }.data!!
+        return retryKey.send(request, { r, id -> r.copy(requestId = id) }) { sent ->
+            ApiClient.call { saveStocktakingResult(sent) }
+        }.data ?: throw ApiException("SYS-004", 500, "The server did not return the saved row.")
+    }
 
     suspend fun zones(): List<Zone> = ApiClient.call { listZones() }.data
 

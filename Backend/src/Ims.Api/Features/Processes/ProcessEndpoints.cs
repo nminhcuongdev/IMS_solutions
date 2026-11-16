@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Ims.Api.Http;
@@ -8,14 +9,13 @@ public static class ProcessEndpoints
 {
     public static IEndpointRouteBuilder MapProcessEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/masters/processes").WithTags("Processes");
-        group.MapGet("", ListAsync);
-        group.MapGet("/{code}", GetAsync);
-        group.MapPost("", CreateAsync);
-        group.MapPut("/{code}", UpdateAsync);
-        group.MapDelete("/{code}", DeleteAsync);
-        group.MapGet("/export.csv", ExportCsvAsync);
-        app.MapGet("/export/processes", ExportCsvAsync).WithTags("Processes");
+        var group = app.MapGroup("/masters/processes").WithTags("Processes").RequireModule("production");
+        group.MapGet("", ListAsync).RequireLookup();
+        group.MapGet("/{code}", GetAsync).RequireLookup();
+        group.MapPost("", CreateAsync).RequirePermission("m_process.New", "m_process.Copy");
+        group.MapPut("/{code}", UpdateAsync).RequirePermission("m_process.Edit");
+        group.MapDelete("/{code}", DeleteAsync).RequirePermission("m_process.Delete");
+        app.MapGet("/export/processes", ExportCsvAsync).WithTags("Processes").RequireModule("production").RequirePermission("m_process.Export");
         return app;
     }
 

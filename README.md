@@ -2,37 +2,64 @@
 
 [![CI](https://github.com/nminhcuongdev/IMS_solutions/actions/workflows/ci.yml/badge.svg)](https://github.com/nminhcuongdev/IMS_solutions/actions/workflows/ci.yml)
 
-A warehouse inventory management system with a web back office, a REST API and two Android
-handheld apps (barcode/QR scanner and UHF RFID reader). It covers the full flow of goods:
-receiving, put-away, picking, shipping, returns, holds, disposal, location transfer, stocktaking
-and RFID stock counts, plus label printing and an alert center.
+A warehouse and light-manufacturing inventory system: a web back office, a REST API and two Android handheld apps
+(barcode/QR scanner and UHF RFID reader). It follows goods end to end — receiving, put-away, picking, shipping,
+returns, holds, disposal, location transfer, production (material picking, consumption, output, labels) and
+stocktaking — and can trace any lot backward to its suppliers or forward to its customers.
 
-![Location 3D](docs/screenshots/location-3d.png)
+![Trace back](docs/screenshots/trace-back.png)
 
 ## Features
 
 | Area | What it does |
 |---|---|
-| **Master data** | Factories, zones, locations (3-level `Large_Middle_Small` codes), item groups, items, business partners, reasons, devices, users — with search, sort, paging, copy and CSV export |
-| **Receiving / Returns** | Schedules (manual entry or Excel import), package-by-package confirmation from the handheld, shortage reasons, status change that posts and reverses real stock |
-| **Shipping / Picking** | Schedules, line confirmation, shortage handling, label reprint |
-| **Inventory** | Stock inquiry by lot / item / location, adjust, hold & release, disposal, location transfer, append-only work history |
-| **Stocktaking** | Snapshot-based count (Start → Complete → Finalize), handheld counting, missing / over handling, history |
-| **RFID stock count** | Live board of EPC tags; the RFID handheld app reads tags and posts them in batches |
-| **Location 3D** | Interactive 3D view of the racking, with location codes read as X / Y / Z coordinates |
-| **Alert center** | Expiring lots, low / overflow stock, holds, late receiving / picking / shipping — configurable thresholds |
-| **Label printing** | QR / GS1 labels through a local label print engine (optional) |
-| **Administration** | Role-based permissions per function and action, data-driven menu, UI text editable in the database (English, Japanese, Vietnamese) |
+| **Master data** | Factories, zones, 3-level locations (`Large_Middle_Small`), item groups, items, business partners, reasons, processes, devices, users — search, sort, paging, copy, CSV export |
+| **Receiving / Returns** | Schedules (manual entry or Excel import), package-by-package confirmation on the handheld, shortage registration that closes the line, status change that posts and takes back real stock |
+| **Shipping / Picking** | Schedules, picking by lot (FEFO), line confirmation, shortage handling that returns picked goods to the shelf, label reprint |
+| **Production** | Production orders imported from CSV, material picking and receipt, consumption by scanned lot, leftover return, output with lot and expiry, label issue, reversal of any result with a reason |
+| **Traceability** | Trace back from a finished lot to every material lot, process and supplier; trace forward from a material lot to the lots it went into and the customers they were shipped to. Per-lot quantity balance, event timeline, multiple-supplier warning, CSV export |
+| **Inventory** | Stock inquiry by lot / item / location, adjust, hold & release, disposal and restore, location transfer, append-only work history |
+| **Stocktaking** | Per-session snapshots (Start → Complete → Finalize), handheld counting that only accepts labels at the right shelf, missing-label write-off, history per session |
+| **RFID** | Live EPC stock-count board with part targets; the RFID handheld registers new tags by part and counts per device |
+| **Location 3D** | Interactive 3D racking view; location codes are read as X / Y / Z coordinates |
+| **Alert center** | Expiring lots, low / overflow stock, holds, late schedules — thresholds configurable per alert type |
+| **Labels** | QR / GS1 labels through a local label print engine (optional), print history with exact reprint |
+| **Data distribution** | Publishes handheld app updates (APK) to targeted devices; the HT app downloads, verifies and installs them |
+| **Administration** | Role master with a permission matrix per function and action, enforced on every endpoint; menu visibility; UI and error texts editable in the database (English, Japanese, Vietnamese) |
 
 ## Screenshots
 
-| Login | Item master |
+| Dashboard | Stock inquiry |
 |---|---|
-| ![Login](docs/screenshots/login.png) | ![Item master](docs/screenshots/item-master.png) |
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Stock inquiry](docs/screenshots/stock-inquiry.png) |
+
+| Production orders | Production results |
+|---|---|
+| ![Production orders](docs/screenshots/production-orders.png) | ![Production results](docs/screenshots/production-results.png) |
+
+| Trace back | Trace forward |
+|---|---|
+| ![Trace back](docs/screenshots/trace-back.png) | ![Trace forward](docs/screenshots/trace-forward.png) |
+
+| Receiving schedule | Shipping result |
+|---|---|
+| ![Receiving schedule](docs/screenshots/receiving-schedule.png) | ![Shipping result](docs/screenshots/shipping-result.png) |
+
+| Stocktaking | Alert center |
+|---|---|
+| ![Stocktaking](docs/screenshots/stocktaking.png) | ![Alert center](docs/screenshots/alert-center.png) |
+
+| User permissions | Data distribution |
+|---|---|
+| ![User permissions](docs/screenshots/permissions.png) | ![Data distribution](docs/screenshots/data-distribution.png) |
 
 | RFID stock count | Location 3D |
 |---|---|
 | ![RFID stock count](docs/screenshots/rfid-stock-count.png) | ![Location 3D](docs/screenshots/location-3d.png) |
+
+| Login | Item master |
+|---|---|
+| ![Login](docs/screenshots/login.png) | ![Item master](docs/screenshots/item-master.png) |
 
 ## Architecture
 
@@ -49,17 +76,12 @@ and RFID stock counts, plus label printing and an alert center.
 └──────────────────┘                          └───────────────────┘
 ```
 
-| Folder | Stack |
-|---|---|
-| [`Backend/`](Backend) | .NET 10, ASP.NET Core Minimal APIs, EF Core 10 (SQL Server), JWT auth, xUnit (730+ tests on in-memory SQLite) |
-| [`Frontend/`](Frontend) | React 18, TypeScript, Vite 5, Tailwind CSS 4, React Router 6, react-three-fiber |
-| [`Android/`](Android) | Kotlin, Jetpack Compose, Retrofit — handheld terminal app for scanning workflows |
-| [`AndroidRfid/`](AndroidRfid) | Kotlin, Jetpack Compose — RFID stock count app (CipherLab RS36 and DENSO SP1 readers) |
-
-The backend follows a feature-folder layout: each feature has its endpoints (thin HTTP adapters),
-a service interface, an `internal sealed` service holding validation and queries, and one DTO per
-file. Every response uses a common envelope (`ApiSuccess`, `ApiListSuccess` with paging,
-`ApiError` with an error code). Data is soft-deleted and natural business codes are primary keys.
+| Folder | Stack | Details |
+|---|---|---|
+| [`Backend/`](Backend) | .NET 10, ASP.NET Core Minimal APIs, EF Core 10 (SQL Server), JWT, xUnit (1,400+ tests) | [Backend/README.md](Backend/README.md) |
+| [`Frontend/`](Frontend) | React 18, TypeScript, Vite 5, Tailwind CSS 4, React Router 6, react-three-fiber | [Frontend/README.md](Frontend/README.md) |
+| [`Android/`](Android) | Kotlin, Jetpack Compose, Retrofit — handheld scanner app | [Android/README.md](Android/README.md) |
+| [`AndroidRfid/`](AndroidRfid) | Kotlin, Jetpack Compose — RFID stock count and tag registration (CipherLab RS36, DENSO SP1, Newland MT93) | [AndroidRfid/app/libs/README.md](AndroidRfid/app/libs/README.md) |
 
 ## Quick start with Docker
 
@@ -97,83 +119,19 @@ Change these passwords before exposing the system anywhere.
 
 ## Local development
 
-### Backend
-
-Requirements: .NET 10 SDK and SQL Server (Express or Developer).
-
-```bash
-cd Backend
-dotnet build
-dotnet test tests/Ims.Api.Tests
-dotnet run --project src/Ims.Api
-```
-
-The API listens on `http://localhost:5271`. In Development it migrates and seeds the database
-named in `ConnectionStrings:Ims` (default `localhost\SQLEXPRESS`, database `Ims`). Override it
-with an environment variable or user secrets, e.g. `ConnectionStrings__Ims="Server=...;"`.
-
-In Production the API refuses to start unless `Jwt:Key` is set to a non-placeholder value of 64+
-characters. Provide it through the `Jwt__Key` environment variable or an
-`appsettings.Secrets.json` file next to the binaries (ignored by git).
-
-Migrations:
-
-```bash
-dotnet ef migrations add <Name> --project src/Ims.Infrastructure --startup-project src/Ims.Api
-dotnet ef database update --project src/Ims.Infrastructure --startup-project src/Ims.Api
-```
-
-### Frontend
-
-Requirements: Node.js 22.
-
-```bash
-cd Frontend
-npm ci
-npm run dev            # http://localhost:5173, talks to http://localhost:5271
-npx tsc --noEmit       # type check
-npx vite build         # production bundle in dist/
-```
-
-The API address comes from `VITE_API_BASE`. When it is empty, the app calls the same host it was
-opened from on port `VITE_API_PORT` (default `8091`), so other machines on the LAN work without
-rebuilding.
-
-### Android HT app
-
-Requirements: Android Studio (or JDK 17 + Android SDK 35).
-
-```bash
-cd Android
-./gradlew assembleDebug testDebugUnitTest
-```
-
-Set the server URL on the login screen. For a device on USB, `adb reverse tcp:8091 tcp:8091`
-lets it reach an API running on your PC.
-
-### Android RFID app
-
-The reader vendors' SDKs are **not included** in this repository because of their licences.
-See [`AndroidRfid/app/libs/README.md`](AndroidRfid/app/libs/README.md) for the files to add, then:
-
-```bash
-cd AndroidRfid
-./gradlew assembleDebug
-```
-
-The reader is selected on the login / menu screen (CipherLab RS36 or DENSO SP1).
+See the README in each folder: [Backend](Backend/README.md), [Frontend](Frontend/README.md),
+[Android HT app](Android/README.md). The RFID app needs the reader vendors' SDKs, which are not included in this
+repository because of their licences ([AndroidRfid/app/libs/README.md](AndroidRfid/app/libs/README.md)).
 
 ## Label printing (optional)
 
-Label printing is done by a local label print engine reached from the browser at
-`http://localhost:8080/` and from the API through `MlEngine:BaseUrl`. Without it, every other
-feature works; print buttons report that the engine is not available. Layout files are not part
-of this repository.
+Label printing is done by a local label print engine reached from the browser at `http://localhost:8080/` and from
+the API through `MlEngine:BaseUrl`. Without it, every other feature works; print buttons report that the engine is
+not available. Label layout files are not part of this repository.
 
 ## Continuous integration
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `main` and on pull
-requests:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `main` and on pull requests:
 
 | Job | Steps |
 |---|---|
@@ -190,7 +148,7 @@ The RFID app is not built in CI because it needs the vendor SDKs.
 .
 ├── Backend/
 │   ├── src/Ims.Domain/           entities
-│   ├── src/Ims.Infrastructure/   EF Core configuration, migrations, seed data
+│   ├── src/Ims.Infrastructure/   EF Core configuration, migrations, seed data, permission catalog
 │   ├── src/Ims.Api/              Minimal API features, hosting, contracts
 │   └── tests/Ims.Api.Tests/      xUnit tests (SQLite in memory)
 ├── Frontend/                     React SPA

@@ -1,11 +1,12 @@
+import { useScreenCan } from "@/auth/PermissionContext";
 import { useEffect, useState } from "react";
 import { getSettings, saveSettings, type AppSettings } from "@/api/settings";
-import { mlGetDriverNamesOrFallback } from "@/lib/mlEngine";
+import { mlGetDriverStatus } from "@/lib/mlEngine";
 import { useT } from "@/i18n/LanguageContext";
 import { useToast } from "@/lib/Toast";
 import { errorText } from "@/lib/errorText";
 
-export function SettingsPage() {
+export function SettingsPage() { const can = useScreenCan();
   const t = useT();
   const toast = useToast();
   const [form, setForm] = useState<AppSettings | null>(null);
@@ -14,25 +15,32 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [loaded, setLoaded] = useState<AppSettings | null>(null);
+
+  const checkEngine = async () => {
+    setDriversLive(null);
+    const r = await mlGetDriverStatus();
+    setDrivers(r.names); setDriversLive(r.live);
+  };
 
   useEffect(() => {
-    getSettings().then(setForm).catch(e => setErr(errorText(t, e)));
-    mlGetDriverNamesOrFallback().then(r => { setDrivers(r.names); setDriversLive(r.live); });
+    getSettings().then(f => { setForm(f); setLoaded(f); }).catch(e => setErr(errorText(t, e)));
+    checkEngine();
   }, []);
 
   const set = <K extends keyof AppSettings>(k: K, v: AppSettings[K]) =>
     setForm(f => (f ? { ...f, [k]: v } : f));
 
   const onSave = async () => {
-    if (!form) return;
+    if (!form || !loaded) return;
     setSaving(true); setErr(null); setSaved(false);
-    try { setForm(await saveSettings(form)); setSaved(true); toast.ok(t("toastSaved", "Saved")); }
+    try { const body = driversLive ? form : { ...form, masterPrinterDefault: loaded.masterPrinterDefault, schedulePrinterDefault: loaded.schedulePrinterDefault }; const result = await saveSettings(body); setForm(result); setLoaded(result); setSaved(true); toast.ok(t("toastSaved", "Saved")); }
     catch (e: any) { setErr(errorText(t, e)); toast.err(errorText(t, e)); }
     finally { setSaving(false); }
   };
 
   if (!form) {
-    return <div className="page-info">{err ? <span className="text-rose-600">{err}</span> : "Loading…"}</div>;
+    return <div className="page-info">{err ? <span className="text-rose-600">{err}</span> : t("loading", "Loading...")}</div>;
   }
 
   return (
@@ -51,20 +59,18 @@ export function SettingsPage() {
         <div className="search-row mt-2.5">
           <label>{t("settingsMasterPrinterDefault", "Master Label Default Printer")}</label>
           <PrinterSelect value={form.masterPrinterDefault} drivers={drivers}
-            loading={driversLive === null}
+            live={driversLive} onRefresh={checkEngine}
             onChange={v => set("masterPrinterDefault", v)} />
 
           <label className="ml-3.5">{t("settingsSchedulePrinterDefault", "Schedule Label Default Printer")}</label>
           <PrinterSelect value={form.schedulePrinterDefault} drivers={drivers}
-            loading={driversLive === null}
+            live={driversLive} onRefresh={checkEngine}
             onChange={v => set("schedulePrinterDefault", v)} />
         </div>
-
         {driversLive === false && (
           <div className="search-row mt-1">
             <span className="text-[11px] text-slate-500">
-              Label Engine không phản hồi tại localhost:8080 — đang hiển thị danh sách driver mẫu.
-              Engine phải cài trên chính máy đang mở trình duyệt.
+              {t("settingsEngineOffline", "Cannot connect to the label print engine. Start it on this PC and refresh.")}
             </span>
           </div>
         )}
@@ -73,26 +79,29 @@ export function SettingsPage() {
         {saved && !err && <div className="search-row text-emerald-600 text-[12px]">{t("settingsSaved", "Settings saved")}</div>}
 
         <div className="search-btns">
-          <button className="btn btn-primary" onClick={onSave} disabled={saving}>
+          {can("Save") && <button className="btn btn-primary" onClick={onSave} disabled={saving}>
             {saving ? t("saving", "Saving…") : t("modalSave", "Save")}
-          </button>
+          </button>}
         </div>
       </div>
     </div>
   );
 }
 
-function PrinterSelect({ value, drivers, loading, onChange }: {
-  value: string | null; drivers: string[]; loading: boolean; onChange: (v: string) => void;
+function PrinterSelect({ value, drivers, live, onChange, onRefresh }: {
+  value: string | null; drivers: string[]; live: boolean | null;
+  onChange: (v: string) => void; onRefresh: () => void;
 }) {
-  const options = value && !drivers.includes(value) ? [value, ...drivers] : drivers;
-  if (loading) {
-    return <select className="w-55" disabled><option>Loading printer drivers…</option></select>;
-  }
-  return (
-    <select className="w-55" value={value ?? ""} onChange={e => onChange(e.target.value)}>
-      <option value="">—</option>
-      {options.map(d => <option key={d} value={d}>{d}</option>)}
+  const t = useT();
+  const missing = !!value && !drivers.includes(value);
+  return <div className="flex items-center gap-2">
+    <select className="w-55" value={value ?? ""} disabled={live !== true} onChange={e => onChange(e.target.value)}>
+      {live !== true ? <option value={value ?? ""}>{live === null ? t("loading", "Loading...") : value || "-"}</option> : <>
+        {missing && <option value={value!}>{value} {t("printerNotFound", "(not found)")}</option>}
+        <option value="">-</option>
+        {drivers.map(d => <option key={d} value={d}>{d}</option>)}
+      </>}
     </select>
-  );
+    <button type="button" className="btn btn-outline" onClick={onRefresh} aria-label={t("btnRefresh", "Refresh")}>{t("btnRefresh", "Refresh")}</button>
+  </div>;
 }

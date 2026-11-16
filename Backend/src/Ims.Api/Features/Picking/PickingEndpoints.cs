@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -8,16 +9,17 @@ public static class PickingEndpoints
 {
     public static IEndpointRouteBuilder MapPickingEndpoints(this IEndpointRouteBuilder app)
     {
-        var schedule = app.MapGroup("/picking-schedule").WithTags("Picking").RequireAuthorization();
-        schedule.MapGet("", ListPlansAsync);
-        schedule.MapPost("", CreatePlanAsync);
-        schedule.MapPut("/status", ChangeStatusAsync);
-        schedule.MapGet("/export.csv", ExportPlansCsvAsync);
+        var schedule = app.MapGroup("/schedules/picking").WithTags("Picking").RequireAuthorization().RequireModule("picking");
+        schedule.MapGet("", ListPlansAsync).RequirePermission("pick_import.Open", "ht_picking.Open");
+        schedule.MapPost("", CreatePlanAsync).RequirePermission("pick_import.New");
+        schedule.MapPut("/status", ChangeStatusAsync).RequirePermission("pick_import.StatusChange");
+        app.MapGet("/export/picking-schedule", ExportPlansCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("picking").RequirePermission("pick_import.Export");
 
-        var result = app.MapGroup("/picking-result").WithTags("Picking").RequireAuthorization();
-        result.MapGet("", ListResultsAsync);
-        result.MapPost("", CreateResultAsync);
-        result.MapGet("/export.csv", ExportResultsCsvAsync);
+        var result = app.MapGroup("/results/picking").WithTags("Picking").RequireAuthorization().RequireModule("picking");
+        var write = app.MapGroup("/picking-result").WithTags("Picking").RequireAuthorization().RequireModule("picking");
+        result.MapGet("", ListResultsAsync).RequirePermission("pick_result.Open", "ht_picking.Open");
+        write.MapPost("", CreateResultAsync).RequirePermission("ht_picking.Open");
+        app.MapGet("/export/picking-result", ExportResultsCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("picking").RequirePermission("pick_result.Export");
         return app;
     }
 

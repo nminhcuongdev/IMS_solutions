@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -9,7 +10,7 @@ public static class AuthEndpoints
     {
         var g = app.MapGroup("/auth").WithTags("Auth");
         g.MapPost("/login", LoginAsync).AllowAnonymous();
-        g.MapPost("/logout", LogoutAsync).RequireAuthorization();
+        g.MapPost("/logout", LogoutAsync).RequireAuthorization().AuthenticatedOnly();
         return app;
     }
 

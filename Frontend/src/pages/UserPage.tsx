@@ -20,19 +20,14 @@ import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useRowNav } from "@/lib/useShortcuts";
 import { useRowSelect } from "@/lib/rowSelect";
 import { errorText } from "@/lib/errorText";
+import { listRoles, type RoleRow } from "@/api/roles";
 
 type ModalMode = "new" | "edit" | "copy" | null;
 
 const PASSWORD_MASK = "•".repeat(8);
 
-const AUTH_LABEL: Record<string, string> = {
-  Admin: "authAdmin", General: "authGeneral", Worker: "authWorker",
-};
 const LANG_LABEL: Record<string, string> = { en: "langEn", ja: "langJa", vi: "langVi" };
 
-const authBadge = roleBadge;
-
-const ROLES = ["Admin", "General", "Worker"] as const;
 
 export function UserPage() {
   const t = useT();
@@ -46,6 +41,10 @@ export function UserPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<ModalMode>(null);
   const [target, setTarget] = useState<AppUser | null>(null);
+
+  const [roles, setRoles] = useState<RoleRow[]>([]);
+  useEffect(() => { listRoles().then(setRoles).catch(() => {}); }, []);
+  const roleOf = (code: string) => roles.find(r => r.roleCode.toUpperCase() === code.toUpperCase());
 
   const { sort, toggleSort } = useSort("user_code");
   const onSort = toggleSort;
@@ -71,7 +70,7 @@ export function UserPage() {
 
   return (
     <div className="pg on">
-      <CommonToolbar
+      <CommonToolbar fn="m_user"
         searchDraft={qDraft} onSearchDraftChange={setQDraft}
         onSearch={() => setPage(1)}
         onNew={() => { setModal("new"); setTarget(null); }}
@@ -129,7 +128,7 @@ export function UserPage() {
                 <td>{r.userCode}</td>
                 <td className="text-left">{r.userName}</td>
                 <td>{PASSWORD_MASK}</td>
-                <td><span className={"badge " + authBadge(r.roleCode)}>{t(AUTH_LABEL[r.roleCode] ?? "", r.roleCode)}</span></td>
+                <td><span className={"badge " + roleBadge(roleOf(r.roleCode)?.isBuiltin)}>{r.roleName ?? roleOf(r.roleCode)?.roleName ?? r.roleCode}</span></td>
                 <td className="text-left"><span className={"badge " + (r.isActive ? "badge-ok" : "badge-ng")}>{r.isActive ? t("statusEnable", "Enable") : t("statusDisable", "Disable")}</span></td>
                 <td>{r.defaultLanguage ? t(LANG_LABEL[r.defaultLanguage] ?? "", r.defaultLanguage) : "—"}</td>
                 <td className="text-left">{r.remark1 ?? "—"}</td>
@@ -162,7 +161,7 @@ function UserModal({ mode, source, onClose, onSaved }: {
   const [form, setForm] = useState<UserWrite>({
     userCode: isEdit ? source!.userCode : "",
     userName: mode === "new" ? "" : source?.userName ?? "",
-    roleCode: source?.roleCode ?? "General",
+    roleCode: source?.roleCode ?? "",
     password: "",
     factoryCode: source?.factoryCode ?? "",
     defaultLanguage: source?.defaultLanguage ?? "en",
@@ -175,7 +174,9 @@ function UserModal({ mode, source, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const [roles, setRoles] = useState<RoleRow[]>([]);
   useEffect(() => { listFactories({ pageSize: 200 }).then(r => setFactories(r.data)).catch(() => {}); }, []);
+  useEffect(() => { listRoles().then(setRoles).catch(() => {}); }, []);
 
   return (
     <ModalShell title={t("mUser", "User Master")} onClose={onClose} saving={saving} err={err}
@@ -199,14 +200,15 @@ function UserModal({ mode, source, onClose, onSaved }: {
       </Field>
       <Field label={isEdit ? t("passwordKeepBlank", "Password (leave blank to keep current)") : t("password", "Password")}>
         <input type="password" maxLength={100} required={!isEdit}
-          placeholder={isEdit ? "Không đổi mật khẩu" : ""}
+          placeholder={isEdit ? t("passwordKeepPlaceholder", "Leave blank to keep the current password") : ""}
           value={form.password ?? ""}
           onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
       </Field>
       <Field label={t("thAuthority", "Authority")}>
         <select required value={form.roleCode}
           onChange={e => setForm(f => ({ ...f, roleCode: e.target.value }))}>
-          {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+          {!form.roleCode && <option value="" />}
+          {roles.map(r => <option key={r.roleCode} value={r.roleCode}>{r.roleCode} - {r.roleName}</option>)}
         </select>
       </Field>
       <Field label={t("saDefaultFactory", "Default Factory")}>

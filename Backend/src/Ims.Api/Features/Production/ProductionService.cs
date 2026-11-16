@@ -72,7 +72,6 @@ internal sealed partial class ProductionService : IProductionService
         var returnRows = await db.ProductionReturns.AsNoTracking().Where(x => selectedNos.Contains(x.ProductionOrderNo)
             && x.ReversesNo == null && !db.ProductionReturns.Any(r => r.ReversesNo == x.No)).ToListAsync(ct);
         var itemRows = await db.Items.AsNoTracking().Include(x => x.ItemGroup).ToDictionaryAsync(x => x.ItemCode, ct);
-        var receipts = await db.ProductionReceipts.AsNoTracking().Where(x => selectedNos.Contains(x.ProductionOrderNo)).ToListAsync(ct);
         var starts = orders.ToDictionary(x => x.ProductionOrderNo, x =>
             inputRows.Where(y => y.ProductionOrderNo == x.ProductionOrderNo).Select(y => y.CreatedAt)
                 .Concat(outputRows.Where(y => y.ProductionOrderNo == x.ProductionOrderNo).Select(y => y.CreatedAt))
@@ -95,7 +94,7 @@ internal sealed partial class ProductionService : IProductionService
                     inputRows.Where(x => x.ProductionOrderNo == l.ProductionOrderNo && x.LineNo == l.LineNo).Sum(x => x.Qty)
                         - returnRows.Where(x => x.ProductionOrderNo == l.ProductionOrderNo && x.LineNo == l.LineNo).Sum(x => x.Qty),
                     l.UomCode, o.ProductionLotNo, o.OutputLotNo, o.StorageLocationCode,
-                    l.PickedAt is not null, receipts.Any(x => x.ProductionOrderNo == o.ProductionOrderNo),
+                    l.PickedAt is not null, o.ReceivedAt != null,
                     inputRows.Where(x => x.ProductionOrderNo == o.ProductionOrderNo && x.LineNo == l.LineNo)
                         .Select(x => x.RequestId).Distinct().Count(),
                     item?.HtScanRequired ?? true, o.PlannedStartDate, o.PlannedEndDate,
@@ -115,31 +114,38 @@ internal sealed partial class ProductionService : IProductionService
         return Outcome.Ok(new ApiListSuccess<ProductionOrderRowDto>(sortedOrders, new PageMeta(orderRows.Count, pg, sz)));
     }
 
-    public async Task<ServiceResult> GetAsync(string orderNo, CancellationToken ct)
+    public async Task<ServiceResult> GetAsync(string orderNo, CancellationToken ct, string? processCode = null)
     {
         var order = await db.ProductionOrders.AsNoTracking().FirstOrDefaultAsync(x => x.ProductionOrderNo == orderNo, ct);
         if (order is null) return MissingOrder();
         var lines = await DetailedLinesAsync(order, ct);
+        if (!string.IsNullOrWhiteSpace(processCode))
+        {
+            lines = lines.Where(x => x.ProcessCode == processCode.Trim() && x.HtScanRequired).ToList();
+            if (lines.Count == 0) return Outcome.Conflict(new ApiError(ErrorCatalog.Scn010()));
+        }
         var inputTimes = await db.ProductionConsumptions.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo && x.ReversesNo == null && !db.ProductionConsumptions.Any(r => r.ReversesNo == x.No)).Select(x => x.CreatedAt).ToListAsync(ct);
         var outputTimes = await db.ProductionOutputs.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo && x.ReversesNo == null && !db.ProductionOutputs.Any(r => r.ReversesNo == x.No)).Select(x => x.CreatedAt).ToListAsync(ct);
         var outputQty = await db.ProductionOutputs.Where(x => x.ProductionOrderNo == orderNo && x.ReversesNo == null && !db.ProductionOutputs.Any(r => r.ReversesNo == x.No)).SumAsync(x => (decimal?)x.Qty, ct) ?? 0;
-        var progress = order.PlannedQty > 0 ? outputQty / order.PlannedQty * 100 : 0;
-        return Outcome.Ok(new ApiSuccess<object>(new { Order = order, Lines = lines, OutputQty = outputQty,
-            Progress = progress, OverPlan = outputQty > order.PlannedQty,
-            StartedAt = inputTimes.Concat(outputTimes).Cast<DateTime?>().Min(),
-            CompletedAt = order.StatusCode == 2 ? inputTimes.Concat(outputTimes).Cast<DateTime?>().Max() : null,
+        var percent = order.PlannedQty > 0 ? (int)Math.Min(100, Math.Floor(outputQty / order.PlannedQty * 100)) : 0;
+        var works = await TimelineAsync(orderNo, ct);
+        var startedAt = inputTimes.Concat(outputTimes).Cast<DateTime?>().Min();
+        var completedAt = order.StatusCode == 2 ? inputTimes.Concat(outputTimes).Cast<DateTime?>().Max() : null;
+        var pick = lines.Count == 0 ? "na" : lines.All(x => x.Picked) ? "all" : lines.Any(x => x.Picked) ? "part" : "none";
+        var receipt = lines.Count == 0 ? "na" : lines.All(x => x.Received) ? "all" : "none";
+        var htInput = lines.All(x => !x.HtScanRequired) ? "na" : lines.Where(x => x.HtScanRequired).All(x => x.HtInputCount > 0) ? "all" : lines.Any(x => x.HtInputCount > 0) ? "part" : "none";
+        return Outcome.Ok(new ApiSuccess<object>(new
+        {
+            order.ProductionOrderNo, order.StatusCode, order.ProductionLotNo, order.OutputLotNo, order.StorageLocationCode,
+            order.PlannedQty, ProducedQty = outputQty, OverPlan = outputQty > order.PlannedQty,
+            Progress = new { Percent = percent },
+            PickState = pick, ReceiptState = receipt, HtInputState = htInput,
+            order.PlannedStartDate, order.PlannedEndDate, ActualStartAt = startedAt, ActualEndAt = completedAt,
+            Lines = lines, Works = works,
+            Order = order, OutputQty = outputQty, StartedAt = startedAt, CompletedAt = completedAt,
             HtScanRequiredCount = lines.Count(x => x.HtScanRequired),
-            PickedStatus = lines.Count == 0 ? "na" : lines.All(x => x.Picked) ? "all" : lines.Any(x => x.Picked) ? "part" : "none",
-            ReceiptStatus = lines.Count == 0 ? "na" : lines.All(x => x.Received) ? "all" : "none",
-            HtInputStatus = lines.All(x => !x.HtScanRequired) ? "na" : lines.Where(x => x.HtScanRequired).All(x => x.HtInputCount > 0) ? "all" : lines.Any(x => x.HtInputCount > 0) ? "part" : "none" }));
-    }
-
-    public async Task<ServiceResult> LinesAsync(string orderNo, CancellationToken ct)
-    {
-        if (!await db.ProductionOrders.AnyAsync(x => x.ProductionOrderNo == orderNo, ct)) return MissingOrder();
-        var order = await OrderAsync(orderNo, ct);
-        var lines = await DetailedLinesAsync(order!, ct);
-        return Outcome.Ok(new ApiSuccess<IReadOnlyList<ProductionLineRowDto>>(lines));
+            PickedStatus = pick, ReceiptStatus = receipt, HtInputStatus = htInput,
+        }));
     }
 
     private async Task<IReadOnlyList<ProductionLineRowDto>> DetailedLinesAsync(ProductionOrder order, CancellationToken ct)
@@ -150,7 +156,7 @@ internal sealed partial class ProductionService : IProductionService
             && !db.ProductionConsumptions.Any(r => r.ReversesNo == x.No)).ToListAsync(ct);
         var returns = await db.ProductionReturns.AsNoTracking().Where(x => x.ProductionOrderNo == order.ProductionOrderNo && x.ReversesNo == null
             && !db.ProductionReturns.Any(r => r.ReversesNo == x.No)).ToListAsync(ct);
-        var received = await db.ProductionReceipts.AnyAsync(x => x.ProductionOrderNo == order.ProductionOrderNo, ct);
+        var received = order.ReceivedAt != null;
         var outputTimes = await db.ProductionOutputs.AsNoTracking().Where(x => x.ProductionOrderNo == order.ProductionOrderNo && x.ReversesNo == null
             && !db.ProductionOutputs.Any(r => r.ReversesNo == x.No)).Select(x => x.CreatedAt).ToListAsync(ct);
         var times = inputs.Select(x => x.CreatedAt).Concat(outputTimes).ToList();
@@ -175,24 +181,29 @@ internal sealed partial class ProductionService : IProductionService
         }).ToList();
     }
 
-    public async Task<ServiceResult> WorksAsync(string orderNo, CancellationToken ct)
+    private async Task<List<ProductionWorkDto>> TimelineAsync(string orderNo, CancellationToken ct)
     {
-        if (!await db.ProductionOrders.AnyAsync(x => x.ProductionOrderNo == orderNo, ct)) return MissingOrder();
-        var receipts = await db.ProductionReceipts.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo).ToListAsync(ct);
-        var consumptions = await db.ProductionConsumptions.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo).ToListAsync(ct);
-        var outputs = await db.ProductionOutputs.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo).ToListAsync(ct);
-        var labels = await db.ProductionLabels.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo).ToListAsync(ct);
-        var returns = await db.ProductionReturns.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo).ToListAsync(ct);
+        var order = await db.ProductionOrders.AsNoTracking().FirstAsync(x => x.ProductionOrderNo == orderNo, ct);
+        var results = await db.ProductionResults.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo).ToListAsync(ct);
+        var reversed = results.Where(x => x.ReversesNo != null).Select(x => x.ReversesNo!.Value).ToHashSet();
         var picked = await db.ProductionOrderLines.AsNoTracking().Where(x => x.ProductionOrderNo == orderNo && x.PickedAt != null).ToListAsync(ct);
-        var timeline = picked.Select(x => new ProductionWorkDto("picking", x.No, orderNo, x.ItemCode, null,
-                x.PlannedQty, x.PickedAt!.Value, x.PickedBy))
-            .Concat(receipts.Select(x => new ProductionWorkDto("receipt", x.No, orderNo, null, null, null, x.CreatedAt, x.CreatedBy)))
-            .Concat(consumptions.Select(x => new ProductionWorkDto("consumption", x.No, orderNo, x.ItemCode, x.LotNo, x.Qty, x.CreatedAt, x.CreatedBy)))
-            .Concat(outputs.Select(x => new ProductionWorkDto("output", x.No, orderNo, x.ItemCode, x.LotNo, x.Qty, x.CreatedAt, x.CreatedBy)))
-            .Concat(labels.Select(x => new ProductionWorkDto("label", x.No, orderNo, x.ItemCode, x.LotNo, x.TotalQty, x.CreatedAt, x.CreatedBy)))
-            .Concat(returns.Select(x => new ProductionWorkDto("return", x.No, orderNo, x.ItemCode, x.LotNo, x.Qty, x.CreatedAt, x.CreatedBy)))
+        static string TypeOf(string resultType) => resultType switch
+        {
+            ProductionResultType.Consume => "consumption",
+            ProductionResultType.Return => "return",
+            _ => "output",
+        };
+        var labels = results.Where(x => x.ResultType == ProductionResultType.Output && x.LabelIssuedAt != null && x.ReversesNo == null)
+            .GroupBy(x => x.RequestId)
+            .Select(g => new ProductionWorkDto("label", g.Min(x => x.No), orderNo, g.First().ItemCode, g.First().LotNo,
+                g.Sum(x => x.Qty), g.Min(x => x.LabelIssuedAt!.Value), g.First().LabelIssuedBy));
+        var timeline = picked.Select(x => new ProductionWorkDto("picking", x.No, orderNo, x.ItemCode, null, x.PlannedQty, x.PickedAt!.Value, x.PickedBy))
+            .Concat(order.ReceivedAt is { } at ? [new ProductionWorkDto("receipt", order.No, orderNo, null, null, null, at, order.ReceivedBy)] : [])
+            .Concat(results.Select(x => new ProductionWorkDto(TypeOf(x.ResultType), x.No, orderNo, x.ItemCode, x.LotNo, x.Qty,
+                x.CreatedAt, x.CreatedBy, x.ReversesNo != null || reversed.Contains(x.No), x.LineNo, x.SerialNo,
+                x.LocationCode, x.ExpiryDate, x.ReversesNo, x.RequestId)))
+            .Concat(labels)
             .OrderBy(x => x.CreatedAt).ThenBy(x => x.No).ToList();
-        return Outcome.Ok(new ApiSuccess<object>(new { Receipts = receipts, Consumptions = consumptions, Outputs = outputs,
-            Labels = labels, Returns = returns, Timeline = timeline }));
+        return timeline;
     }
 }

@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,12 +9,12 @@ public static class UserEndpoints
     public static IEndpointRouteBuilder MapUserEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/masters/users").WithTags("Users");
-        g.MapGet("", ListAsync);
-        g.MapGet("/{code}", GetAsync);
-        g.MapPost("", CreateAsync);
-        g.MapPut("/{code}", UpdateAsync);
-        g.MapDelete("/{code}", DeleteAsync);
-        g.MapGet("/export.csv", ExportCsvAsync);
+        g.MapGet("", ListAsync).RequirePermission("m_user.Open");
+        g.MapGet("/{code}", GetAsync).RequirePermission("m_user.Open");
+        g.MapPost("", CreateAsync).RequirePermission("m_user.New", "m_user.Copy");
+        g.MapPut("/{code}", UpdateAsync).RequirePermission("m_user.Edit");
+        g.MapDelete("/{code}", DeleteAsync).RequirePermission("m_user.Delete");
+        app.MapGet("/export/users", ExportCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("m_user.Export");
         return app;
     }
 

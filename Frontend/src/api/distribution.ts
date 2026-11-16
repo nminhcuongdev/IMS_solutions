@@ -1,4 +1,4 @@
-import { apiCall, apiList, getToken, clearToken } from "./client";
+import { API_BASE, apiCall, apiList, getToken, clearToken } from "./client";
 import { ApiCallError, type ApiError, type ApiSuccess } from "./types";
 
 export type DeviceUpdateStatus = "latest" | "downloaded" | "waiting" | "attention" | "unconfirmed" | "notTarget";
@@ -71,20 +71,13 @@ export const getDistSettings = () => apiCall<DistSettings>(`${P}/settings`);
 export const saveDistSettings = (body: DistSettings) => apiCall<DistSettings>(`${P}/settings`, { method: "PUT", body });
 export const getVersionJson = () => apiCall<VersionJson>(`${P}/version-json`);
 
-function apiBase(): string {
-  const explicit = (import.meta.env.VITE_API_BASE as string | undefined)?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
-  const port = (import.meta.env.VITE_API_PORT as string | undefined)?.trim() || "8091";
-  return `${window.location.protocol}//${window.location.hostname}:${port}`;
-}
-
-export const updateSourceUrl = () => `${apiBase()}/dl/`;
+export const updateSourceUrl = () => `${API_BASE}/dl/`;
 
 export async function uploadPackage(file: File): Promise<PackageUploadResult> {
   const fd = new FormData();
   fd.append("file", file);
   const token = getToken();
-  const res = await fetch(`${apiBase()}${P}/packages`, {
+  const res = await fetch(`${API_BASE}${P}/packages`, {
     method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd,
   });
   if (res.status === 401) clearToken();

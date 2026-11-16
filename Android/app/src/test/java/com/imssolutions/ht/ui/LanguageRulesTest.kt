@@ -9,7 +9,9 @@ class LanguageRulesTest {
 
     @Test
     fun `khong co lua chon nao thi ve tieng Viet`() {
-        assertEquals("vi", resolveLanguage(override = null, userCode = "", userDefault = null))
+        assertEquals("en", resolveLanguage(override = null, userCode = "", userDefault = null))
+        assertEquals("ja", resolveLanguage(override = null, userCode = "", userDefault = null, deviceLanguage = "ja"))
+        assertEquals("en", resolveLanguage(override = null, userCode = "", userDefault = null, deviceLanguage = "fr"))
     }
 
 
@@ -20,8 +22,8 @@ class LanguageRulesTest {
 
     @Test
     fun `ma ngon ngu la thi bo qua, khong lam sap app`() {
-        assertEquals("vi", resolveLanguage(null, userCode = "U001", userDefault = "zz"))
-        assertEquals("vi", resolveLanguage(null, userCode = "U001", userDefault = "  "))
+        assertEquals("en", resolveLanguage(null, userCode = "U001", userDefault = "zz"))
+        assertEquals("en", resolveLanguage(null, userCode = "U001", userDefault = "  "))
     }
 
 
@@ -37,7 +39,7 @@ class LanguageRulesTest {
 
     @Test
     fun `lua chon cua nguoi khac ma tai khoan moi khong khai gi thi ve tieng Viet`() {
-        assertEquals("vi", resolveLanguage("en" to "U001", userCode = "U002", userDefault = null))
+        assertEquals("en", resolveLanguage("en" to "U001", userCode = "U002", userDefault = null))
     }
 
     @Test
@@ -90,8 +92,8 @@ class LanguageRulesTest {
     fun `ma ngon ngu la khong lam sap thanh co`() {
         assertEquals("ja", HtLang.of("ja", HtLang.BUILT_IN).code)
         assertEquals("en", HtLang.of("EN", HtLang.BUILT_IN).code)
-        assertEquals("vi", HtLang.of("zz", HtLang.BUILT_IN).code)
-        assertEquals("vi", HtLang.of(null, HtLang.BUILT_IN).code)
+        assertEquals("en", HtLang.of("zz", HtLang.BUILT_IN).code)
+        assertEquals("en", HtLang.of(null, HtLang.BUILT_IN).code)
     }
 
     private val withKorean = setOf("en", "ja", "vi", "ko")

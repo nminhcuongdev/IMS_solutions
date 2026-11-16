@@ -51,4 +51,5 @@ data class StocktakingResultRequest(
     val itemCode: String,
     val lotNo: String? = null,
     val countedLabels: Int,
+    val requestId: String? = null,
 )

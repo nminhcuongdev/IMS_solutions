@@ -70,7 +70,7 @@ public class StocktakingSessionTests
     {
         using var t = Warehouse();
         var res = await new StocktakingService(t.Db).StartAsync(new StartStocktakingDto("   "), User(), default);
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class StocktakingSessionTests
     }
 
     [Fact]
-    public async Task Starting_again_replaces_the_previous_snapshot()
+    public async Task Starting_again_keeps_the_labels_of_earlier_sessions()
     {
         using var t = Warehouse();
         await StartAsync(t);
@@ -154,8 +154,9 @@ public class StocktakingSessionTests
 
         var second = await StartAsync(t, "Dot sau");
 
-        Assert.Equal(3, await t.Db.StocktakingLabels.CountAsync());
-        Assert.True(await t.Db.StocktakingLabels.AllAsync(x => x.StocktakingSessionNo == second.No));
+        Assert.Equal(6, await t.Db.StocktakingLabels.CountAsync());
+        Assert.Equal(3, await t.Db.StocktakingLabels.CountAsync(x => x.StocktakingSessionNo == second.No));
+        Assert.Equal(10m, (await t.Db.StocktakingLabels.FirstAsync(x => x.StocktakingSessionNo == second.No && x.SerialNo == "SN-001")).PlannedQty);
     }
 
 
@@ -352,7 +353,7 @@ public class StocktakingSessionTests
     }
 
     [Fact]
-    public async Task A_later_session_overwrites_the_summary()
+    public async Task A_later_session_adds_its_own_summary()
     {
         using var t = Warehouse();
         await StartAsync(t);
@@ -364,15 +365,16 @@ public class StocktakingSessionTests
         await new StocktakingService(t.Db).CompleteAsync(User(), default);
         await new StocktakingService(t.Db).FinalizeAsync(new FinalizeStocktakingDto(null), User(), default);
 
-        var a = await t.Db.StocktakingHistories.SingleAsync(x => x.ItemCode == "ITM-A");
-        Assert.Equal("Dot sau", a.StocktakingName);
-        Assert.Equal(20m, a.ResultQty);
-        Assert.Equal(0m, a.MissingQty);
-        Assert.Equal(2, await t.Db.StocktakingHistories.CountAsync());
+        var rows = await t.Db.StocktakingHistories.Where(x => x.ItemCode == "ITM-A").OrderBy(x => x.StocktakingSessionNo).ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("Dot sau", rows[1].StocktakingName);
+        Assert.Equal(20m, rows[1].ResultQty);
+        Assert.Equal(0m, rows[1].MissingQty);
+        Assert.Equal(4, await t.Db.StocktakingHistories.CountAsync());
     }
 
     [Fact]
-    public async Task Finalize_does_not_touch_the_stock_table()
+    public async Task Finalize_writes_off_the_labels_marked_missing()
     {
         using var t = Warehouse();
         await StartAsync(t);
@@ -380,8 +382,49 @@ public class StocktakingSessionTests
         await new StocktakingService(t.Db).FinalizeAsync(new FinalizeStocktakingDto(new[] { "SN-001", "SN-002" }), User(), default);
 
         var qty = await t.Db.Stocks.Where(x => x.ItemCode == "ITM-A").SumAsync(x => x.StockQty);
-        Assert.Equal(20m, qty);
-        Assert.Empty(await t.Db.InventoryHistories.ToListAsync());
+        Assert.Equal(0m, qty);
+        var diffs = await t.Db.InventoryHistories.Where(h => h.ActionType == InventoryAction.StocktakeDiff).ToListAsync();
+        Assert.Equal(-20m, diffs.Sum(h => h.Qty));
+        Assert.Equal(20m, (await t.Db.StocktakingHistories.SingleAsync(h => h.ItemCode == "ITM-A")).MissingQty);
+        Assert.Equal(5m, (await t.Db.Stocks.SingleAsync(x => x.ItemCode == "ITM-B")).StockQty);
+    }
+
+    [Fact]
+    public async Task Finalize_runs_only_once()
+    {
+        using var t = Warehouse();
+        await StartAsync(t);
+        await new StocktakingService(t.Db).CompleteAsync(User(), default);
+        await new StocktakingService(t.Db).FinalizeAsync(new FinalizeStocktakingDto(null), User(), default);
+
+        var again = await new StocktakingService(t.Db).FinalizeAsync(new FinalizeStocktakingDto(null), User(), default);
+
+        ResultAssert.Error(again, 409, "STK-001");
+    }
+
+    [Fact]
+    public async Task A_label_moved_during_counting_is_flagged_and_not_written_off()
+    {
+        using var t = Warehouse();
+        await StartAsync(t);
+        var stock = await t.Db.Stocks.SingleAsync(x => x.SerialNo == "SN-001");
+        stock.StockQty = 8;
+        stock.Recalculate();
+        t.Db.InventoryHistories.Add(new InventoryHistory
+        {
+            CreatedAt = DateTime.Now.AddSeconds(1), ItemCode = "ITM-A", SerialNo = "SN-001", LotNo = "LOT-1",
+            LocationCode = "W1_ZA_S1", FactoryCode = "FAC-01", ActionType = InventoryAction.Consume, Qty = -2,
+        });
+        await t.Db.SaveChangesAsync();
+        t.Db.ChangeTracker.Clear();
+        await new StocktakingService(t.Db).CompleteAsync(User(), default);
+        await new StocktakingService(t.Db).FinalizeAsync(new FinalizeStocktakingDto(new[] { "SN-001" }), User(), default);
+
+        var label = await t.Db.StocktakingLabels.SingleAsync(x => x.SerialNo == "SN-001");
+        Assert.True(label.MovedAfterStart);
+        Assert.NotEqual(StocktakingLabelStatus.Missing, label.Status);
+        Assert.Equal(10m, label.PlannedQty);
+        Assert.Equal(8m, (await t.Db.Stocks.SingleAsync(x => x.SerialNo == "SN-001")).StockQty);
     }
 
     [Fact]

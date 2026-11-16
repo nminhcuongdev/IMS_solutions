@@ -62,7 +62,7 @@ class PickingListViewModel : ViewModel() {
         val s = _state.value
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.listPlans(date = s.date) }
+            runCatching { repo.listAllPlans(date = s.date) }
                 .onSuccess { r -> _state.update { it.copy(loading = false, lines = r.data) } }
                 .onFailure { e -> _state.update { it.copy(loading = false, error = e.toPair()) } }
         }
@@ -75,6 +75,8 @@ data class PickingDetailState(
     val line: PickingPlan? = null,
     val actualQty: String = "",
     val locationCode: String = "",
+    val lotNo: String = "",
+    val lotFromLabel: Boolean = false,
     val busy: Boolean = false,
     val error: Pair<String, String>? = null,
     val toast: HtMsg? = null,
@@ -98,6 +100,34 @@ class PickingDetailViewModel : ViewModel() {
 
     fun setActual(v: String) = _state.update { it.copy(actualQty = v, error = null) }
     fun setLocation(v: String) = _state.update { it.copy(locationCode = v, error = null) }
+    fun setLot(v: String) = _state.update { it.copy(lotNo = v, error = null) }
+
+    fun onScan(raw: String) {
+        val line = _state.value.line ?: return
+        val payload = when (val r = com.imssolutions.ht.scan.QrPayload.parse(raw)) {
+            is com.imssolutions.ht.scan.QrScan.Ok -> r.payload
+            is com.imssolutions.ht.scan.QrScan.Invalid -> {
+                if (_state.value.locationEditable) setLocation(raw.trim())
+                else _state.update { it.copy(error = "SCN-001" to "The scanned code is not in a valid format.") }
+                return
+            }
+        }
+        if (payload.kind == com.imssolutions.ht.scan.QrLabelKind.Location) {
+            if (_state.value.locationEditable) setLocation(payload.locationCode.orEmpty())
+            return
+        }
+        val item = payload.itemCode?.trim()
+        if (item.isNullOrEmpty()) {
+            _state.update { it.copy(error = "VAL-001" to "fldItemCode") }
+            return
+        }
+        if (!item.equals(line.itemCode, ignoreCase = true)) {
+            _state.update { it.copy(error = "SCN-005" to "fldItemCode") }
+            return
+        }
+        val lot = payload.lotNo?.trim().orEmpty()
+        _state.update { it.copy(lotNo = lot, lotFromLabel = lot.isNotEmpty(), error = null) }
+    }
     fun clearToast() = _state.update { it.copy(toast = null) }
     fun clearError() = _state.update { it.copy(error = null) }
 
@@ -112,6 +142,8 @@ class PickingDetailViewModel : ViewModel() {
                             line = line,
                             actualQty = "",
                             locationCode = "",
+                            lotNo = "",
+                            lotFromLabel = false,
                             error = if (line == null) {
                                 "SYS-404" to serialNo
                             } else null,
@@ -129,25 +161,25 @@ class PickingDetailViewModel : ViewModel() {
 
         val qty = s.actualQty.trim().toDoubleOrNull()
         if (qty == null || qty < 0) {
-            _state.update { it.copy(error = "QTY-001" to "Vui lòng nhập số lượng hợp lệ (từ 0 trở lên).") }
+            _state.update { it.copy(error = "QTY-001" to "Please enter a valid quantity (0 or more).") }
             return
         }
         if (s.locationEditable && s.locationCode.isBlank()) {
             _state.update {
-                it.copy(error = "LOC-001" to "Dòng này chưa có vị trí. Vui lòng nhập vị trí đã lấy hàng.")
+                it.copy(error = "LOC-001" to "Please enter a Location.")
             }
             return
         }
 
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.confirmLine(line, qty, s.locationCode) }
+            runCatching { repo.confirmLine(line, qty, s.locationCode, s.lotNo) }
                 .onSuccess { row ->
                     val msg = if (qty >= line.plannedQty) {
-                        HtMsg("htPickedFull", "Đã nhặt đủ {0}", fmt(row.qty))
+                        HtMsg("htPickedFull", "Picked all {0}", fmt(row.qty))
                     } else {
                         HtMsg(
-                            "htPickedShort", "Đã ghi {0}/{1} — dòng vẫn còn để nhặt tiếp",
+                            "htPickedShort", "Saved {0}/{1}; the line is still open",
                             fmt(row.qty), fmt(line.plannedQty),
                         )
                     }

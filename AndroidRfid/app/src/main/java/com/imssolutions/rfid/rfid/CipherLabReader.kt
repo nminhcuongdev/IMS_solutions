@@ -12,7 +12,6 @@ import com.cipherlab.rfid.GeneralString
 import com.cipherlab.rfid.QValue
 import com.cipherlab.rfid.RFIDMode
 import com.cipherlab.rfid.ScanMode
-import com.cipherlab.rfid.SwitchMode
 import com.cipherlab.rfidapi.RfidManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
@@ -30,9 +29,9 @@ class CipherLabReader(context: Context) : TagReader {
     override val kind = ReaderKind.CipherLab
     override val powerRange = MIN_POWER..MAX_POWER
     override val caps = ReaderCaps(
-        modes = listOf(ReadMode.Rfid, ReadMode.Barcode, ReadMode.Both),
+        modes = listOf(ReadMode.Rfid),
         barcodeBySoftTrigger = false,
-        barcodeByKeyboard = true,
+        barcodeByKeyboard = false,
     )
 
     private val appContext = context.applicationContext
@@ -150,15 +149,7 @@ class CipherLabReader(context: Context) : TagReader {
         result { it.SetTxPower(next) } ?: if (power() == next) null else APPLY_FAILED
     }
 
-    override suspend fun setMode(mode: ReadMode): String? = withContext(Dispatchers.IO) {
-        val target = when (mode) {
-            ReadMode.Rfid -> SwitchMode.UHFRFIDReader
-            ReadMode.Barcode -> SwitchMode.BarcodeReader
-            ReadMode.Both -> SwitchMode.UHFRFIDBarcodeReader
-        }
-        result { it.SetSwitchMode(target) }
-            ?: if (runCatching { manager?.GetSwitchMode() }.getOrNull() == target) null else APPLY_FAILED
-    }
+    override suspend fun setMode(mode: ReadMode): String? = if (mode in caps.modes) null else UNSUPPORTED
 
     override fun trigger(on: Boolean): String? = result { it.SoftScanTrigger(on) }
 
@@ -175,6 +166,7 @@ class CipherLabReader(context: Context) : TagReader {
         const val MAX_POWER = 30
         const val NOT_AVAILABLE = "RFID service not available"
         const val APPLY_FAILED = "RS36 did not accept the setting"
+        const val UNSUPPORTED = "Only RFID mode is available on the RS36"
         private const val RESPONSE_SUCCESS = 0
         private const val POLL_MS = 500L
         private const val MAX_POLLS = 20

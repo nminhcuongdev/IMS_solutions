@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -9,18 +10,18 @@ public static class InventoryEndpoints
     public static IEndpointRouteBuilder MapInventoryEndpoints(this IEndpointRouteBuilder app)
     {
         var stock = app.MapGroup("/stock").WithTags("Inventory").RequireAuthorization();
-        stock.MapGet("", ListStockAsync);
-        stock.MapGet("/export.csv", ExportStockCsvAsync);
-        stock.MapPost("/adjust", AdjustStockAsync);
-        stock.MapPost("/hold", HoldStockAsync);
-        stock.MapPost("/release-hold", ReleaseHoldAsync);
-        stock.MapPost("/disposal", DisposeStockAsync);
-        stock.MapPost("/transfer", TransferStockAsync);
+        stock.MapGet("", ListStockAsync).RequirePermission("inv.Open", "inv_hold.Open", "alert_center.Open", "ht_inventory.Open", "ht_disposal.Open", "ht_transfer.Open", "ht_prd_input.Open", "ht_stocktaking.Open");
+        app.MapGet("/export/stock", ExportStockCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("inv.Export", "inv_hold.Export");
+        stock.MapPost("/adjust", AdjustStockAsync).RequirePermission("inv.Adjust");
+        stock.MapPost("/hold", HoldStockAsync).RequirePermission("inv_hold.Hold");
+        stock.MapPost("/release-hold", ReleaseHoldAsync).RequirePermission("inv_hold.Release");
+        stock.MapPost("/disposal", DisposeStockAsync).RequirePermission("inv.Disposal", "ht_disposal.Open");
+        stock.MapPost("/transfer", TransferStockAsync).RequirePermission("ht_transfer.Open");
 
         var history = app.MapGroup("/inventory-history").WithTags("Inventory").RequireAuthorization();
-        history.MapGet("", ListHistoryAsync);
-        history.MapGet("/export.csv", ExportHistoryCsvAsync);
-        history.MapPost("/restore", RestoreDisposalAsync);
+        history.MapGet("", ListHistoryAsync).RequirePermission("inv_history.Open");
+        app.MapGet("/export/inventory-history", ExportHistoryCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("inv_history.Export");
+        history.MapPost("/restore", RestoreDisposalAsync).RequirePermission("inv_history.RestoreDisposal");
         return app;
     }
 

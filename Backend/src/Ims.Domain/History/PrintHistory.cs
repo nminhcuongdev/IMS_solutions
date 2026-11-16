@@ -14,4 +14,7 @@ public class PrintHistory
     public string? Spec { get; set; }
     public int Status { get; set; }
     public string? CreatedBy { get; set; }
+    public string? PrintData { get; set; }
+    public string? LayoutFile { get; set; }
+    public long? ReprintOfNo { get; set; }
 }

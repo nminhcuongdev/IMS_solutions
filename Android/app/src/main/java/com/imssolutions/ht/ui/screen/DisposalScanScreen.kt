@@ -78,16 +78,18 @@ fun DisposalScanScreen(
         HtBottomInset()
     }
 
+    StockChoiceDialog(state.choices, onChoose = { vm.choose(it) }, onDismiss = { vm.dismissChoices() })
+
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
-            title = { Text(t("confirmTitle", "Bỏ danh sách đã quét?")) },
-            text = { Text(t("htScannedRowsLost", "{0} dòng vừa quét sẽ mất.", state.lines.size)) },
+            title = { Text(t("confirmTitle", "Discard the scanned list?")) },
+            text = { Text(t("htScannedRowsLost", "{0} scanned rows will be lost.", state.lines.size)) },
             confirmButton = {
-                TextButton(onClick = { confirmDiscard = false; vm.reset(); onBack() }) { Text(t("htDiscard", "Bỏ")) }
+                TextButton(onClick = { confirmDiscard = false; vm.reset(); onBack() }) { Text(t("htDiscard", "Discard")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDiscard = false }) { Text(t("htStay", "Ở lại")) }
+                TextButton(onClick = { confirmDiscard = false }) { Text(t("htStay", "Stay")) }
             },
         )
     }
@@ -123,7 +125,7 @@ private fun ScannedCard(line: DisposalLine, onQty: (String) -> Unit, onRemove: (
             ) {
                 Text(line.itemCode, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                 IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = t("htRemoveRow", "Bỏ dòng này"), tint = BadgeNg)
+                    Icon(Icons.Default.Close, contentDescription = t("htRemoveRow", "Remove this row"), tint = BadgeNg)
                 }
             }
             Text(
@@ -149,7 +151,7 @@ private fun ScannedCard(line: DisposalLine, onQty: (String) -> Unit, onRemove: (
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    t("htStockOnHand", "Tồn") + ": " + fmt(line.stockQty),
+                    t("htStockOnHand", "Stock") + ": " + fmt(line.stockQty),
                     fontSize = 11.5.sp,
                     color = if (bad) BadgeNg else MaterialTheme.colorScheme.onSurfaceVariant,
                 )

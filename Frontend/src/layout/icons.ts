@@ -12,6 +12,8 @@ export const GROUP_ICON: Record<string, string> = {
   printHistory:   ICON("print"),
   rfidHistory:    ICON("sensors"),
   otherMgmt:      ICON("folder"),
+  productionMgmt: ICON("precision_manufacturing"),
+  traceMgmt:      ICON("history"),
 };
 
 export const FUNCTION_ICON: Record<string, string> = {
@@ -27,8 +29,10 @@ export const FUNCTION_ICON: Record<string, string> = {
   pick_result:       ICON("content_paste_search"),
   shp_import:        ICON("upload"),
   shp_result:        ICON("content_paste_search"),
-  prd_import:        ICON("precision_manufacturing"),
+  prd_import:        ICON("upload"),
   prd_result:        ICON("content_paste_search"),
+  trace_back:        ICON("history"),
+  trace_fwd:         ICON("history"),
   st_label:          ICON("Stocktakingbucket_check"),
   st_ref:            ICON("folder"),
   st_rfid_demo:      ICON("Stocktakingbucket_check"),
@@ -51,6 +55,8 @@ export const FUNCTION_ICON: Record<string, string> = {
   lang_data:         ICON("database"),
   super_admin:       ICON("admin_panel_settings"),
 };
+
+export const FALLBACK_ICON = ICON("folder");
 
 export const BTN_ICON = {
   search:  "/Images/Icon/search_50_FFFFFF.svg",

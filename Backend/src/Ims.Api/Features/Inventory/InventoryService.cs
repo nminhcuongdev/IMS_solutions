@@ -249,6 +249,9 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
 
     public async Task<ServiceResult> DisposeStockAsync(StockDisposalDto body, ClaimsPrincipal user, CancellationToken ct)
     {
+        var requestId = RequestReplays.Normalize(body.RequestId);
+        if (RequestReplays.Invalid(requestId) is { } badId) return badId;
+        if (await RequestReplays.FindAsync(db, requestId, ct) is { } replay) return replay;
         var reason = Trimmed(body.ReasonCode);
         if (reason is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Rsn001()));
 
@@ -256,11 +259,12 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
         if (row is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Stock")));
         if (!await db.Reasons.AnyAsync(x => x.ReasonCode == reason && !x.IsDeleted, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Reason")));
-        if (row.StockQty <= 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
+        if (body.Qty is <= 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty003()));
+        if (row.IsOnHold) return Outcome.Conflict(new ApiError(ErrorCatalog.Hld001()));
 
-        var disposed = body.Qty ?? row.StockQty;
-        if (disposed <= 0 || disposed > row.StockQty)
-            return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
+        var disposed = body.Qty ?? row.AvailableQty;
+        if (disposed <= 0 || disposed > row.AvailableQty)
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Inv009()));
 
         var who = user.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -269,12 +273,20 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
         Touch(row, who);
         db.InventoryHistories.Add(History(row, InventoryAction.Disposal, -disposed, reason, who));
 
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.SaveChangesAsync(ct);
-        return Outcome.Ok(new ApiSuccess<StockDto>(await LoadDtoAsync(db, row, ct)));
+        var result = Outcome.Ok(new ApiSuccess<StockDto>(await LoadDtoAsync(db, row, ct)));
+        RequestReplays.Record(db, requestId, "disposal", result, who);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     public async Task<ServiceResult> TransferStockAsync(StockTransferDto body, ClaimsPrincipal user, CancellationToken ct)
     {
+        var requestId = RequestReplays.Normalize(body.RequestId);
+        if (RequestReplays.Invalid(requestId) is { } badId) return badId;
+        if (await RequestReplays.FindAsync(db, requestId, ct) is { } replay) return replay;
         var to = Trimmed(body.ToLocationCode);
         if (to is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
 
@@ -287,10 +299,8 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
         if (await db.Locations.AnyAsync(l => l.ParentLocationCode == dest.LocationCode && !l.IsDeleted, ct))
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
 
-        var destFactory = dest.ZoneCode is null
-            ? null
-            : await db.Zones.Where(z => z.ZoneCode == dest.ZoneCode)
-                .Select(z => z.FactoryCode).FirstOrDefaultAsync(ct);
+        var destFactory = await LocationFactory.OfAsync(db, dest.LocationCode, ct);
+        if (destFactory is null) return Outcome.Conflict(new ApiError(ErrorCatalog.Loc003NoFactory()));
 
         if (string.Equals(row.LocationCode, to, StringComparison.OrdinalIgnoreCase))
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
@@ -307,19 +317,24 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             LotNo = row.LotNo,
             FromFactoryCode = row.FactoryCode,
             FromLocationCode = from!,
-            ToFactoryCode = destFactory ?? row.FactoryCode,
+            ToFactoryCode = destFactory,
             ToLocationCode = to,
             Qty = row.StockQty,
             CreatedBy = who,
         });
 
         row.LocationCode = to;
-        if (destFactory is not null) row.FactoryCode = destFactory;
+        row.FactoryCode = destFactory;
         row.Recalculate();
         Touch(row, who);
 
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.SaveChangesAsync(ct);
-        return Outcome.Ok(new ApiSuccess<StockDto>(await LoadDtoAsync(db, row, ct)));
+        var result = Outcome.Ok(new ApiSuccess<StockDto>(await LoadDtoAsync(db, row, ct)));
+        RequestReplays.Record(db, requestId, "transfer", result, who);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     public async Task<ServiceResult> ListHistoryAsync(
@@ -354,20 +369,22 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
                 ItemCode = l.ItemCode, LotNo = null, ActionType = InventoryAction.ProdPick,
                 Qty = l.PlannedQty, LocationCode = null, ReasonCode = null, CreatedBy = l.PickedBy,
             });
-        var received = from r in db.ProductionReceipts.AsNoTracking()
-                       join o in db.ProductionOrders.AsNoTracking() on r.ProductionOrderNo equals o.ProductionOrderNo
-                       select new HistorySourceRow
-                       {
-                           No = -2000000000000L - r.No, CreatedAt = r.CreatedAt,
-                           ItemCode = o.OutputItemCode, LotNo = null, ActionType = InventoryAction.ProdReceipt,
-                           Qty = null, LocationCode = null, ReasonCode = null, CreatedBy = r.CreatedBy,
-                       };
-        var labels = db.ProductionLabels.AsNoTracking().Select(l => new HistorySourceRow
-        {
-            No = -3000000000000L - l.No, CreatedAt = l.CreatedAt, ItemCode = l.ItemCode,
-            LotNo = l.LotNo, ActionType = InventoryAction.ProdLabel, Qty = l.LabelCount,
-            LocationCode = null, ReasonCode = null, CreatedBy = l.CreatedBy,
-        });
+        var received = db.ProductionOrders.AsNoTracking().Where(o => o.ReceivedAt != null)
+            .Select(o => new HistorySourceRow
+            {
+                No = -2000000000000L - o.No, CreatedAt = o.ReceivedAt!.Value,
+                ItemCode = o.OutputItemCode, LotNo = null, ActionType = InventoryAction.ProdReceipt,
+                Qty = null, LocationCode = null, ReasonCode = null, CreatedBy = o.ReceivedBy,
+            });
+        var labels = db.ProductionOutputs.AsNoTracking()
+            .Where(l => l.LabelIssuedAt != null && l.ReversesNo == null)
+            .GroupBy(l => new { l.RequestId, l.ItemCode, l.LotNo })
+            .Select(g => new HistorySourceRow
+            {
+                No = -3000000000000L - g.Min(l => l.No), CreatedAt = g.Min(l => l.LabelIssuedAt!.Value), ItemCode = g.Key.ItemCode,
+                LotNo = g.Key.LotNo, ActionType = InventoryAction.ProdLabel, Qty = g.Count(),
+                LocationCode = null, ReasonCode = null, CreatedBy = g.Max(l => l.LabelIssuedBy),
+            });
         var selectedAction = Trimmed(action);
         IQueryable<HistorySourceRow> query;
         if (selectedAction is not null && InventoryAction.IsDefined(selectedAction))
@@ -417,14 +434,17 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             }
 
             var amount = -q;
-            var already = h.SerialNo is null
-                ? await db.InventoryHistories.AnyAsync(x =>
-                    x.No > no && x.ActionType == InventoryAction.Adjust &&
-                    x.ItemCode == h.ItemCode && x.LotNo == h.LotNo && x.Qty == amount, ct)
-                : await db.InventoryHistories.AnyAsync(x =>
-                    x.No > no && x.ActionType == InventoryAction.Adjust &&
-                    x.ItemCode == h.ItemCode && x.SerialNo == h.SerialNo &&
-                    x.ReasonCode == h.ReasonCode && x.Qty == amount, ct);
+            var reference = no.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var already = await db.InventoryHistories.AnyAsync(x =>
+                    x.ActionType == InventoryAction.RestoreDisposal && x.ReferenceNo == reference, ct)
+                || (h.SerialNo is null
+                    ? await db.InventoryHistories.AnyAsync(x =>
+                        x.No > no && x.ActionType == InventoryAction.Adjust && x.ReferenceNo == null &&
+                        x.ItemCode == h.ItemCode && x.LotNo == h.LotNo && x.Qty == amount, ct)
+                    : await db.InventoryHistories.AnyAsync(x =>
+                        x.No > no && x.ActionType == InventoryAction.Adjust && x.ReferenceNo == null &&
+                        x.ItemCode == h.ItemCode && x.SerialNo == h.SerialNo &&
+                        x.ReasonCode == h.ReasonCode && x.Qty == amount, ct));
             if (already) { skipped.Add(no.ToString()); continue; }
 
             var stock = h.SerialNo is null
@@ -437,7 +457,9 @@ internal sealed class InventoryService(ImsDbContext db) : IInventoryService
             stock.StockQty += amount;
             stock.Recalculate();
             Touch(stock, who);
-            db.InventoryHistories.Add(History(stock, InventoryAction.Adjust, amount, h.ReasonCode, who));
+            var restored = History(stock, InventoryAction.RestoreDisposal, amount, h.ReasonCode, who);
+            restored.ReferenceNo = reference;
+            db.InventoryHistories.Add(restored);
             updated++;
         }
 

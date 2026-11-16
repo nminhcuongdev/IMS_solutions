@@ -191,12 +191,16 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
         PickingResultWriteDto body, ClaimsPrincipal user, CancellationToken ct)
     {
         if (ValidateCode(body.ItemCode) is { } e1) return e1;
+        var requestId = RequestReplays.Normalize(body.RequestId);
+        if (RequestReplays.Invalid(requestId) is { } badId) return badId;
+        if (await RequestReplays.FindAsync(db, requestId, ct) is { } replay) return replay;
         if (body.Qty is not { } qty || qty < 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
         var itemCode = body.ItemCode.Trim();
-        if (!await db.Items.AnyAsync(i => i.ItemCode == itemCode && !i.IsDeleted, ct))
-            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
+        var item = await db.Items.Where(i => i.ItemCode == itemCode && !i.IsDeleted)
+            .Select(i => new { i.IsLotManaged }).FirstOrDefaultAsync(ct);
+        if (item is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
 
         var soNo = NullIfBlank(body.SoNo)?.Trim();
         if (soNo is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Sel006()));
@@ -226,7 +230,10 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
         var delta = qty - plan.PickedQty;
         if (delta < 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
         var worker = user.FindFirstValue(ClaimTypes.NameIdentifier);
-        var lotNo = NullIfBlank(body.LotNo)?.Trim();
+        var lot = Inventory.LotRules.Check(item.IsLotManaged, body.LotNo, required: delta > 0);
+        if (lot.Error is { } lotError) return Outcome.BadRequest(new ApiError(lotError));
+        var lotNo = lot.Lot;
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         var taken = new List<Domain.Inventory.Stock>();
         var allocations = new List<Inventory.StockAllocation>();
         if (await Inventory.StockMovement.TakeAsync(db, itemCode, lotNo, locationCode, delta,
@@ -239,7 +246,7 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
                 .Where(r => r.SoNo == plan.SoNo && r.SoBranchNo == plan.SoBranchNo && r.ItemCode == itemCode)
                 .OrderByDescending(r => r.No).Select(r => r.LotNo).FirstOrDefaultAsync(ct));
         var distinctLots = lots.Distinct().ToList();
-        var pickedLot = lotNo ?? (distinctLots.Count == 1 ? distinctLots[0] : null);
+        var pickedLot = item.IsLotManaged ? lotNo ?? (distinctLots.Count == 1 ? distinctLots[0] : null) : null;
 
         var row = new PickingResult
         {
@@ -269,7 +276,11 @@ internal sealed class PickingService(ImsDbContext db) : IPickingService
         await db.SaveChangesAsync(ct);
 
         var dto = await LoadResultDtoAsync(db, row.No, ct);
-        return Outcome.Created($"/picking-result/{row.No}", new ApiSuccess<PickingResultDto>(dto!));
+        var result = Outcome.Created($"/picking-result/{row.No}", new ApiSuccess<PickingResultDto>(dto!));
+        RequestReplays.Record(db, requestId, "picking", result, worker);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     public async Task<ServiceResult> ExportPlansCsvAsync(CancellationToken ct)

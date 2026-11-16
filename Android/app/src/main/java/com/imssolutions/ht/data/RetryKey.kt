@@ -23,3 +23,15 @@ class RetryKey(private val newId: () -> String = { UUID.randomUUID().toString() 
         succeeded()
     }
 }
+
+suspend fun <R : Any, T> RetryKey.send(request: R, withId: (R, String) -> R, call: suspend (R) -> T): T {
+    val sent = withId(request, idFor(request))
+    val result = try {
+        call(sent)
+    } catch (e: Throwable) {
+        failed(e)
+        throw e
+    }
+    succeeded()
+    return result
+}

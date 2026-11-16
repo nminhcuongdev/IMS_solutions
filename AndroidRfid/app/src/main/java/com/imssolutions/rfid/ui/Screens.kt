@@ -56,6 +56,7 @@ import com.imssolutions.rfid.data.ServerAddress
 import com.imssolutions.rfid.logic.BarKind
 import com.imssolutions.rfid.logic.LineStatus
 import com.imssolutions.rfid.logic.StockLine
+import com.imssolutions.rfid.logic.partChoices
 
 @Composable
 fun HtApp(vm: AppViewModel) {
@@ -63,9 +64,11 @@ fun HtApp(vm: AppViewModel) {
         when (vm.screen) {
             Screen.Login -> LoginScreen(vm)
             Screen.Menu -> MenuScreen(vm)
+            Screen.StockParts -> StockPartsScreen(vm)
             Screen.StockCount -> StockCountScreen(vm)
             Screen.Search -> SearchScreen(vm)
             Screen.SearchDetail -> SearchDetailScreen(vm)
+            Screen.Register -> RegisterScreen(vm)
             Screen.Settings -> SettingsScreen(vm)
         }
         if (vm.busy) {
@@ -205,6 +208,7 @@ private fun MenuScreen(vm: AppViewModel) {
         ) {
             MenuItem(s.t("htStockCount"), vm::openStockCount)
             MenuItem(s.t("htSearch"), vm::openSearch)
+            MenuItem(s.t("htRegister"), vm::openRegister)
             MenuItem(s.t("htSettings"), vm::openSettings)
             Spacer(Modifier.weight(1f))
             Row(
@@ -261,7 +265,7 @@ private fun MenuItem(title: String, onClick: () -> Unit) {
 @Composable
 private fun StockCountScreen(vm: AppViewModel) {
     val s = vm.strings
-    val board = vm.board
+    val board = vm.countBoard
     val lines = remember(board, vm.pending) { board?.stockLines(vm.pending).orEmpty() }
     val total = lines.sumOf { it.qty }
     BackHandler { vm.backFromStockCount() }
@@ -276,7 +280,10 @@ private fun StockCountScreen(vm: AppViewModel) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PowerPill(vm)
-            ModePill(vm)
+            if (vm.caps.modes.size > 1) ModePill(vm)
+            Pill(Ht.Blue, onClick = vm::backFromStockCount) {
+                Text(s.t("htPartsPill", vm.stockChoice.size, vm.board?.let { partChoices(it).size } ?: 0), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
             Spacer(Modifier.weight(1f))
             if (vm.pending.isNotEmpty()) {
                 Text(s.t("htPending", vm.pending.size), color = Ht.OrangeText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -528,7 +535,7 @@ private fun SettingsScreen(vm: AppViewModel) {
     val s = vm.strings
     var server by remember { mutableStateOf(ServerAddress.toDisplay(vm.prefs.serverUrl)) }
     val resolved = vm.resolveServer(server)
-    val save = { vm.saveServer(server)?.let { server = it } }
+    val save = { vm.saveServer(server) { server = it } }
     BackHandler { vm.backFromSettings() }
 
     Column(Modifier.fillMaxSize()) {
@@ -538,14 +545,64 @@ private fun SettingsScreen(vm: AppViewModel) {
             Modifier.weight(1f).fillMaxWidth().background(Color.White).verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         ) {
-            LoginField(s.t("htServer"), server, { server = it }, keyboard = KeyboardType.Decimal, onDone = { save() })
+            LoginField(s.t("htServer"), server, { server = it }, keyboard = KeyboardType.Uri, onDone = { save() })
             Text(
-                resolved ?: if (server.isBlank()) "" else s.t("errServerInvalid"),
-                color = if (resolved == null) Ht.Logout else Ht.Muted,
+                when {
+                    server.isBlank() -> ""
+                    resolved.isEmpty() -> s.t("errServerInvalid")
+                    resolved.size == 1 -> resolved.first()
+                    else -> s.t("htPortAuto", resolved.first().removePrefix("http://").substringBefore(':'), resolved.joinToString(", ") { it.trimEnd('/').substringAfterLast(':') })
+                },
+                color = if (resolved.isEmpty()) Ht.Logout else Ht.Muted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
             )
             ActionButton(s.t("htSaveServer"), Ht.Blue, Modifier.fillMaxWidth()) { save() }
+            if (vm.savedServers.isNotEmpty()) {
+                Text(
+                    s.t("htSavedServers"),
+                    color = Ht.Muted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp, top = 18.dp, bottom = 6.dp),
+                )
+                val current = vm.prefs.serverUrl
+                vm.savedServers.forEach { url ->
+                    val active = ServerAddress.sameServer(url, current)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (active) Color(0xFFEBF4FB) else Color(0xFFF7FAFC))
+                            .border(1.dp, if (active) Ht.Blue else Color(0xFFCBD5E0), RoundedCornerShape(8.dp))
+                            .clickable {
+                                server = ServerAddress.toDisplay(url)
+                                if (!active) save()
+                            }
+                            .padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            (if (active) "● " else "") + ServerAddress.toDisplay(url),
+                            color = if (active) Ht.Blue else Ht.Text,
+                            fontSize = 14.sp,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                        )
+                        if (!active) {
+                            Text(
+                                "✕",
+                                color = Ht.Muted,
+                                fontSize = 16.sp,
+                                modifier = Modifier
+                                    .clickable { vm.forgetServer(url) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
             Spacer(Modifier.height(22.dp))
             DevicePicker(vm)
         }

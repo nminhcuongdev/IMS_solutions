@@ -210,7 +210,7 @@ public class ShippingShortageStockTests
             await new ShippingService(t.Db).RegisterShortageAsync("SO-001", new ShippingShortageDto(3, "RS-SHORT"), default));
         t.Db.ChangeTracker.Clear();
 
-        ResultAssert.Ok<ApiSuccess<ShippingPlanDto>>(
+        ResultAssert.NotFound(
             await new ShippingService(t.Db).RegisterShortageAsync("SO-001", new ShippingShortageDto(3, "RS-SHORT"), default));
 
         Assert.Equal(103m, await OnShelfAsync(t));

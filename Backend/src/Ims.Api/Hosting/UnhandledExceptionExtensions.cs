@@ -10,7 +10,9 @@ internal static class UnhandledExceptionExtensions
         app.UseExceptionHandler(branch => branch.Run(async ctx =>
         {
             var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
-            app.Logger.LogError(ex, "Unhandled exception on {Method} {Path}", ctx.Request.Method, ctx.Request.Path);
+            var correlationId = ctx.TraceIdentifier;
+            app.Logger.LogError(ex, "Unhandled exception {CorrelationId} on {Method} {Path}", correlationId, ctx.Request.Method, ctx.Request.Path);
+            ctx.Response.Headers["X-Correlation-Id"] = correlationId;
             var (status, body) = ExceptionErrors.For(ex);
             await ApiErrorWriter.WriteAsync(ctx.Response, status, new ApiError(body));
         }));

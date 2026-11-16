@@ -1,5 +1,5 @@
 import { ApiCallError, type ApiError, type ApiSuccess } from "./types";
-import { apiDownload, clearToken, getToken } from "./client";
+import { API_BASE, apiDownload, clearToken, getToken } from "./client";
 
 
 export interface ImportRowError {
@@ -13,14 +13,6 @@ export interface ImportResult {
   importedCount: number;
   skippedCount: number;
   errors: ImportRowError[];
-}
-
-function base(): string {
-  const explicit = (import.meta.env.VITE_API_BASE as string | undefined)?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
-  const port = (import.meta.env.VITE_API_PORT as string | undefined)?.trim() || "8091";
-  const { protocol, hostname } = window.location;
-  return `${protocol}//${hostname}:${port}`;
 }
 
 export type ImportKind = "receiving-schedule" | "shipping-schedule" | "returns-schedule" | "picking-schedule";
@@ -51,7 +43,7 @@ export async function importSchedule(kind: ImportKind, file: File): Promise<Impo
   fd.append("file", file);
 
   const token = getToken();
-  const res = await fetch(`${base()}/import/${kind}`, {
+  const res = await fetch(`${API_BASE}/import/${kind}`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: fd,
@@ -72,4 +64,4 @@ export async function importSchedule(kind: ImportKind, file: File): Promise<Impo
 }
 
 export const downloadImportTemplate = (kind: ImportKind) =>
-  apiDownload(`/import/${kind}/template.xlsx`);
+  apiDownload(`/schedules/${kind.replace("-schedule", "")}/template.xlsx`);

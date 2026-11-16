@@ -9,7 +9,7 @@ import { LanPrinterField } from "./LanPrinterField";
 
 export function ProcessLabelModal({ rows, onClose, onPrinted }: { rows: Process[]; onClose: () => void; onPrinted: (n: number) => void }) {
   const t = useT();
-  const { printers, deviceCode, setDeviceCode, setting, error: printerError } = useLanPrinters();
+  const { printers, deviceCode, setDeviceCode, setting, error: printerError, engineOnline, recheck } = useLanPrinters();
   const [layout, setLayout] = useState("Layout_IMS/Process.mllayx");
   const [count, setCount] = useState(1);
   const [index, setIndex] = useState(0);
@@ -48,7 +48,7 @@ export function ProcessLabelModal({ rows, onClose, onPrinted }: { rows: Process[
     <div className="modal-head"><span>{t("issueLabelTitle", "Issue Label")}</span><span className="modal-close" onClick={onClose}>&times;</span></div>
     <div className="modal-body">
       <div className="mfg"><label>{t("thSelectedCount", "Selected")}</label><input readOnly value={rows.length} /></div>
-      <LanPrinterField printers={printers} deviceCode={deviceCode} onChange={setDeviceCode} />
+      <LanPrinterField printers={printers} deviceCode={deviceCode} onChange={setDeviceCode} engineOnline={engineOnline} onRecheck={recheck} />
       <div className="mfg"><label>{t("thLabelCount", "Label Print Count")}</label><input type="number" min={1} value={count} onChange={e => setCount(Number(e.target.value))} /></div>
       {current && <div>{current.processCode} · {current.processName}</div>}
       {(error || printerError) && <div className="page-info" style={{ color: "#DC3545" }}>{error || printerError}</div>}

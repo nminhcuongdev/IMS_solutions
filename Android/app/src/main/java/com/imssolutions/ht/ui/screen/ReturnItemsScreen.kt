@@ -103,7 +103,7 @@ fun ReturnItemsScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.visible.isEmpty() && state.error == null -> EmptyBox(t("htNoResults", "Không có mặt hàng nào khớp bộ lọc."))
+                state.visible.isEmpty() && state.error == null -> EmptyBox(t("htNoResults", "No items match the filter."))
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
                     val keys = distinctKeys(state.visible.map { it.lineKey })
                     itemsIndexed(state.visible, key = { i, _ -> keys[i] }) { _, line ->
@@ -182,11 +182,11 @@ private fun ReturnLineCard(line: ReturnPlan, onClick: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                RtnQtyCell(t("thPlannedQty", "Dự kiến"), fmt(line.expectedQty), line.unit)
-                RtnQtyCell(t("thActualQty", "Đã nhận lại"), fmt(line.actualQty), line.unit)
+                RtnQtyCell(t("thPlannedQty", "Expected"), fmt(line.expectedQty), line.unit)
+                RtnQtyCell(t("thActualQty", "Returned"), fmt(line.actualQty), line.unit)
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "Dòng ${line.serialNo}",
+                    "Line ${line.serialNo}",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Bottom),

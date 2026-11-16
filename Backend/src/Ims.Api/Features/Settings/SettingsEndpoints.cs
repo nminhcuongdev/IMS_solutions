@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,8 +9,8 @@ public static class SettingsEndpoints
     public static IEndpointRouteBuilder MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/settings").WithTags("Settings").RequireAuthorization();
-        g.MapGet("", GetAsync);
-        g.MapPut("", SaveAsync);
+        g.MapGet("", GetAsync).AuthenticatedOnly();
+        g.MapPut("", SaveAsync).AuthenticatedOnly();
         return app;
     }
 

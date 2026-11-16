@@ -49,4 +49,4 @@ export const updateZone = (code: string, body: ZoneWrite) =>
 export const deleteZone = (code: string) =>
   apiCall<void>(`/masters/zones/${encodeURIComponent(code)}`, { method: "DELETE" });
 
-export const exportZonesCsv = () => apiDownload("/masters/zones/export.csv");
+export const exportZonesCsv = () => apiDownload("/export/zones");

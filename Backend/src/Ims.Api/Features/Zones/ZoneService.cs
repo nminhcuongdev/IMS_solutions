@@ -59,8 +59,11 @@ internal sealed class ZoneService(ImsDbContext db) : IZoneService
         var code = body.ZoneCode.Trim();
         if (await db.Zones.AnyAsync(z => z.ZoneCode == code, ct))
             return Outcome.Conflict(new ApiError(ErrorCatalog.Dup001()));
-        var factoryCode = body.FactoryCode.Trim();
-        if (!await db.Factories.AnyAsync(f => f.FactoryCode == factoryCode && !f.IsDeleted, ct))
+        if (string.IsNullOrWhiteSpace(body.FactoryCode)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldFactoryCode", "工場コード")));
+        var wantedFactory = body.FactoryCode.Trim().ToUpper();
+        var factoryCode = await db.Factories.Where(f => f.FactoryCode.ToUpper() == wantedFactory && !f.IsDeleted)
+            .Select(f => f.FactoryCode).FirstOrDefaultAsync(ct);
+        if (factoryCode is null)
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Factory")));
 
         var z = new Zone
@@ -83,8 +86,11 @@ internal sealed class ZoneService(ImsDbContext db) : IZoneService
         var z = await db.Zones.FirstOrDefaultAsync(x => x.ZoneCode == code && !x.IsDeleted, ct);
         if (z is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Zone")));
         if (ValidateName(body.ZoneName) is { } e) return e;
-        var factoryCode = body.FactoryCode.Trim();
-        if (!await db.Factories.AnyAsync(f => f.FactoryCode == factoryCode && !f.IsDeleted, ct))
+        if (string.IsNullOrWhiteSpace(body.FactoryCode)) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001("fldFactoryCode", "工場コード")));
+        var wantedFactory = body.FactoryCode.Trim().ToUpper();
+        var factoryCode = await db.Factories.Where(f => f.FactoryCode.ToUpper() == wantedFactory && !f.IsDeleted)
+            .Select(f => f.FactoryCode).FirstOrDefaultAsync(ct);
+        if (factoryCode is null)
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Factory")));
 
         z.ZoneName = body.ZoneName.Trim();

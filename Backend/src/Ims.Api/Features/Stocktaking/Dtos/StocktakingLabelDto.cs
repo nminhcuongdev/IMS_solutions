@@ -13,4 +13,5 @@ public sealed record StocktakingLabelDto(
     string StatusLabelKey,
     DateOnly? ExpiryDate,
     bool IsExpired,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool MovedAfterStart = false);

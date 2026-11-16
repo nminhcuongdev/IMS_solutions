@@ -22,7 +22,7 @@ import { errorText } from "@/lib/errorText";
 
 const CATEGORIES = [
   "Receiving", "ReceivingReprint", "Returns", "ReturnsReprint",
-  "Shipping", "ShippingReprint", "Inventory",
+  "Shipping", "ShippingReprint", "Production", "ProductionReprint",
 ];
 
 const ROW_H = 37;
@@ -153,8 +153,8 @@ export function PrintHistoryPage() {
 
         <div className="search-btns">
           <SearchButton onClick={() => { patch({ ...dates.patch(), page: null, item: itemDraft || null, q: qDraft || null }); refresh(); }} />
-          <PrintButton disabled={!selectedRow}
-            onClick={() => selectedRow && setReprint(selectedRow)}>{t("btnReprint", "Reprint")}</PrintButton>
+          {(!selectedRow || selectedRow.canReprint) && <PrintButton action="Reprint" disabled={!selectedRow}
+            onClick={() => selectedRow && setReprint(selectedRow)}>{t("btnReprint", "Reprint")}</PrintButton>}
           <CsvButton onClick={onExport} disabled={!canExport} title={exportHint} />
           <button className={"btn " + (virtualMode ? "btn-primary" : "btn-outline")}
             onClick={() => setVirtualMode(!virtualMode)}

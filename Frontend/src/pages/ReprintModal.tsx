@@ -1,23 +1,44 @@
-import { useState } from "react";
-import { BRAND } from "@/brand";
-import { reprintPrintHistory, type PrintHistoryRow } from "@/api/history";
+import { useEffect, useState } from "react";
+import { getReprintData, reprintPrintHistory, type PrintHistoryRow, type PrintSource } from "@/api/history";
 import { useAuth } from "@/auth/AuthContext";
-import { mlPreviewLabel } from "@/lib/mlEngine";
+import { mlPreviewLabel, mlPrintLabel } from "@/lib/mlEngine";
 import { printErrorText } from "@/lib/printErrors";
-import { buildProductLabelQr, qrDate } from "@/lib/qrPayload";
+import { buildProductLabelQr, buildShippingLabelQr, qrDate } from "@/lib/qrPayload";
 import { useLanPrinters } from "@/lib/useLanPrinters";
 import { useT } from "@/i18n/LanguageContext";
 import { LanPrinterField } from "@/pages/LanPrinterField";
 import { errorText } from "@/lib/errorText";
-
-const LAYOUTS: Record<string, { file: string; qtyField: "ItemQty" | "TotalQty" }> = {
-  Receiving: { file: "Layout_IMS/ReceivingQR_24dpmm.mllayx", qtyField: "ItemQty" },
-  Returns:   { file: "Layout_IMS/ReturnsQR_24dpmm.mllayx",   qtyField: "ItemQty" },
-  Shipping:  { file: "Layout_IMS/ShippingQR_24dpmm.mllayx",  qtyField: "TotalQty" },
-};
+import { fillText } from "@/lib/fillLabel";
 
 function baseCategory(category: string) {
   return category.replace(/Reprint$/, "");
+}
+
+function rebuild(category: string, s: PrintSource, userCode?: string): Record<string, string> {
+  const shipping = category === "Shipping";
+  const qty = String(s.qty ?? 0);
+  return {
+    PONo: s.docNo,
+    SupplierCode: s.partnerCode ?? "",
+    SupplierName: s.partnerName ?? "",
+    "Item Code": s.itemCode,
+    "Item Name": s.itemName ?? s.itemCode,
+    Unit: s.uomCode ?? "",
+    Lot: s.lotNo ?? "",
+    FactoryCode: s.factoryCode ?? "",
+    FactoryName: s.factoryName ?? "",
+    Address: s.address ?? "",
+    ScheduledDate: s.scheduledDate ?? "",
+    ReprintFlag: "REPRINT",
+    [shipping ? "TotalQty" : "ItemQty"]: qty,
+    QR: shipping
+      ? buildShippingLabelQr({ gtin: s.barcode, lotNo: s.lotNo, qty: s.qty ?? 0, itemCode: s.itemCode, itemName: s.itemName })
+      : buildProductLabelQr({
+        gtin: s.barcode, lotNo: s.lotNo, qty: s.qty ?? 0,
+        productionDate: qrDate(s.productionDate), expiryDate: qrDate(s.expiryDate),
+        itemCode: s.itemCode, itemName: s.itemName, userCode,
+      }),
+  };
 }
 
 export function ReprintModal({ row, onClose, onPrinted }: {
@@ -29,56 +50,51 @@ export function ReprintModal({ row, onClose, onPrinted }: {
   const { user } = useAuth();
   const lan = useLanPrinters(row.spec);
   const [count, setCount] = useState(1);
+  const [layout, setLayout] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string> | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<"preview" | "print" | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const layout = LAYOUTS[baseCategory(row.category)];
+  useEffect(() => {
+    let alive = true;
+    getReprintData(row.no).then(d => {
+      if (!alive) return;
+      setLayout(d.layoutFile);
+      try {
+        setFields(d.fields ?? (d.source ? rebuild(baseCategory(row.category), d.source, user?.userCode) : null));
+      } catch (e) { setErr(errorText(t, e)); }
+    }, e => { if (alive) setErr(errorText(t, e)); });
+    return () => { alive = false; };
+  }, [row.no]);
 
-  const labelFields = (l: NonNullable<typeof layout>): Record<string, string> => ({
-    PONo: row.docNo ?? "",
-    SupplierCode: "",
-    SupplierName: "",
-    "Item Code": row.itemCode ?? "",
-    "Item Name": row.itemName ?? row.itemCode ?? "",
-    Unit: row.uomCode ?? "",
-    Lot: "",
-    FactoryCode: "FAC-01",
-    FactoryName: BRAND.company,
-    Address: "",
-    ScheduledDate: row.scheduledDate ?? "",
-    ReprintFlag: "REPRINT",
-    [l.qtyField]: String(row.qty ?? 0),
-    QR: buildProductLabelQr({
-      qty: row.qty ?? 0,
-      productionDate: qrDate(row.scheduledDate),
-      itemCode: row.itemCode ?? "",
-      itemName: row.itemName,
-      userCode: user?.userCode,
-    }),
-  });
-
-  const noLayout = () => setErr(`Chưa có layout cho phân loại "${row.category}".`);
+  const ready = !!layout && !!fields;
+  const noLayout = () => setErr(fillText(t("labelNoLayoutForCategory", "No label layout is defined for category \"{0}\"."), row.category));
 
   const onPreview = async () => {
-    if (!layout) { noLayout(); return; }
+    if (!ready) { noLayout(); return; }
     setBusy("preview"); setErr(null);
     try {
-      setPreview(await mlPreviewLabel({
-        layoutFile: layout.file, setting: lan.setting, fields: { ...labelFields(layout), Quantiy: count },
-      }));
+      setPreview(await mlPreviewLabel({ layoutFile: layout!, setting: lan.setting, fields: { ...fields!, Quantiy: count } }));
     } catch (e) {
       setErr(printErrorText(e, t));
     } finally { setBusy(null); }
   };
 
   const onPrint = async () => {
-    if (!layout) { noLayout(); return; }
+    if (!ready) { noLayout(); return; }
     setBusy("print"); setErr(null);
     try {
-      await reprintPrintHistory(row.no, { deviceCode: lan.deviceCode, count, fields: labelFields(layout) });
+      await mlPrintLabel({ layoutFile: layout!, setting: lan.setting, fields: { ...fields!, Quantiy: count } });
+    } catch (e) {
+      setErr(printErrorText(e, t));
+      setBusy(null);
+      return;
+    }
+    try {
+      await reprintPrintHistory(row.no, { deviceCode: lan.deviceCode, count, fields: fields!, clientPrinted: true });
       onPrinted(count);
-    } catch (e: any) {
+    } catch (e) {
       setErr(errorText(t, e));
       setBusy(null);
     }
@@ -97,8 +113,10 @@ export function ReprintModal({ row, onClose, onPrinted }: {
           <ReadOnlyField label={t("colDocNo", "Doc No.")} value={row.docNo ?? ""} />
           <ReadOnlyField label={t("thItemCode", "Item Code")} value={row.itemCode ?? ""} />
           <ReadOnlyField label={t("thItemName", "Item Name")} value={row.itemName ?? ""} />
+          <ReadOnlyField label={t("thLot", "Lot")} value={fields?.Lot ?? ""} />
+          <ReadOnlyField label={t("thQty", "Qty")} value={fields?.ItemQty ?? fields?.TotalQty ?? String(row.qty ?? "")} />
 
-          <LanPrinterField printers={lan.printers} deviceCode={lan.deviceCode} onChange={lan.setDeviceCode} />
+          <LanPrinterField printers={lan.printers} deviceCode={lan.deviceCode} onChange={lan.setDeviceCode} engineOnline={lan.engineOnline} onRecheck={lan.recheck} />
           <div className="mfg">
             <label>{t("thLabelCount", "Label Print Count")}</label>
             <input type="number" min={1} value={count}
@@ -109,17 +127,17 @@ export function ReprintModal({ row, onClose, onPrinted }: {
 
           {preview && (
             <div className="mt-3 text-center">
-              <img className="max-w-full shadow-[0_2px_10px_rgba(0,0,0,.18)]" src={preview} alt="Label preview" />
+              <img className="max-w-full shadow-[0_2px_10px_rgba(0,0,0,.18)]" src={preview} alt={t("btnPreview", "Preview")} />
             </div>
           )}
         </div>
         <div className="modal-actions">
           <button className="btn btn-outline" onClick={onClose}>{t("modalClose", "Close")}</button>
-          <button className="btn btn-outline" onClick={onPreview} disabled={busy !== null || !lan.setting}>
-            {busy === "preview" ? "Đang tạo…" : "Preview"}
+          <button className="btn btn-outline" onClick={onPreview} disabled={busy !== null || !lan.setting || !ready}>
+            {busy === "preview" ? t("creating", "Creating...") : t("btnPreview", "Preview")}
           </button>
-          <button className="btn btn-primary" onClick={onPrint} disabled={busy !== null || !lan.setting}>
-            {busy === "print" ? "Đang in…" : t("btnPrint", "Print")}
+          <button className="btn btn-primary" onClick={onPrint} disabled={busy !== null || !lan.setting || !ready}>
+            {busy === "print" ? t("printing", "Printing...") : t("btnPrint", "Print")}
           </button>
         </div>
       </div>

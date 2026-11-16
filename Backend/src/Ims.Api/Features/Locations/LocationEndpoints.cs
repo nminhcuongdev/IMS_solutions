@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,12 +9,12 @@ public static class LocationEndpoints
     public static IEndpointRouteBuilder MapLocationEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/masters/locations").WithTags("Locations");
-        g.MapGet("", ListAsync);
-        g.MapGet("/{code}", GetAsync);
-        g.MapPost("", CreateAsync);
-        g.MapPut("/{code}", UpdateAsync);
-        g.MapDelete("/{code}", DeleteAsync);
-        g.MapGet("/export.csv", ExportCsvAsync);
+        g.MapGet("", ListAsync).RequireLookup();
+        g.MapGet("/{code}", GetAsync).RequireLookup();
+        g.MapPost("", CreateAsync).RequirePermission("m_location.New", "m_location.Copy");
+        g.MapPut("/{code}", UpdateAsync).RequirePermission("m_location.Edit");
+        g.MapDelete("/{code}", DeleteAsync).RequirePermission("m_location.Delete");
+        app.MapGet("/export/locations", ExportCsvAsync).WithTags("Export").RequireAuthorization().RequirePermission("m_location.Export");
         return app;
     }
 

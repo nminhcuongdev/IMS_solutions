@@ -22,6 +22,7 @@ internal static class ServiceCollectionExtensions
         {
             o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
             o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
+            o.SerializerOptions.Converters.Add(new LocalDateTimeJsonConverter());
         });
         services.Configure<Microsoft.AspNetCore.Routing.RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
         return services;

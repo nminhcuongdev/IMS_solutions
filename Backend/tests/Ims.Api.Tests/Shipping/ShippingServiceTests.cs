@@ -21,6 +21,7 @@ public class ShippingServiceTests
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-01", ItemName = "Industrial Printer 4in", ItemGroupCode = "IG-01",
             UomCode = "pcs", PackingTypeCode = "BOX", PackageQty = 10,
             IsActive = true, CreatedAt = now,
@@ -247,7 +248,7 @@ public class ShippingServiceTests
     {
         using var t = TestDb.Seeded();
         var r = await new ShippingService(t.Db).ChangeStatusAsync(new ShippingStatusChangeDto(), default);
-        ResultAssert.BadRequest(r, "SEL-002");
+        ResultAssert.BadRequest(r, "SEL-004");
     }
 
     [Fact]
@@ -315,13 +316,14 @@ public class ShippingServiceTests
     {
         using var t = TestDb.Seeded(); await SeedRefsAsync(t);
         t.Db.ShippingPlans.Add(Plan(qty: 10));
+        (await t.Db.Items.SingleAsync(i => i.ItemCode == "IT-01")).IsLotManaged = false;
         await t.Db.SaveChangesAsync();
 
         var r = await new ShippingService(t.Db).RegisterShortageAsync("SO-001", new ShippingShortageDto(3, "RS-SHORT"), default);
 
         var dto = ResultAssert.Ok<ApiSuccess<ShippingPlanDto>>(r).Data;
         Assert.Equal(7, dto.ActualQty);
-        Assert.Equal("statusPartialShip", dto.Status);
+        Assert.Equal("statusShipped", dto.Status);
         Assert.Equal("RS-SHORT", dto.ShortageReason);
     }
 
@@ -390,7 +392,7 @@ public class ShippingServiceTests
     }
 
     [Fact]
-    public async Task Result_short_of_the_plan_needs_a_reason()
+    public async Task Result_short_of_the_plan_needs_no_reason()
     {
         using var t = TestDb.Seeded(); await SeedRefsAsync(t);
         t.Db.ShippingPlans.Add(Plan(qty: 10));
@@ -398,7 +400,7 @@ public class ShippingServiceTests
 
         var r = await new ShippingService(t.Db).CreateResultAsync(new ShippingResultWriteDto("IT-01", 4, "SO-001", "01", "W1_ZA", "LOT-1"), Worker(), default);
 
-        ResultAssert.BadRequest(r, "RSN-001");
+        ResultAssert.Created<ApiSuccess<ShippingResultDto>>(r);
     }
 
     [Fact]
@@ -458,7 +460,7 @@ public class ShippingServiceTests
 
         var r = await new ShippingService(t.Db).CreateResultAsync(new ShippingResultWriteDto("IT-01", 10, "SO-001", "01", "W1_ZA"), Worker(), default);
 
-        ResultAssert.BadRequest(r, "LOT-001");
+        ResultAssert.BadRequest(r, "VAL-001");
     }
 
     [Fact]
@@ -623,7 +625,7 @@ public class ShippingServiceTests
         t.Db.ChangeTracker.Clear();
 
         ResultAssert.Error(
-            await new ShippingService(t.Db).CreateResultAsync(Ship(10), Worker(), default), 404, "LOT-002");
+            await new ShippingService(t.Db).CreateResultAsync(Ship(10), Worker(), default), 409, "SCN-005");
 
         Assert.Empty(await t.Db.ShippingResults.ToListAsync());
         Assert.Equal(0m, (await t.Db.ShippingPlans.SingleAsync()).ActualQty);
@@ -821,6 +823,7 @@ public class ShippingServiceTests
         using var t = TestDb.Seeded(); await SeedRefsAsync(t);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-02", ItemName = "RFID Label UHF", ItemGroupCode = "IG-01",
             UomCode = "rolls", IsActive = true, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         });

@@ -1,7 +1,7 @@
 import { CsvButton, SearchButton } from "@/lib/Buttons";
 import { useState } from "react";
 import {
-  exportStocktakingHistoryCsv, listStocktakingHistory, type StocktakingHistoryRow,
+  exportStocktakingHistoryCsv, listStocktakingHistory, listStocktakingSessions, type StocktakingHistoryRow,
 } from "@/api/stocktaking";
 import { PageFooter } from "@/lib/PageFooter";
 import { SortTh, useSort } from "@/lib/SortableTh";
@@ -31,19 +31,23 @@ export function StocktakingHistoryPage() {
   const { sort, toggleSort } = useSort("stocktaking_date", "desc");
   const [q, setQ] = useUrlString("q");
   const [qDraft, setQDraft] = useState(q);
+  const [session, setSession] = useUrlNumber("session", 0);
+  const [sessionDraft, setSessionDraft] = useState(session);
+  const sessions = useFetch("stRefSessions", () => listStocktakingSessions());
+  const sessionNo = session > 0 ? session : undefined;
 
   const { data, loading, error, refresh } = useFetch(
-    qs("stRef", { q, page, pageSize, sort: sort.value }),
-    () => listStocktakingHistory({ q: q || undefined, page, pageSize, sort: sort.value }));
+    qs("stRef", { q, session, page, pageSize, sort: sort.value }),
+    () => listStocktakingHistory({ q: q || undefined, sessionNo, page, pageSize, sort: sort.value }));
 
   const rows: StocktakingHistoryRow[] = data?.data ?? [];
   const total = data?.meta.total ?? 0;
 
-  const search = () => { setPage(1); setQ(qDraft); refresh(); };
+  const search = () => { setPage(1); setQ(qDraft); setSession(sessionDraft); refresh(); };
 
   const onExport = async () => {
     try {
-      const { blob, filename } = await exportStocktakingHistoryCsv({ q: q || undefined });
+      const { blob, filename } = await exportStocktakingHistoryCsv({ q: q || undefined, sessionNo });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
@@ -58,6 +62,7 @@ export function StocktakingHistoryPage() {
             placeholder={t("searchStRef", "Stocktaking name, item, status...")}
             value={qDraft} onChange={e => setQDraft(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") search(); }} />
+          <label>{t("stSession", "Stocktaking session")}</label><select value={sessionDraft} onChange={e => setSessionDraft(Number(e.target.value))}><option value={0}>{t("optAll", "All")}</option>{(sessions.data ?? []).map(s => <option key={s.no} value={s.no}>{s.sessionName}{s.completedAt ? ` (${s.completedAt.slice(0, 10).replaceAll("-", "/")})` : ""}</option>)}</select>
         </div>
 
         {error && <div className="search-row text-rose-600 text-[12px]">{error}</div>}
@@ -94,7 +99,7 @@ export function StocktakingHistoryPage() {
               </tr>
             )}
             {!loading && rows.map((r, i) => (
-              <tr key={`${r.itemCode}|${r.lotNo}`}>
+              <tr key={`${r.stocktakingSessionNo}|${r.itemCode}|${r.lotNo}`}>
                 <td>{(page - 1) * pageSize + i + 1}</td>
                 <td className="text-left">{r.stocktakingName}</td>
                 <td>{stamp(r.stocktakingDate)}</td>

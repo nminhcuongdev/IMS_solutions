@@ -1,5 +1,6 @@
+import { useScreenCan } from "@/auth/PermissionContext";
 import { useEffect, useMemo, useState } from "react";
-import { getStockScanSummary, listStockScan, resetStockScan, type ScannedFilter, type StockScanRow } from "@/api/stockScan";
+import { getStockScanParts, getStockScanSummary, listStockScan, resetStockScan, type ScannedFilter, type StockScanRow } from "@/api/stockScan";
 import { SearchButton } from "@/lib/Buttons";
 import { useConfirm } from "@/lib/Confirm";
 import { useToast } from "@/lib/Toast";
@@ -7,6 +8,7 @@ import { invalidate, qs, useFetch } from "@/lib/useFetch";
 import { useUrlString } from "@/lib/useUrlState";
 import { useT } from "@/i18n/LanguageContext";
 import { errorText } from "@/lib/errorText";
+import { RfidPartSelectModal } from "./RfidPartSelectModal";
 
 const POLL_MS = 3000;
 
@@ -37,7 +39,7 @@ function Tile({ row, state }: { row: StockScanRow; state: TileState }) {
   );
 }
 
-export function RfidStockCountPage() {
+export function RfidStockCountPage() { const can = useScreenCan();
   const t = useT();
   const toast = useToast();
   const ask = useConfirm();
@@ -51,12 +53,14 @@ export function RfidStockCountPage() {
   const [nameDraft, setNameDraft] = useState(itemName);
   const [scannedDraft, setScannedDraft] = useState<ScannedFilter>(scanned);
   const [busy, setBusy] = useState(false);
+  const [selecting, setSelecting] = useState(false);
 
   const { data, loading, error, reload, refresh } = useFetch(
     qs("stockScan", { itemCode, itemName, scanned }),
     () => listStockScan({ itemCode: itemCode || undefined, itemName: itemName || undefined, scanned }));
 
   const summary = useFetch("stockScanSummary", getStockScanSummary);
+  const parts = useFetch("stockScanParts", getStockScanParts);
   const reloadSummary = summary.reload;
 
   useEffect(() => {
@@ -89,6 +93,7 @@ export function RfidStockCountPage() {
     setScanned(scannedDraft);
     refresh();
     void reloadSummary();
+    void parts.reload();
   };
 
   const onEnter = (e: React.KeyboardEvent) => { if (e.key === "Enter") search(); };
@@ -103,7 +108,7 @@ export function RfidStockCountPage() {
     try {
       await resetStockScan();
       invalidate("stockScan");
-      await Promise.all([reload(), reloadSummary()]);
+      await Promise.all([reload(), reloadSummary(), parts.reload()]);
     } catch (ex: any) { toast.err(errorText(t, ex)); }
     finally { setBusy(false); }
   };
@@ -131,13 +136,16 @@ export function RfidStockCountPage() {
 
         <div className="search-btns">
           <SearchButton onClick={search} />
-          <button className="btn btn-delete" onClick={onReset} disabled={busy || loading}>
+          {can("Reset") && <button className="btn btn-delete" onClick={onReset} disabled={busy || loading}>
             <ResetIcon /> <span>{t("rsdReset", "Reset")}</span>
-          </button>
+          </button>}
+          {can("SelectTarget") && <button className="btn btn-primary" onClick={() => setSelecting(true)}>{t("rsdSelectParts", "Select Parts")}</button>}
         </div>
       </div>
 
-      <div className="flex items-center justify-end border-b border-slate-200 bg-white px-4 py-2.5">
+      {selecting && <RfidPartSelectModal canDelete={can("Delete")} onClose={() => setSelecting(false)} onChanged={async () => { invalidate("stockScan"); await Promise.all([reload(), reloadSummary(), parts.reload()]); }} onSaved={async () => { invalidate("stockScan"); await Promise.all([reload(), reloadSummary(), parts.reload()]); toast.ok(t("toastSaved", "Saved")); setSelecting(false); }} />}
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
+        <span>{parts.data && t("rsdTargetParts", "Counting: {0} / {1} parts").replace("{0}", String(parts.data.filter(part => part.isTarget).length)).replace("{1}", String(parts.data.length))}</span>
         <span className="rsd-count">{data ? `${data.scanned} / ${data.total}` : "0 / 0"}</span>
       </div>
 

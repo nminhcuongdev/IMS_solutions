@@ -59,7 +59,7 @@ fun StocktakingLocationScreen(
             if (state.open) {
                 StSection(t("htSelectLocation", "Select Location")) {
                     Text(
-                        t("htStScanOrPickLocation", "Quét tem vị trí hoặc chọn bên dưới."),
+                        t("htStScanOrPickLocation", "Scan a location label or choose below."),
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
@@ -78,9 +78,9 @@ fun StocktakingLocationScreen(
                         value = state.locations.firstOrNull { it.locationCode == state.locationCode }
                             ?.let { l -> l.locationName?.let { "${l.locationCode} - $it" } ?: l.locationCode }
                             ?: state.locationCode,
-                        placeholder = if (state.busy) t("htLoading", "Đang tải…")
-                        else if (state.locations.isEmpty()) t("htNoLocationsInZone", "Khu vực này chưa có ô kệ nào.")
-                        else t("htPickLocation", "— Chọn vị trí —"),
+                        placeholder = if (state.busy) t("htLoading", "Loading…")
+                        else if (state.locations.isEmpty()) t("htNoLocationsInZone", "This zone has no shelf cells yet.")
+                        else t("htPickLocation", "— Select a location —"),
                         expanded = locOpen,
                         onExpanded = { locOpen = it },
                         options = state.locations.map { l ->
@@ -139,7 +139,7 @@ private fun StPicker(
     onExpanded: (Boolean) -> Unit,
     options: List<Pair<String, String>>,
     onPick: (String) -> Unit,
-    placeholder: String = t("htPickOne", "— Chọn —"),
+    placeholder: String = t("htPickOne", "— Select —"),
 ) {
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = onExpanded) {
         OutlinedTextField(

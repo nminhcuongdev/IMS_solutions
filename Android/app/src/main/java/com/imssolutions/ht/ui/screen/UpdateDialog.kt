@@ -56,22 +56,22 @@ fun UpdateHost(vm: UpdateViewModel) {
         properties = DialogProperties(dismissOnBackPress = canLater, dismissOnClickOutside = false),
         title = {
             Text(
-                if (offer.forced) t("htUpdTitleForced", "Cần cập nhật ứng dụng") else t("htUpdTitle", "Có phiên bản mới"),
+                if (offer.forced) t("htUpdTitleForced", "An app update is required") else t("htUpdTitle", "A new version is available"),
                 fontWeight = FontWeight.Bold,
             )
         },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(t("htUpdVersion", "Phiên bản: {0} → {1}", vm.installedName, e.versionName), fontSize = 14.sp)
-                e.updatedAt?.let { Text(t("htUpdDate", "Ngày phát hành: {0}", it.take(16).replace('T', ' ')), fontSize = 12.sp) }
+                Text(t("htUpdVersion", "Version: {0} → {1}", vm.installedName, e.versionName), fontSize = 14.sp)
+                e.updatedAt?.let { Text(t("htUpdDate", "Released: {0}", it.take(16).replace('T', ' ')), fontSize = 12.sp) }
                 UpdateRules.note(e, strings.lang.code)?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(t("htUpdNotes", "Nội dung cập nhật"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("htUpdNotes", "What is new"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Text(it, fontSize = 13.sp)
                 }
                 if (offer.forced && state.phase == UpdatePhase.OFFER) {
                     Spacer(Modifier.height(8.dp))
-                    Text(t("htUpdForcedMsg", "Phải cập nhật để tiếp tục sử dụng."), fontSize = 12.sp, color = Color(0xFFDC3545))
+                    Text(t("htUpdForcedMsg", "You must update to keep using the app."), fontSize = 12.sp, color = Color(0xFFDC3545))
                 }
                 when (state.phase) {
                     UpdatePhase.DOWNLOADING -> {
@@ -83,7 +83,7 @@ fun UpdateHost(vm: UpdateViewModel) {
                         }
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            t("htUpdProgress", "Đang tải: {0} / {1} MB ({2}%)", mb(state.done), mb(state.total),
+                            t("htUpdProgress", "Downloading: {0} / {1} MB ({2}%)", mb(state.done), mb(state.total),
                                 if (state.total > 0) state.done * 100 / state.total else 0),
                             fontSize = 12.sp,
                         )
@@ -91,16 +91,16 @@ fun UpdateHost(vm: UpdateViewModel) {
                     UpdatePhase.VERIFYING -> {
                         Spacer(Modifier.height(12.dp))
                         LinearProgressIndicator(Modifier.fillMaxWidth())
-                        Text(t("htUpdVerifying", "Đang kiểm tra tệp..."), fontSize = 12.sp)
+                        Text(t("htUpdVerifying", "Checking the file..."), fontSize = 12.sp)
                     }
                     UpdatePhase.INSTALLING -> {
                         Spacer(Modifier.height(12.dp))
-                        Text(t("htUpdInstalling", "Đang mở trình cài đặt. Hãy chọn \"Cài đặt\"."), fontSize = 12.sp)
+                        Text(t("htUpdInstalling", "Opening the installer. Choose \"Install\"."), fontSize = 12.sp)
                     }
                     UpdatePhase.PERMISSION -> {
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            t("htUpdPermission", "Hãy cho phép ứng dụng này cài đặt ứng dụng (Cài đặt ứng dụng không xác định), rồi quay lại và chọn Tiếp tục."),
+                            t("htUpdPermission", "Allow this app to install apps (Install unknown apps), then come back and choose Continue."),
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.error,
                         )
                     }
@@ -114,19 +114,19 @@ fun UpdateHost(vm: UpdateViewModel) {
         },
         confirmButton = {
             when (state.phase) {
-                UpdatePhase.OFFER -> Button(onClick = vm::update) { Text(t("htUpdNow", "Cập nhật")) }
-                UpdatePhase.FAILED, UpdatePhase.INSTALLING -> Button(onClick = vm::update) { Text(t("htUpdRetry", "Thử lại")) }
+                UpdatePhase.OFFER -> Button(onClick = vm::update) { Text(t("htUpdNow", "Update")) }
+                UpdatePhase.FAILED, UpdatePhase.INSTALLING -> Button(onClick = vm::update) { Text(t("htUpdRetry", "Retry")) }
                 UpdatePhase.PERMISSION -> Column {
                     TextButton(onClick = { context.startActivity(ApkInstaller.permissionIntent(context)) }) {
-                        Text(t("htUpdOpenSettings", "Mở cài đặt"))
+                        Text(t("htUpdOpenSettings", "Open settings"))
                     }
-                    Button(onClick = vm::update) { Text(t("htUpdContinue", "Tiếp tục")) }
+                    Button(onClick = vm::update) { Text(t("htUpdContinue", "Continue")) }
                 }
                 else -> Unit
             }
         },
         dismissButton = if (canLater) {
-            { TextButton(onClick = vm::later) { Text(t("htUpdLater", "Để sau")) } }
+            { TextButton(onClick = vm::later) { Text(t("htUpdLater", "Later")) } }
         } else null,
     )
 }

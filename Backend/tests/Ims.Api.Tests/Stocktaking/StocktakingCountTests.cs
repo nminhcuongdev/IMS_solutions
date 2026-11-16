@@ -65,7 +65,7 @@ public class StocktakingCountTests
         await StartAsync(t);
 
         var res = await new StocktakingService(t.Db).SaveResultAsync(new StocktakingResultDto("W1_ZA_S9", "ITM-A", "LOT-1", 1), User(), default);
-        ResultAssert.Error(res, 404, "LOC-003");
+        ResultAssert.Error(res, 404, "SCN-003");
     }
 
 
@@ -158,7 +158,7 @@ public class StocktakingCountTests
         await StartAsync(t);
 
         var res = await new StocktakingService(t.Db).ListItemsAtLocationAsync(default, "W1_ZA");
-        ResultAssert.Error(res, 404, "LOC-003");
+        ResultAssert.Error(res, 404, "SCN-003");
     }
 
     [Fact]
@@ -334,7 +334,7 @@ public class StocktakingCountTests
         await StartAsync(t);
 
         var res = await new StocktakingService(t.Db).SaveResultAsync(new StocktakingResultDto("W1_ZA_S1", "ITM-B", "LOT-2", 2), User(), default);
-        ResultAssert.Error(res, 404, "LOC-003");
+        ResultAssert.Error(res, 404, "SCN-003");
 
         Assert.False(await t.Db.StocktakingLabels
             .AnyAsync(x => x.ItemCode == "ITM-B" && x.LocationCode == "W1_ZA_S1"));
@@ -349,7 +349,7 @@ public class StocktakingCountTests
         await StartAsync(t);
 
         var res = await new StocktakingService(t.Db).SaveResultAsync(new StocktakingResultDto("W1_ZA_S1", "ITM-B", "LOT-2", 0), User(), default);
-        ResultAssert.Error(res, 404, "LOC-003");
+        ResultAssert.Error(res, 404, "SCN-003");
     }
 
     [Fact]
@@ -359,7 +359,7 @@ public class StocktakingCountTests
         await StartAsync(t);
 
         var res = await new StocktakingService(t.Db).SaveResultAsync(new StocktakingResultDto("W1_ZA_S1", "ITM-A", "LOT-9", 1), User(), default);
-        ResultAssert.Error(res, 404, "LOC-003");
+        ResultAssert.Error(res, 404, "SCN-003");
 
         var known = await Count(t, "W1_ZA_S1", "ITM-A", "LOT-1", 2);
         Assert.Equal(2, known.ScannedLabels);

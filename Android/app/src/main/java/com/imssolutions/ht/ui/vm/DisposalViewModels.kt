@@ -11,6 +11,8 @@ import com.imssolutions.ht.ui.HtMsg
 import com.imssolutions.ht.data.DisposalLine
 import com.imssolutions.ht.data.InventoryRepository
 import com.imssolutions.ht.data.Reason
+import com.imssolutions.ht.data.StockLine
+import com.imssolutions.ht.data.StockScanRules
 import com.imssolutions.ht.scan.QrPayload
 import com.imssolutions.ht.scan.QrScan
 
@@ -34,47 +36,53 @@ class DisposalViewModel : ViewModel() {
         val payload = when (val r = QrPayload.parse(raw)) {
             is QrScan.Ok -> r.payload
             is QrScan.Invalid -> {
-                _state.update { it.copy(error = "SCN-001" to "Mã quét không đúng định dạng.") }
+                _state.update { it.copy(error = "SCN-001" to "The scanned code is not in a valid format.") }
                 return
             }
         }
         val itemCode = payload.itemCode?.trim().orEmpty()
         if (itemCode.isEmpty()) {
-            _state.update { it.copy(error = "SCN-006" to "Nhãn không có mã hàng.") }
+            _state.update { it.copy(error = "VAL-001" to "fldItemCode") }
             return
         }
         val lot = payload.lotNo?.trim()
-
-        if (_state.value.lines.any {
-                it.itemCode.equals(itemCode, ignoreCase = true) &&
-                    it.lotNo?.trim().orEmpty().equals(lot.orEmpty(), ignoreCase = true)
-            }
-        ) {
-            _state.update { it.copy(error = "SCN-007" to "Nhãn này đã được quét rồi.") }
-            return
-        }
+        val serial = payload.serialNo?.trim()?.takeIf { it.isNotEmpty() }
+        val fromLabel = payload.variableCount?.toDoubleOrNull()
 
         if (_state.value.busy) return
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.resolveScan(itemCode, lot) }
-                .onSuccess { line ->
-                    if (line == null) {
-                        _state.update {
-                            it.copy(
-                                busy = false,
-                                error = "SYS-404" to itemCode,
-                            )
+            runCatching { repo.candidates(itemCode, lot, serial) }
+                .onSuccess { found ->
+                    val fresh = found.filter { c -> _state.value.lines.none { it.serialNo == c.serialNo && it.itemCode == c.itemCode } }
+                    when {
+                        found.isEmpty() -> _state.update {
+                            it.copy(busy = false, error = if (serial != null) "SCN-003" to serial else "SYS-404" to itemCode)
                         }
-                    } else {
-                        val fromLabel = payload.variableCount?.toDoubleOrNull()
-                        val qty = (fromLabel ?: 1.0).coerceAtMost(line.stockQty)
-                        _state.update {
-                            it.copy(busy = false, lines = it.lines + line.copy(qty = qty))
+                        fresh.isEmpty() -> _state.update {
+                            it.copy(busy = false, error = "SCN-007" to "This label has already been scanned or used.")
                         }
+                        fresh.size == 1 -> add(fresh[0], fromLabel)
+                        else -> _state.update { it.copy(busy = false, choices = fresh, pendingQty = fromLabel) }
                     }
                 }
                 .onFailure { e -> _state.update { it.copy(busy = false, error = e.toPair()) } }
+        }
+    }
+
+    fun choose(serialNo: String) {
+        val s = _state.value
+        val line = s.choices.firstOrNull { it.serialNo == serialNo } ?: return
+        add(line, s.pendingQty)
+    }
+
+    fun dismissChoices() = _state.update { it.copy(choices = emptyList(), pendingQty = null) }
+
+    private fun add(line: StockLine, fromLabel: Double?) {
+        val disposal = StockScanRules.toDisposal(line)
+        val qty = (fromLabel ?: 1.0).coerceAtMost(disposal.stockQty)
+        _state.update {
+            it.copy(busy = false, choices = emptyList(), pendingQty = null, lines = it.lines + disposal.copy(qty = qty))
         }
     }
 
@@ -102,18 +110,20 @@ class DisposalViewModel : ViewModel() {
         val s = _state.value
         if (s.busy) return
         if (s.lines.isEmpty()) {
-            _state.update { it.copy(error = "STK-005" to "Chưa quét nhãn nào.") }
+            _state.update { it.copy(error = "STK-005" to "No labels have been scanned yet.") }
             return
         }
         val reason = s.reasonCode?.takeIf { it.isNotBlank() }
         if (reason == null) {
-            _state.update { it.copy(error = "RSN-001" to "Vui lòng chọn lý do huỷ.") }
+            _state.update { it.copy(error = "RSN-001" to "Please select a reason.") }
             return
         }
-        s.lines.firstOrNull { it.qty <= 0 || it.overStock }?.let { bad ->
-            _state.update {
-                it.copy(error = "QTY-001" to "${bad.itemCode}: số lượng phải trong khoảng 1..${fmt(bad.stockQty)}.")
-            }
+        s.lines.firstOrNull { it.qty <= 0 }?.let {
+            _state.update { st -> st.copy(error = "QTY-003" to "Please enter a quantity greater than 0.") }
+            return
+        }
+        s.lines.firstOrNull { it.overStock }?.let {
+            _state.update { st -> st.copy(error = "INV-009" to "There is not enough stock for the entered quantity.") }
             return
         }
 
@@ -126,10 +136,10 @@ class DisposalViewModel : ViewModel() {
                             busy = false,
                             done = r.skipped.isEmpty(),
                             toast = if (r.skipped.isEmpty()) {
-                                HtMsg("htDisposalDoneN", "Đã huỷ {0} dòng.", r.updated)
+                                HtMsg("htDisposalDoneN", "Disposed {0} rows.", r.updated)
                             } else {
                                 HtMsg(
-                                    "htBatchPartial", "Đã xử lý {0} dòng. Lỗi: {1}",
+                                    "htBatchPartial", "Processed {0} rows. Failed: {1}",
                                     r.updated, r.skipped.joinToString(", "),
                                 )
                             },
@@ -146,6 +156,8 @@ data class DisposalState(
     val lines: List<DisposalLine> = emptyList(),
     val reasons: List<Reason> = emptyList(),
     val reasonCode: String? = null,
+    val choices: List<StockLine> = emptyList(),
+    val pendingQty: Double? = null,
     val busy: Boolean = false,
     val error: Pair<String, String>? = null,
     val toast: HtMsg? = null,

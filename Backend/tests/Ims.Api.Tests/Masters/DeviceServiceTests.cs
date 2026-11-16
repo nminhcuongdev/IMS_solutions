@@ -59,7 +59,7 @@ public class DeviceServiceTests
 
         var res = await new DeviceService(t.Db).CreateAsync(Valid(name: ""), default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]

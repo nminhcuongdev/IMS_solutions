@@ -16,6 +16,7 @@ public class InventoryHistory
     public decimal? Qty { get; set; }
 
     public string? ReasonCode { get; set; }
+    public string? ReferenceNo { get; set; }
     public string? CreatedBy { get; set; }
 
     public Masters.Item? Item { get; set; }

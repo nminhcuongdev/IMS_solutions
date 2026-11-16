@@ -97,29 +97,29 @@ type QueryRecord = Record<string, string | number | boolean | undefined | null>;
 export const listShippingSchedule = (
   q: ShippingScheduleQuery = {},
 ): Promise<ApiListSuccess<ShippingPlanRow>> =>
-  apiList<ShippingPlanRow>("/shipping-schedule", { query: q as QueryRecord });
+  apiList<ShippingPlanRow>("/schedules/shipping", { query: q as QueryRecord });
 
 export const createShippingPlan = (body: ShippingPlanWrite) =>
-  apiCall<ShippingPlanRow>("/shipping-schedule", { method: "POST", body });
+  apiCall<ShippingPlanRow>("/schedules/shipping", { method: "POST", body });
 
 export const changeShippingStatus = (
   lines: { slipNo: string; serialNo: string }[], status: ShippingStatusAction,
 ) =>
-  apiCall<ShippingStatusChangeResult>("/shipping-schedule/status", {
+  apiCall<ShippingStatusChangeResult>("/schedules/shipping/status", {
     method: "PUT", body: { lines, status },
   });
 
 export const registerShippingShortage = (
   slipNo: string, shortageQty: number, reasonCode: string, serialNo?: string | null,
 ) =>
-  apiCall<ShippingPlanRow>(`/shipping-schedule/${encodeURIComponent(slipNo)}/shortage`, {
+  apiCall<ShippingPlanRow>(`/schedules/shipping/${encodeURIComponent(slipNo)}/shortage`, {
     method: "POST", body: { shortageQty, reasonCode, serialNo },
   });
 
 export const listShippingResults = (
   q: ShippingResultQuery = {},
 ): Promise<ApiListSuccess<ShippingResultRow>> =>
-  apiList<ShippingResultRow>("/shipping-result", { query: q as QueryRecord });
+  apiList<ShippingResultRow>("/results/shipping", { query: q as QueryRecord });
 
 function qsOf(q: Record<string, unknown>): string {
   const p = new URLSearchParams();
@@ -132,7 +132,7 @@ function qsOf(q: Record<string, unknown>): string {
 }
 
 export const exportShippingResultCsv = (q: ShippingResultQuery = {}) =>
-  apiDownload("/shipping-result/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/shipping-result" + qsOf({ ...q, page: undefined, pageSize: undefined }));
 
 export const exportShippingScheduleCsv = (q: ShippingScheduleQuery = {}) =>
-  apiDownload("/shipping-schedule/export.csv" + qsOf({ ...q, page: undefined, pageSize: undefined }));
+  apiDownload("/export/shipping-schedule" + qsOf({ ...q, page: undefined, pageSize: undefined }));

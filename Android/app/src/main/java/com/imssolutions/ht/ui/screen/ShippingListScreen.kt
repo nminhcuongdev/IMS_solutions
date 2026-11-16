@@ -54,12 +54,12 @@ fun ShippingListScreen(
                     onValueChange = {},
                     readOnly = true,
                     singleLine = true,
-                    placeholder = { Text(t("htAnyDate", "Mọi ngày"), fontSize = 13.sp) },
+                    placeholder = { Text(t("htAnyDate", "Any date"), fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
                     trailingIcon = {
                         if (state.date != null) {
                             IconButton(onClick = { vm.setDate(null) }) {
-                                Icon(Icons.Default.Close, contentDescription = t("htClearDateFilter", "Bỏ lọc ngày"))
+                                Icon(Icons.Default.Close, contentDescription = t("htClearDateFilter", "Clear date filter"))
                             }
                         }
                     },
@@ -114,8 +114,8 @@ fun ShippingListScreen(
             when {
                 state.loading -> LoadingBox()
                 state.slips.isEmpty() && state.error == null -> EmptyBox(
-                    if (state.query.isBlank()) t("htNoResults", "Không có phiếu xuất hàng nào khớp bộ lọc.")
-                    else t("htNotFoundQuery", "Không tìm thấy \"{0}\".", state.query)
+                    if (state.query.isBlank()) t("htNoResults", "No shipping slips match the filter.")
+                    else t("htNotFoundQuery", "\"{0}\" was not found.", state.query)
                 )
                 else -> LazyColumn(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
                     items(state.slips, key = { it.slipNo }) { slip ->

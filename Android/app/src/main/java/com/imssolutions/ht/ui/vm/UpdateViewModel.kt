@@ -55,7 +55,7 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             UpdateInstallReceiver.failures.collect { message ->
-                fail(HtMsg("htUpdInstallFailed", "Không thể cài đặt: {0}", listOf(message)))
+                fail(HtMsg("htUpdInstallFailed", "Could not install: {0}", listOf(message)))
             }
         }
     }
@@ -66,8 +66,8 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         val started = s.startedCode
         if (started != null) {
             val notice = when {
-                installedCode >= started -> HtMsg("htUpdDone", "Đã cập nhật lên phiên bản {0}.", listOf(s.startedName ?: installedName))
-                s.failure != null -> HtMsg("htUpdInstallFailed", "Không thể cài đặt: {0}", listOf(s.failure))
+                installedCode >= started -> HtMsg("htUpdDone", "Updated to version {0}.", listOf(s.startedName ?: installedName))
+                s.failure != null -> HtMsg("htUpdInstallFailed", "Could not install: {0}", listOf(s.failure))
                 else -> null
             }
             _state.update { it.copy(notice = notice) }
@@ -85,7 +85,7 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         val s = store.current()
         val deviceId = UpdateRules.deviceIdOf(s.deviceId)
         if (deviceId == null) {
-            if (manual) notice(HtMsg("htUpdNeedDeviceId", "Hãy nhập Mã thiết bị (Device Code) trước."))
+            if (manual) notice(HtMsg("htUpdNeedDeviceId", "Enter the Device Code first."))
             return
         }
         val base = ApiClient.tokens.baseUrl.first()
@@ -96,8 +96,8 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(checking = false) }
         val f = fetched.getOrElse { e ->
             if (manual) notice(
-                if (e is IOException) HtMsg("NET-002", "Không kết nối được máy chủ. Kiểm tra Wi-Fi.")
-                else HtMsg("htUpdCheckFailed", "Không đọc được thông tin cập nhật.")
+                if (e is IOException) HtMsg("NET-002", "Network connection lost. Check the Wi-Fi.")
+                else HtMsg("htUpdCheckFailed", "The update information could not be read.")
             )
             return
         }
@@ -109,7 +109,7 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         val offer = d.offer
         if (offer == null) {
             _state.update { if (it.phase == UpdatePhase.OFFER) it.copy(offer = null, dialog = false) else it }
-            if (manual) notice(HtMsg("htUpdLatest", "Đang dùng phiên bản mới nhất."))
+            if (manual) notice(HtMsg("htUpdLatest", "You are using the latest version."))
             return
         }
         val show = manual || !shownThisLaunch || offer.forced
@@ -171,8 +171,8 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
                 if (failure != null) {
                     part.delete()
                     fail(
-                        if (failure == ApkVerifier.Failure.HASH) HtMsg("htUpdHashMismatch", "Tệp tải về bị hỏng hoặc đã bị thay đổi. Hãy thử lại.")
-                        else HtMsg("htUpdVerifyFailed", "Tệp cập nhật không khớp với ứng dụng này. Hãy liên hệ quản trị viên.")
+                        if (failure == ApkVerifier.Failure.HASH) HtMsg("htUpdHashMismatch", "The downloaded file is damaged or was changed. Try again.")
+                        else HtMsg("htUpdVerifyFailed", "The update file does not match this app. Contact the administrator.")
                     )
                     return@launch
                 }
@@ -180,11 +180,11 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
                 ApiClient.updates.saveStarted(e.versionCode, e.versionName)
                 withContext(Dispatchers.IO) { ApkInstaller.install(ctx, part) }
             } catch (x: NoSpaceException) {
-                fail(HtMsg("htUpdNoSpace", "Không đủ dung lượng trống. Cần {0} MB.", listOf((x.needed + 1048575) / 1048576)))
+                fail(HtMsg("htUpdNoSpace", "Not enough free space. {0} MB is needed.", listOf((x.needed + 1048575) / 1048576)))
             } catch (x: IOException) {
-                fail(HtMsg("htUpdDownloadFailed", "Tải xuống thất bại: {0}", listOf(x.message ?: x.javaClass.simpleName)))
+                fail(HtMsg("htUpdDownloadFailed", "Download failed: {0}", listOf(x.message ?: x.javaClass.simpleName)))
             } catch (x: Exception) {
-                fail(HtMsg("htUpdInstallFailed", "Không thể cài đặt: {0}", listOf(x.message ?: x.javaClass.simpleName)))
+                fail(HtMsg("htUpdInstallFailed", "Could not install: {0}", listOf(x.message ?: x.javaClass.simpleName)))
             }
         }
     }

@@ -58,7 +58,7 @@ export function FactoryPage() {
 
   return (
     <div className="pg on">
-      <CommonToolbar
+      <CommonToolbar fn="m_factory"
         searchDraft={qDraft} onSearchDraftChange={setQDraft}
         onSearch={() => setPage(1)}
         onNew={() => { setModal("new"); setTarget(null); }}

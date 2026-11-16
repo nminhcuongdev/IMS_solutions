@@ -21,6 +21,7 @@ public class ReturnsServiceTests
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-01", ItemName = "Industrial Printer 4in", ItemGroupCode = "IG-01",
             UomCode = "pcs", PackingTypeCode = "BOX", PackageQty = 10, DefaultLocationCode = "W1_ZA",
             IsActive = true, CreatedAt = now,
@@ -241,7 +242,7 @@ public class ReturnsServiceTests
 
         var res = await new ReturnsService(t.Db).ChangeStatusAsync(new ReturnStatusChangeDto(Array.Empty<string>(), "done"), default);
 
-        ResultAssert.BadRequest(res, "SEL-002");
+        ResultAssert.BadRequest(res, "SEL-004");
     }
 
     [Fact]
@@ -289,7 +290,7 @@ public class ReturnsServiceTests
 
 
     [Fact]
-    public async Task Shortage_subtracts_from_the_expected_qty_and_marks_partial()
+    public async Task Shortage_subtracts_from_the_expected_qty_and_closes_the_line()
     {
         using var t = TestDb.Seeded();
         await SeedRefsAsync(t);
@@ -302,7 +303,7 @@ public class ReturnsServiceTests
         var dto = ResultAssert.Ok<ApiSuccess<ReturnPlanDto>>(res).Data!;
         Assert.Equal(5m, dto.ExpectedQty);
         Assert.Equal(3m, dto.ActualQty);
-        Assert.Equal("statusPartialReturn", dto.Status);
+        Assert.Equal("statusReturned", dto.Status);
         Assert.Equal("RS-SHORT", dto.ShortageReason);
     }
 
@@ -358,7 +359,7 @@ public class ReturnsServiceTests
 
         var res = await new ReturnsService(t.Db).CreateResultAsync(ValidResult(locationCode: "   "), Worker(), default);
 
-        ResultAssert.BadRequest(res, "LOC-001");
+        ResultAssert.BadRequest(res, "VAL-001");
         Assert.Empty(t.Db.ReturnResults);
     }
 
@@ -386,7 +387,7 @@ public class ReturnsServiceTests
 
         var res = await new ReturnsService(t.Db).CreateResultAsync(ValidResult(lotNo: null), Worker(), default);
 
-        ResultAssert.BadRequest(res, "LOT-001");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -505,7 +506,7 @@ public class ReturnsServiceTests
         await SeedRefsAsync(t);
         t.Db.AppUsers.Add(new AppUser
         {
-            UserCode = "U001", UserName = "Nguyen Van An", RoleCode = "Admin",
+            UserCode = "U001", UserName = "Nguyen Van An", RoleCode = "ADMIN",
             PasswordHash = "x", IsActive = true, CreatedAt = DateTime.UtcNow,
         });
         t.Db.ReturnPlans.Add(Plan(qty: 5));

@@ -34,6 +34,7 @@ public class ReprintServiceTests
             Category = category, DocNo = "PO-20260914-001", ItemCode = "PT-RBN-05", Qty = 5,
             UomCode = "pcs", PackageCount = 1, Spec = "OLD-PRN", Status = 19,
             ScheduledDate = new DateOnly(2026, 9, 14), CreatedBy = "U001", CreatedAt = DateTime.UtcNow,
+            PrintData = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>(Fields) { ["ReprintFlag"] = "" }),
         };
         t.Db.PrintHistories.Add(row);
         await t.Db.SaveChangesAsync();
@@ -43,7 +44,9 @@ public class ReprintServiceTests
     private static Mock<IMlEngineClient> PrintingEngine(string layoutFile, int copies)
     {
         var engine = new Mock<IMlEngineClient>(MockBehavior.Strict);
-        engine.Setup(e => e.PrintAsync(layoutFile, "LAN:192.168.10.101", Fields, copies, It.IsAny<CancellationToken>()))
+        engine.Setup(e => e.PrintAsync(layoutFile, "LAN:192.168.10.101",
+                It.Is<IReadOnlyDictionary<string, string>>(d => d.Count == Fields.Count && Fields.All(kv => d.ContainsKey(kv.Key) && d[kv.Key] == kv.Value)),
+                copies, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         return engine;
     }
@@ -141,6 +144,67 @@ public class ReprintServiceTests
         var dto = ResultAssert.Created<ApiSuccess<PrintHistoryDto>>(r).Data!;
         Assert.Equal("ShippingReprint", dto.Category);
         engine.VerifyAll();
+    }
+
+    [Fact]
+    public async Task A_reprint_printed_by_the_browser_is_recorded_without_calling_the_engine()
+    {
+        using var t = TestDb.Seeded();
+        var no = await SeedAsync(t, printer: false);
+        var engine = new Mock<IMlEngineClient>(MockBehavior.Strict);
+
+        var r = await new HistoryService(t.Db, engine.Object, new Ims.Api.Features.Print.PrintTargetResolver(t.Db)).ReprintAsync(no,
+            new PrintReprintRequest(" DRV:Label Printer 609dpi ", 2, Fields, ClientPrinted: true), Worker(), CancellationToken.None);
+
+        var dto = ResultAssert.Created<ApiSuccess<PrintHistoryDto>>(r).Data!;
+        Assert.Equal("ReceivingReprint", dto.Category);
+        var copy = t.Db.PrintHistories.OrderBy(h => h.No).Last();
+        Assert.Equal(("DRV:Label Printer 609dpi", 2, no), (copy.Spec, copy.PackageCount, copy.ReprintOfNo));
+        Assert.Equal("Layout_IMS/ReceivingQR_24dpmm.mllayx", copy.LayoutFile);
+        Assert.Contains("\"ReprintFlag\":\"REPRINT\"", copy.PrintData);
+        engine.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task A_browser_reprint_still_refuses_a_count_below_one()
+    {
+        using var t = TestDb.Seeded();
+        var no = await SeedAsync(t, printer: false);
+        var engine = new Mock<IMlEngineClient>(MockBehavior.Strict);
+
+        var r = await new HistoryService(t.Db, engine.Object, new Ims.Api.Features.Print.PrintTargetResolver(t.Db)).ReprintAsync(no,
+            new PrintReprintRequest("DRV:Label Printer 609dpi", 0, Fields, ClientPrinted: true), Worker(), CancellationToken.None);
+
+        ResultAssert.BadRequest(r, "QTY-001");
+        Assert.Single(t.Db.PrintHistories);
+    }
+
+    [Fact]
+    public async Task A_browser_reprint_with_a_printer_name_longer_than_the_column_is_VAL_005()
+    {
+        using var t = TestDb.Seeded();
+        var no = await SeedAsync(t, printer: false);
+        var engine = new Mock<IMlEngineClient>(MockBehavior.Strict);
+
+        var r = await new HistoryService(t.Db, engine.Object, new Ims.Api.Features.Print.PrintTargetResolver(t.Db)).ReprintAsync(no,
+            new PrintReprintRequest("DRV:" + new string('X', 97), 1, Fields, ClientPrinted: true), Worker(), CancellationToken.None);
+
+        ResultAssert.BadRequest(r, "VAL-005");
+        Assert.Single(t.Db.PrintHistories);
+    }
+
+    [Fact]
+    public async Task A_browser_reprint_of_a_category_with_no_layout_is_refused()
+    {
+        using var t = TestDb.Seeded();
+        var no = await SeedAsync(t, category: "Inventory", printer: false);
+        var engine = new Mock<IMlEngineClient>(MockBehavior.Strict);
+
+        var r = await new HistoryService(t.Db, engine.Object, new Ims.Api.Features.Print.PrintTargetResolver(t.Db)).ReprintAsync(no,
+            new PrintReprintRequest("DRV:Label Printer 609dpi", 1, Fields, ClientPrinted: true), Worker(), CancellationToken.None);
+
+        ResultAssert.NotFound(r);
+        Assert.Single(t.Db.PrintHistories);
     }
 
     [Fact]

@@ -95,7 +95,7 @@ class ReturnListViewModel : ViewModel() {
         val s = _state.value
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.listPlans(date = s.date) }
+            runCatching { repo.listAllPlans(date = s.date) }
                 .onSuccess { r -> _state.update { it.copy(loading = false, plans = r.data) } }
                 .onFailure { e -> _state.update { it.copy(loading = false, error = e.toPair()) } }
         }
@@ -213,7 +213,7 @@ class ReturnDetailViewModel : ViewModel() {
 
         val qty = s.actualQty.trim().toDoubleOrNull()
         if (qty == null || qty < 0) {
-            _state.update { it.copy(error = "QTY-001" to "Vui lòng nhập số lượng hợp lệ (từ 0 trở lên).") }
+            _state.update { it.copy(error = "QTY-001" to "Please enter a valid quantity (0 or more).") }
             return
         }
 
@@ -222,9 +222,9 @@ class ReturnDetailViewModel : ViewModel() {
             runCatching { repo.confirmLine(line, qty, s.locationCode, s.lotNo) }
                 .onSuccess { row ->
                     val msg = if (row.status == STATUS_RETURNED) {
-                        HtMsg("htReturnedFull", "Đã nhận lại đủ {0}", fmt(row.qty))
+                        HtMsg("htReturnedFull", "Returned in full: {0}", fmt(row.qty))
                     } else {
-                        HtMsg("htReturnedShort", "Đã ghi nhận lại thiếu: {0}", fmt(row.qty))
+                        HtMsg("htReturnedShort", "Saved a short return: {0}", fmt(row.qty))
                     }
                     _state.update { it.copy(busy = false, toast = msg, done = true) }
                 }
@@ -239,11 +239,11 @@ class ReturnDetailViewModel : ViewModel() {
 
         val qty = s.actualQty.trim().toDoubleOrNull()
         if (qty == null || qty <= 0) {
-            _state.update { it.copy(error = "QTY-001" to "Vui lòng nhập số lượng hợp lệ (từ 0 trở lên).") }
+            _state.update { it.copy(error = "QTY-001" to "Please enter a valid quantity (0 or more).") }
             return
         }
         if (printerDeviceCode.isNullOrBlank()) {
-            _state.update { it.copy(error = "PRN-001" to "Chưa chọn máy in. Vào Settings để đặt.") }
+            _state.update { it.copy(error = "PRN-001" to "Select a printer in Settings.") }
             return
         }
 
@@ -254,7 +254,7 @@ class ReturnDetailViewModel : ViewModel() {
                     _state.update {
                         it.copy(
                             busy = false,
-                            toast = HtMsg("htLabelIssueDoneN", "Đã ghi phát hành nhãn ({0})", printerDeviceCode),
+                            toast = HtMsg("htLabelIssueDoneN", "Label printed ({0})", printerDeviceCode),
                             line = it.line?.copy(labelIssued = true),
                         )
                     }

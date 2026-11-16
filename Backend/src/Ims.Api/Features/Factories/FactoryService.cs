@@ -57,7 +57,7 @@ internal sealed class FactoryService(ImsDbContext db) : IFactoryService
     private static bool IsSuperAdmin(ClaimsPrincipal u) => u.FindFirst("is_super_admin")?.Value == "1";
 
     private static ServiceResult DenyDefaultChange() =>
-        Outcome.Json(new ApiError(ErrorCatalog.Auth005()), statusCode: 403);
+        Outcome.Json(new ApiError(ErrorCatalog.Auth006()), statusCode: 403);
 
     public async Task<ServiceResult> CreateAsync(ClaimsPrincipal user, FactoryWriteDto body, CancellationToken ct)
     {

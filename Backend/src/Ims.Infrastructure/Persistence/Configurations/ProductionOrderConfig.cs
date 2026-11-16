@@ -27,6 +27,8 @@ public class ProductionOrderConfig : IEntityTypeConfiguration<ProductionOrder>
         b.Property(x => x.CancelReasonCode).HasColumnName("cancel_reason_code").CodeN(20);
         b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
         b.Property(x => x.UpdatedBy).HasColumnName("updated_by").CodeN(20);
+        b.Property(x => x.ReceivedAt).HasColumnName("received_at");
+        b.Property(x => x.ReceivedBy).HasColumnName("received_by").CodeN(20);
         b.Property(x => x.CreatedBy).HasColumnName("created_by").Code(20);
         b.HasIndex(x => x.ProductionOrderNo).IsUnique();
         b.HasIndex(x => new { x.StatusCode, x.PlannedStartDate });

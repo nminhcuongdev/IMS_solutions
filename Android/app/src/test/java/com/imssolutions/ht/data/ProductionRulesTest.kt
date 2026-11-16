@@ -35,9 +35,9 @@ class ProductionRulesTest {
     fun `production menu requires view grant and fails closed`() {
         assertEquals(emptySet<String>(), productionMenuKeys(null))
         val permissions = MyPermissions(functions = listOf(
-            PermissionGrant("ht_prd_input", listOf("view")),
+            PermissionGrant("ht_prd_input", listOf("Open")),
             PermissionGrant("ht_prd_output", listOf("edit")),
-            PermissionGrant("prd_import", listOf("view")),
+            PermissionGrant("prd_import", listOf("Open")),
         ))
         assertEquals(setOf("ht_prd_input"), productionMenuKeys(permissions))
         assertEquals(4, productionMenuKeys(MyPermissions(isSuperAdmin = true)).size)

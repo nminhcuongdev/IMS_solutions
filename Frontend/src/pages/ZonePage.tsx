@@ -82,7 +82,7 @@ export function ZonePage() {
 
   return (
     <div className="pg on" id="pg-m_zone">
-      <CommonToolbar
+      <CommonToolbar fn="m_zone"
         searchDraft={qDraft}
         onSearchDraftChange={setQDraft}
         onSearch={() => setPage(1)}

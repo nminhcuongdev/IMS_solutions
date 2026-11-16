@@ -10,7 +10,7 @@ internal sealed partial class ProductionService
     {
         var target = body.Status switch { "done" => 2, "notDone" => 0, "cancelled" => 3, _ => -1 };
         if (target < 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Sel006()));
-        if (body.OrderNos.Count == 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Sel002()));
+        if (body.OrderNos is not { Count: > 0 }) return Outcome.BadRequest(new ApiError(ErrorCatalog.Sel002()));
         var orders = await db.ProductionOrders.Where(x => body.OrderNos.Contains(x.ProductionOrderNo)).ToListAsync(ct);
         if (orders.Select(x => x.StatusCode).Distinct().Count() > 1) return Outcome.Conflict(new ApiError(ErrorCatalog.Sts003()));
         if (orders.Count > 0 && orders.All(x => x.StatusCode == 2) && target == 2)
@@ -37,7 +37,7 @@ internal sealed partial class ProductionService
 
     public async Task<ServiceResult> PickingAsync(PickingWriteDto body, ClaimsPrincipal user, CancellationToken ct)
     {
-        if (body.Items.Count == 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Sel002()));
+        if (body.Items is not { Count: > 0 }) return Outcome.BadRequest(new ApiError(ErrorCatalog.Sel002()));
         var changed = 0;
         foreach (var selected in body.Items)
         {

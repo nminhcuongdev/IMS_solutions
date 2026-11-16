@@ -21,6 +21,7 @@ public class ReceivingPackageQtyTests
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         t.Db.Items.Add(new Item
         {
+            IsLotManaged = true,
             ItemCode = "IT-01", ItemName = "Printer", ItemGroupCode = "IG-01",
             UomCode = "pcs", PackingTypeCode = "BOX", PackageQty = packageQty,
             IsActive = true, CreatedAt = now,
@@ -63,14 +64,16 @@ public class ReceivingPackageQtyTests
     }
 
     [Fact]
-    public async Task A_case_holding_fewer_than_package_qty_units_needs_a_reason()
+    public async Task A_partial_scan_needs_no_reason()
     {
         using var t = await SeedAsync(planQty: 30, packageQty: 10);
 
         var res = await new ReceivingService(t.Db).CreateResultAsync(Scan(5), Worker(), default);
 
-        ResultAssert.BadRequest(res, "RSN-001");
-        Assert.Empty(await t.Db.Stocks.ToListAsync());
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(res);
+        var plan = await t.Db.ReceivingPlans.FirstAsync();
+        Assert.Equal(ReceivingStatus.Partial, plan.Status);
+        Assert.Null(plan.ReasonCode);
     }
 
     [Fact]
@@ -91,9 +94,10 @@ public class ReceivingPackageQtyTests
     {
         using var t = await SeedAsync(planQty: 50, packageQty: 1);
 
-        ResultAssert.BadRequest(
-            await new ReceivingService(t.Db).CreateResultAsync(Scan(1), Worker(), default), "RSN-001");
         ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(
-            await new ReceivingService(t.Db).CreateResultAsync(Scan(50), Worker(), default));
+            await new ReceivingService(t.Db).CreateResultAsync(Scan(1), Worker(), default));
+        ResultAssert.Created<ApiSuccess<ReceivingResultDto>>(
+            await new ReceivingService(t.Db).CreateResultAsync(Scan(49), Worker(), default));
+        Assert.Equal(ReceivingStatus.Arrived, (await t.Db.ReceivingPlans.FirstAsync()).Status);
     }
 }

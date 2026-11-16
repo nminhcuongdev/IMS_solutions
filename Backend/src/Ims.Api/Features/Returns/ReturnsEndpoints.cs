@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
@@ -8,16 +9,17 @@ public static class ReturnsEndpoints
 {
     public static IEndpointRouteBuilder MapReturnsEndpoints(this IEndpointRouteBuilder app)
     {
-        var schedule = app.MapGroup("/returns-schedule").WithTags("Returns").RequireAuthorization();
-        schedule.MapGet("", ListPlansAsync);
-        schedule.MapPost("", CreatePlanAsync);
-        schedule.MapPut("/status", ChangeStatusAsync);
-        schedule.MapPost("/{returnNo}/shortage", RegisterShortageAsync);
-        schedule.MapGet("/export.csv", ExportPlansCsvAsync);
+        var schedule = app.MapGroup("/schedules/returns").WithTags("Returns").RequireAuthorization().RequireModule("returns");
+        schedule.MapGet("", ListPlansAsync).RequirePermission("returns.Open", "ht_returns.Open");
+        schedule.MapPost("", CreatePlanAsync).RequirePermission("returns.New");
+        schedule.MapPut("/status", ChangeStatusAsync).RequirePermission("returns.StatusChange", "ht_returns.Open");
+        schedule.MapPost("/{returnNo}/shortage", RegisterShortageAsync).RequirePermission("returns.Shortage", "ht_returns.Open");
+        app.MapGet("/export/returns-schedule", ExportPlansCsvAsync).WithTags("Export").RequireAuthorization().RequireModule("returns").RequirePermission("returns.Export");
 
-        var result = app.MapGroup("/return-result").WithTags("Returns").RequireAuthorization();
-        result.MapGet("", ListResultsAsync);
-        result.MapPost("", CreateResultAsync);
+        var result = app.MapGroup("/results/returns").WithTags("Returns").RequireAuthorization().RequireModule("returns");
+        var write = app.MapGroup("/return-result").WithTags("Returns").RequireAuthorization().RequireModule("returns");
+        result.MapGet("", ListResultsAsync).RequirePermission("rcv_result.Open", "ht_returns.Open");
+        write.MapPost("", CreateResultAsync).RequirePermission("ht_returns.Open");
         return app;
     }
 

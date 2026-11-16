@@ -32,11 +32,14 @@ class LanguageRepository(private val store: LabelStore) {
     }
 }
 
+val DEVICE_LANGUAGES = setOf("en", "ja", "vi")
+
 fun resolveLanguage(
     override: Pair<String, String>?,
     userCode: String,
     userDefault: String?,
     known: Set<String> = LanguageRepository.DEFAULT_CODES,
+    deviceLanguage: String? = null,
 ): String {
     val lang = override?.first?.takeIf { it in known }
     val owner = override?.second.orEmpty()
@@ -47,5 +50,7 @@ fun resolveLanguage(
     if (declared != null) return declared
 
     if (lang != null && owner.isEmpty()) return lang
-    return if (HtLang.VI.code in known) HtLang.VI.code else known.firstOrNull() ?: HtLang.VI.code
+    val device = deviceLanguage?.trim()?.lowercase()?.takeIf { it in DEVICE_LANGUAGES && it in known }
+    if (device != null) return device
+    return if (HtLang.EN.code in known) HtLang.EN.code else known.firstOrNull() ?: HtLang.EN.code
 }

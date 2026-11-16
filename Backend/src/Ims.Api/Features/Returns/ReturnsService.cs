@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
+using Ims.Api.Features.Inventory;
 using Ims.Domain.Masters;
 using Ims.Domain.Returns;
 using Ims.Infrastructure.Persistence;
@@ -230,6 +231,8 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
                 : await db.Locations.Where(l => l.LocationCode == preferred && !l.IsDeleted)
                     .Select(l => l.LocationCode).FirstOrDefaultAsync(ct);
             if (shelf is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
+            var shelfFactory = await LocationFactory.OfAsync(db, shelf, ct);
+            if (shelfFactory is null) return Outcome.Conflict(new ApiError(ErrorCatalog.Loc003NoFactory()));
 
             var row = new ReturnResult
             {
@@ -246,11 +249,11 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
             };
             db.ReturnResults.Add(row);
             await db.SaveChangesAsync(ct);
-            await PutBackAsync(row, returned - plan.ActualQty, plan.FactoryCode, worker, now, ct);
+            await PutBackAsync(row, returned - plan.ActualQty, shelfFactory, null, worker, now, ct);
         }
 
         plan.ActualQty = returned;
-        plan.Status = ReturnStatus.Partial;
+        plan.Status = ReturnStatus.Returned;
         plan.ReasonCode = reasonCode;
         plan.UpdatedAt = now;
         if (worker is not null) plan.UpdatedBy = worker;
@@ -289,20 +292,29 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
         ReturnResultWriteDto body, ClaimsPrincipal user, CancellationToken ct)
     {
         if (ValidateCode(body.ItemCode) is { } e1) return e1;
+        var requestId = RequestReplays.Normalize(body.RequestId);
+        if (RequestReplays.Invalid(requestId) is { } badId) return badId;
+        if (await RequestReplays.FindAsync(db, requestId, ct) is { } replay) return replay;
         if (body.Qty is not { } qty || qty < 0)
             return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty001()));
 
         var itemCode = body.ItemCode.Trim();
-        if (!await db.Items.AnyAsync(i => i.ItemCode == itemCode && !i.IsDeleted, ct))
-            return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
+        var item = await db.Items.Where(i => i.ItemCode == itemCode && !i.IsDeleted)
+            .Select(i => new { i.IsLotManaged }).FirstOrDefaultAsync(ct);
+        if (item is null) return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Item")));
+        if (qty > 0 && ExpiryRules.IsExpired(body.ExpiryDate, DateTime.Now))
+            return Outcome.Conflict(new ApiError(ErrorCatalog.Inv001()));
 
         var locationCode = NullIfBlank(body.LocationCode)?.Trim();
         if (locationCode is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Loc001()));
         if (!await db.Locations.AnyAsync(l => l.LocationCode == locationCode && !l.IsDeleted, ct))
             return Outcome.NotFound(new ApiError(ErrorCatalog.NotFound("Location")));
+        var locationFactory = await LocationFactory.OfAsync(db, locationCode, ct);
+        if (locationFactory is null && qty > 0) return Outcome.Conflict(new ApiError(ErrorCatalog.Loc003NoFactory()));
 
-        var lotNo = NullIfBlank(body.LotNo)?.Trim();
-        if (lotNo is null) return Outcome.BadRequest(new ApiError(ErrorCatalog.Lot001()));
+        var lot = LotRules.Check(item.IsLotManaged, body.LotNo, required: true);
+        if (lot.Error is { } lotError) return Outcome.BadRequest(new ApiError(lotError));
+        var lotNo = lot.Lot;
 
         var returnNo = NullIfBlank(body.ReturnNo)?.Trim();
         ReturnPlan? plan = null;
@@ -332,6 +344,9 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
 
             plan = open[0];
             if (qty > plan.Qty) return Outcome.BadRequest(new ApiError(ErrorCatalog.Qty002()));
+            if (locationFactory is not null && !string.IsNullOrWhiteSpace(plan.FactoryCode)
+                && !string.Equals(plan.FactoryCode, locationFactory, StringComparison.OrdinalIgnoreCase))
+                return Outcome.Conflict(new ApiError(ErrorCatalog.Loc004Factory()));
         }
 
         var added = qty - (plan?.ActualQty ?? 0m);
@@ -364,27 +379,22 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
         }
 
         await db.SaveChangesAsync(ct);
-        await PutBackAsync(row, added, plan?.FactoryCode, worker, now, ct);
+        await PutBackAsync(row, added, locationFactory, body.ExpiryDate, worker, now, ct);
         await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
 
         var dto = await LoadResultDtoAsync(db, row.No, ct);
-        return Outcome.Created($"/return-result?returnNo={row.ReturnNo}",
+        var result = Outcome.Created($"/return-result?returnNo={row.ReturnNo}",
             new ApiSuccess<ReturnResultDto>(dto!));
+        RequestReplays.Record(db, requestId, "returns", result, worker);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     private async Task PutBackAsync(
-        ReturnResult row, decimal qty, string? planFactory, string? worker, DateTime now, CancellationToken ct)
+        ReturnResult row, decimal qty, string? factoryCode, DateOnly? expiry, string? worker, DateTime now, CancellationToken ct)
     {
-        if (qty <= 0) return;
-
-        var factoryCode = planFactory
-            ?? await db.Locations
-                .Where(l => l.LocationCode == row.LocationCode && l.ZoneCode != null)
-                .Join(db.Zones, l => l.ZoneCode, z => z.ZoneCode, (l, z) => z.FactoryCode)
-                .FirstOrDefaultAsync(ct)
-            ?? await db.Factories.Where(f => !f.IsDeleted).OrderBy(f => f.FactoryCode)
-                .Select(f => f.FactoryCode).FirstAsync(ct);
+        if (qty <= 0 || factoryCode is null) return;
 
         var stock = new Domain.Inventory.Stock
         {
@@ -394,6 +404,7 @@ internal sealed class ReturnsService(ImsDbContext db) : IReturnsService
             LocationCode = row.LocationCode,
             LotNo = row.LotNo,
             StockQty = qty,
+            ExpiryDate = expiry,
             UpdatedAt = now,
             UpdatedBy = worker,
         };

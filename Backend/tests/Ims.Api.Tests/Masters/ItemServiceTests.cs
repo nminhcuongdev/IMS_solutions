@@ -142,7 +142,7 @@ public class ItemServiceTests
         var blankName = await new ItemService(t.Db).CreateAsync(Valid(name: " "), default);
 
         ResultAssert.BadRequest(blankCode, "VAL-001");
-        ResultAssert.BadRequest(blankName, "VAL-002");
+        ResultAssert.BadRequest(blankName, "VAL-001");
 
         var created = await new ItemService(t.Db).CreateAsync(Valid(), default);
         ResultAssert.Created<ApiSuccess<ItemDto>>(created);

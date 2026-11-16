@@ -58,7 +58,7 @@ fun DisposalConfirmScreen(
                 ) {
                     OutlinedTextField(
                         value = state.reasons.firstOrNull { it.reasonCode == state.reasonCode }
-                            ?.let { "${it.reasonCode} — ${it.reasonName}" } ?: "— chọn lý do —",
+                            ?.let { "${it.reasonCode} — ${it.reasonName}" } ?: "— select a reason —",
                         onValueChange = {},
                         readOnly = true,
                         singleLine = true,

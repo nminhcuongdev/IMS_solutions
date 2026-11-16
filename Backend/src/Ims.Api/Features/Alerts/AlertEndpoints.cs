@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -8,7 +9,7 @@ public static class AlertEndpoints
     public static IEndpointRouteBuilder MapAlertEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/alerts").WithTags("Alerts").RequireAuthorization();
-        g.MapGet("", ListAsync);
+        g.MapGet("", ListAsync).RequirePermission("alert_center.Open");
         return app;
     }
 

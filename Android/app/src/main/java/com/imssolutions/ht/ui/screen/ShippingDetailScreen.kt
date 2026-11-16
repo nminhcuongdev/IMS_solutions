@@ -76,7 +76,7 @@ fun ShippingDetailScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.line == null -> EmptyBox(t("htLineNotFound", "Không tìm thấy dòng này."))
+                state.line == null -> EmptyBox(t("htLineNotFound", "This line was not found."))
                 else -> {
                     val line = state.line!!
                     Column(
@@ -106,7 +106,7 @@ fun ShippingDetailScreen(
                                     onValueChange = vm::setLot,
                                     singleLine = true,
                                     shape = RoundedCornerShape(8.dp),
-                                    placeholder = { Text(t("htScanOrTypeLot", "Quét hoặc nhập số lô"), fontSize = 13.sp) },
+                                    placeholder = { Text(t("htScanOrTypeLot", "Scan or type the lot number"), fontSize = 13.sp) },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -125,7 +125,7 @@ fun ShippingDetailScreen(
                             }
                             if (state.overShipped) {
                                 Text(
-                                    t("htShipOverPlan", "Không xuất được nhiều hơn số kế hoạch."),
+                                    t("htShipOverPlan", "You cannot ship more than planned."),
                                     fontSize = 11.sp,
                                     color = Color(0xFFDC3545),
                                 )
@@ -148,7 +148,7 @@ fun ShippingDetailScreen(
                                             onValueChange = {},
                                             readOnly = true,
                                             singleLine = true,
-                                            placeholder = { Text(t("htSelectReason", "Chọn lý do"), fontSize = 13.sp) },
+                                            placeholder = { Text(t("htSelectReason", "Select a reason"), fontSize = 13.sp) },
                                             trailingIcon = {
                                                 ExposedDropdownMenuDefaults.TrailingIcon(reasonExpanded)
                                             },
@@ -201,12 +201,13 @@ fun ShippingDetailScreen(
                 }
 
                 if (state.showLabel) {
+                    val hasPrinter = remember { ApiClient.tokens.htSettingsBlocking().printerDeviceCode.isNotBlank() }
                     Button(
                         onClick = {
                             val deviceCode = ApiClient.tokens.htSettingsBlocking().printerDeviceCode
                             if (deviceCode.isBlank()) onOpenSettings() else vm.issueLabel(deviceCode)
                         },
-                        enabled = !state.busy && !state.labelIssued,
+                        enabled = !state.busy && !state.labelIssued && hasPrinter,
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AC9)),
                         modifier = Modifier.weight(1f).height(44.dp),
@@ -214,7 +215,11 @@ fun ShippingDetailScreen(
                         Icon(Icons.Default.Print, null, tint = Color.White)
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (state.labelIssued) t("badgeIssued", "Issued") else "Label",
+                            when {
+                                state.labelIssued -> t("badgeIssued", "Issued")
+                                !hasPrinter -> t("htNoPrinter", "Select a printer in Settings")
+                                else -> t("btnLabel", "Label")
+                            },
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                         )

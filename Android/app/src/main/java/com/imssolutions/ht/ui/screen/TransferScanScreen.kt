@@ -97,16 +97,18 @@ fun TransferScanScreen(
         HtBottomInset()
     }
 
+    StockChoiceDialog(state.choices, onChoose = { vm.choose(it) }, onDismiss = { vm.dismissChoices() })
+
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
-            title = { Text(t("confirmTitle", "Bỏ danh sách đã quét?")) },
-            text = { Text(t("htScannedRowsLost", "{0} dòng vừa quét sẽ mất.", state.lines.size)) },
+            title = { Text(t("confirmTitle", "Discard the scanned list?")) },
+            text = { Text(t("htScannedRowsLost", "{0} scanned rows will be lost.", state.lines.size)) },
             confirmButton = {
-                TextButton(onClick = { confirmDiscard = false; vm.resetScans(); onBack() }) { Text(t("htDiscard", "Bỏ")) }
+                TextButton(onClick = { confirmDiscard = false; vm.resetScans(); onBack() }) { Text(t("htDiscard", "Discard")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDiscard = false }) { Text(t("htStay", "Ở lại")) }
+                TextButton(onClick = { confirmDiscard = false }) { Text(t("htStay", "Stay")) }
             },
         )
     }
@@ -147,7 +149,7 @@ private fun ScannedRow(line: TransferLine, onRemove: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = t("htRemoveRow", "Bỏ dòng này"), tint = BrandBlue)
+                    Icon(Icons.Default.Close, contentDescription = t("htRemoveRow", "Remove this row"), tint = BrandBlue)
                 }
             }
             Text(
@@ -159,7 +161,7 @@ private fun ScannedRow(line: TransferLine, onRemove: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                t("htFromLocation", "Từ") + ": " + (line.locationCode ?: "—"),
+                t("htFromLocation", "From") + ": " + (line.locationCode ?: "—"),
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -53,9 +53,9 @@ fun TransferPickScreen(
                     label = t("thLocation", "Location"),
                     value = state.locations.firstOrNull { it.locationCode == state.toLocationCode }
                         ?.let { l -> l.locationName?.let { "${l.locationCode} - $it" } ?: l.locationCode },
-                    placeholder = if (state.busy) "đang tải…"
-                    else if (state.locations.isEmpty()) "zone này chưa có ô kệ nào"
-                    else "— chọn vị trí —",
+                    placeholder = if (state.busy) "Loading…"
+                    else if (state.locations.isEmpty()) "This zone has no shelf cells yet."
+                    else "— Select a location —",
                     expanded = locOpen,
                     onExpanded = { locOpen = it },
                     options = state.locations.map { l ->
@@ -101,7 +101,7 @@ private fun Picker(
     onExpanded: (Boolean) -> Unit,
     options: List<Pair<String, String>>,
     onPick: (String) -> Unit,
-    placeholder: String = "— chọn —",
+    placeholder: String = "— Select —",
 ) {
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = onExpanded) {
         OutlinedTextField(

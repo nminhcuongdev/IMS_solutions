@@ -24,25 +24,19 @@ interface ApiService {
     @GET("production-order/{orderNo}")
     suspend fun productionOrder(@Path("orderNo") orderNo: String): ApiSuccess<ProductionOrderDetail>
 
-    @GET("production-order/{orderNo}/lines")
-    suspend fun productionLines(@Path("orderNo") orderNo: String): ApiSuccess<List<ProductionLine>>
-
-    @GET("production-order/{orderNo}/works")
-    suspend fun productionWorks(@Path("orderNo") orderNo: String): ApiSuccess<ProductionWorks>
-
-    @POST("production-order/{orderNo}/receipt")
+    @POST("production-order/{orderNo}/results")
     suspend fun productionReceipt(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<JsonObject>
 
-    @POST("production-order/{orderNo}/consumption")
+    @POST("production-order/{orderNo}/results")
     suspend fun productionConsumption(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<List<JsonObject>>
 
-    @POST("production-order/{orderNo}/return")
+    @POST("production-order/{orderNo}/results")
     suspend fun productionReturn(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<List<JsonObject>>
 
-    @POST("production-order/{orderNo}/output")
+    @POST("production-order/{orderNo}/results")
     suspend fun productionOutput(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<ProductionOutputResult>
 
-    @POST("production-order/{orderNo}/label")
+    @POST("production-order/{orderNo}/results")
     suspend fun productionLabel(@Path("orderNo") orderNo: String, @Body body: JsonObject): ApiSuccess<JsonObject>
 
     @POST("auth/login")
@@ -51,7 +45,7 @@ interface ApiService {
     @POST("auth/logout")
     suspend fun logout()
 
-    @GET("receiving-schedule")
+    @GET("schedules/receiving")
     suspend fun listReceivingSchedule(
         @Query("page") page: Int? = null,
         @Query("pageSize") pageSize: Int? = null,
@@ -63,10 +57,10 @@ interface ApiService {
         @Query("status") status: String? = null,
     ): ApiListSuccess<ReceivingPlan>
 
-    @PUT("receiving-schedule/status")
+    @PUT("schedules/receiving/status")
     suspend fun changeStatus(@Body body: StatusChangeRequest): ApiSuccess<StatusChangeResult>
 
-    @POST("receiving-schedule/{poNo}/shortage")
+    @POST("schedules/receiving/{poNo}/shortage")
     suspend fun registerShortage(
         @Path("poNo") poNo: String,
         @Body body: ShortageRequest,
@@ -77,7 +71,7 @@ interface ApiService {
         @Body body: ReceivingResultRequest,
     ): ApiSuccess<ReceivingResult>
 
-    @GET("receiving-result")
+    @GET("results/receiving")
     suspend fun listReceivingResult(
         @Query("page") page: Int? = null,
         @Query("pageSize") pageSize: Int? = null,
@@ -105,7 +99,7 @@ interface ApiService {
     suspend fun printLabel(@Body body: PrintLabelRequest): ApiSuccess<PrintHistoryRow>
 
 
-    @GET("returns-schedule")
+    @GET("schedules/returns")
     suspend fun listReturnsSchedule(
         @Query("page") page: Int? = null,
         @Query("pageSize") pageSize: Int? = null,
@@ -121,7 +115,7 @@ interface ApiService {
     suspend fun createReturnResult(@Body body: ReturnResultRequest): ApiSuccess<ReturnResult>
 
 
-    @GET("shipping-schedule")
+    @GET("schedules/shipping")
     suspend fun listShippingSchedule(
         @Query("page") page: Int? = null,
         @Query("pageSize") pageSize: Int? = null,
@@ -137,7 +131,7 @@ interface ApiService {
     suspend fun createShippingResult(@Body body: ShippingResultRequest): ApiSuccess<ShippingResult>
 
 
-    @GET("picking-schedule")
+    @GET("schedules/picking")
     suspend fun listPickingSchedule(
         @Query("page") page: Int? = null,
         @Query("pageSize") pageSize: Int? = null,

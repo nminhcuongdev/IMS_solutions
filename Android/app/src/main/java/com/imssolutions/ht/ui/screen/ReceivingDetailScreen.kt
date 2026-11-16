@@ -69,7 +69,7 @@ fun ReceivingDetailScreen(
         Box(Modifier.weight(1f)) {
             when {
                 state.loading -> LoadingBox()
-                state.line == null -> EmptyBox(t("htLineNotFound", "Không tìm thấy dòng này."))
+                state.line == null -> EmptyBox(t("htLineNotFound", "This line was not found."))
                 else -> {
                     val line = state.line!!
                     Column(
@@ -90,13 +90,13 @@ fun ReceivingDetailScreen(
                             DRow(t("thItemCode", "Item Code"), line.itemCode)
                             DRow(t("thItemName", "Item Name"), line.itemName ?: "—")
                             DRow(
-                                t("htPlannedWholeSlip", "Kế hoạch (cả phiếu)"),
+                                t("htPlannedWholeSlip", "Planned (whole slip)"),
                                 "${fmt(line.plannedQty)} ${line.unit.orEmpty()}".trim(),
                             )
                             DRow(
-                                t("htExpectedPerPackage", "Dự kiến (1 kiện)"),
+                                t("htExpectedPerPackage", "Expected (1 package)"),
                                 "${fmt(state.expected)} ${line.unit.orEmpty()}".trim() +
-                                    (state.packageCount?.let { " · " + t("htPackagesN", "{0} kiện", fmt(it)) } ?: ""),
+                                    (state.packageCount?.let { " · " + t("htPackagesN", "{0} packages", fmt(it)) } ?: ""),
                             )
 
                             Spacer(Modifier.height(10.dp))
@@ -106,7 +106,7 @@ fun ReceivingDetailScreen(
                                     onValueChange = vm::setLot,
                                     singleLine = true,
                                     shape = RoundedCornerShape(8.dp),
-                                    placeholder = { Text(t("htScanOrTypeLot", "Quét hoặc nhập số lô"), fontSize = 13.sp) },
+                                    placeholder = { Text(t("htScanOrTypeLot", "Scan or type the lot number"), fontSize = 13.sp) },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -130,7 +130,7 @@ fun ReceivingDetailScreen(
                                 )
                                 if (state.fromScan) {
                                     Text(
-                                        t("htFromQrReadOnly", "Lấy từ mã QR trên nhãn — không sửa được"),
+                                        t("htFromQrReadOnly", "Taken from the label QR; cannot be edited"),
                                         fontSize = 11.sp,
                                         color = Color(0xFF007AC9),
                                         modifier = Modifier.padding(top = 4.dp),
@@ -155,7 +155,7 @@ fun ReceivingDetailScreen(
                                             onValueChange = {},
                                             readOnly = true,
                                             singleLine = true,
-                                            placeholder = { Text(t("htSelectReason", "Chọn lý do"), fontSize = 13.sp) },
+                                            placeholder = { Text(t("htSelectReason", "Select a reason"), fontSize = 13.sp) },
                                             trailingIcon = {
                                                 ExposedDropdownMenuDefaults.TrailingIcon(reasonExpanded)
                                             },
@@ -190,7 +190,7 @@ fun ReceivingDetailScreen(
                                 ) {
                                     Text(t("thLocation", "Location"), fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(t("htScanLocationLabel", "Quét tem vị trí"), fontSize = 12.5.sp,
+                                    Text(t("htScanLocationLabel", "Scan the location label"), fontSize = 12.5.sp,
                                         fontWeight = FontWeight.SemiBold, color = Color(0xFFE67E00))
                                 }
                             } else {
@@ -226,19 +226,20 @@ fun ReceivingDetailScreen(
                 }
 
                 if (state.showLabel) {
+                    val hasPrinter = remember { ApiClient.tokens.htSettingsBlocking().printerDeviceCode.isNotBlank() }
                     Button(
                         onClick = {
                             val deviceCode = ApiClient.tokens.htSettingsBlocking().printerDeviceCode
                             vm.issueLabelAndConfirm(deviceCode)
                         },
-                        enabled = !state.busy,
+                        enabled = !state.busy && hasPrinter,
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = BrandBlueBtn),
                         modifier = Modifier.weight(1f).height(44.dp),
                     ) {
                         Icon(Icons.Default.Print, null, tint = Color.White)
                         Spacer(Modifier.width(6.dp))
-                        Text(t("htLabelConfirm", "Label + Confirm"), fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(if (hasPrinter) t("htLabelConfirm", "Label + Confirm") else t("htNoPrinter", "Select a printer in Settings"), fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -253,7 +254,7 @@ fun ReceivingDetailScreen(
             onDismissRequest = { vm.clearError() },
             title = { Text(code) },
             text = {
-                Text(if (code == "LOC-001") t("htLoc001Scan", message) else t(code, message, message))
+                Text(if (code == "LOC-001" || code == "VAL-001" && message.contains("ロケーション")) t("htLoc001Scan", message) else t(code, message, message))
             },
             confirmButton = { Button(onClick = { vm.clearError() }) { Text(t("thYes", "OK")) } },
         )

@@ -39,6 +39,7 @@ class LanguageViewModel(app: Application) : AndroidViewModel(app) {
                 resolveLanguage(
                     override, session?.userCode.orEmpty(), session?.defaultLanguage,
                     list.map { it.code }.toSet(),
+                    java.util.Locale.getDefault().language,
                 )
             }.distinctUntilChanged().collect { apply(it) }
         }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Ims.Api.Contracts;
 using Ims.Domain.System;
 using Ims.Infrastructure.Persistence;
+using Ims.Infrastructure.Persistence.Catalog;
 
 namespace Ims.Api.Features.SuperAdmin;
 
@@ -15,7 +16,7 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
     private static ServiceResult? RequireSuperAdmin(ClaimsPrincipal user)
         => user.FindFirst("is_super_admin")?.Value == "1"
             ? null
-            : Outcome.Json(new ApiError(ErrorCatalog.Auth005()), statusCode: 403);
+            : Outcome.Json(new ApiError(ErrorCatalog.Auth006()), statusCode: 403);
 
     public async Task<ServiceResult> GetGeneralAsync(
         ClaimsPrincipal user, CancellationToken ct, string? category = null)
@@ -64,17 +65,20 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
     public async Task<ServiceResult> GetVisibilityAsync(ClaimsPrincipal user, CancellationToken ct)
     {
         if (RequireSuperAdmin(user) is { } deny) return deny;
-        var rows = await (
-            from v in db.FunctionVisibilities.AsNoTracking()
-            join f in db.AppFunctions.AsNoTracking().Where(x => !x.IsDeleted)
-                on v.TargetCode equals f.FunctionCode
-            join l in db.FunctionLarges.AsNoTracking() on f.LargeCode equals l.LargeCode into lj
-            from l in lj.DefaultIfEmpty()
-            orderby v.TargetType, l.DisplayOrder, f.DisplayOrder
-            select new VisibilityRowDto(
-                v.TargetType, v.TargetCode, f.FunctionName,
-                l != null ? l.LargeCode : null, l != null ? l.LargeName : null, v.IsVisible)
-        ).ToListAsync(ct);
+        var groups = await db.FunctionLarges.AsNoTracking().Where(g => g.IsActive)
+            .OrderBy(g => g.DisplayOrder).ToListAsync(ct);
+        var names = groups.ToDictionary(g => g.LargeCode, g => g.LargeName);
+        var functions = await db.AppFunctions.AsNoTracking().Where(f => !f.IsDeleted)
+            .OrderBy(f => f.DisplayOrder).ToListAsync(ct);
+        var order = groups.Select((g, i) => (g.LargeCode, i)).ToDictionary(x => x.LargeCode, x => x.i);
+        var rows = groups.Select(g => new VisibilityRowDto("Group", g.LargeCode, g.LargeName, g.LargeCode, g.LargeName, g.IsVisible))
+            .Concat(functions
+                .OrderBy(f => MenuCatalog.DeviceOf(f.FunctionCode))
+                .ThenBy(f => f.LargeCode is { } l && order.TryGetValue(l, out var i) ? i : int.MaxValue)
+                .ThenBy(f => f.DisplayOrder ?? int.MaxValue)
+                .Select(f => new VisibilityRowDto(MenuCatalog.DeviceOf(f.FunctionCode), f.FunctionCode, f.FunctionName,
+                    f.LargeCode, f.LargeCode is { } l ? names.GetValueOrDefault(l) : null, f.IsVisible)))
+            .ToList();
         return Outcome.Ok(new ApiSuccess<IReadOnlyList<VisibilityRowDto>>(rows));
     }
 
@@ -85,21 +89,24 @@ internal sealed class SuperAdminService(ImsDbContext db) : ISuperAdminService
         var items = body?.Items ?? new List<VisibilityItemDto>();
         if (items.Count == 0) return Outcome.BadRequest(new ApiError(ErrorCatalog.Val001()));
 
-        var all = await db.FunctionVisibilities.ToListAsync(ct);
+        var groups = await db.FunctionLarges.ToListAsync(ct);
+        var functions = await db.AppFunctions.Where(f => !f.IsDeleted).ToListAsync(ct);
+        var now = DateTime.Now;
         foreach (var i in items)
         {
-            var row = all.FirstOrDefault(v => v.TargetType == i.TargetType && v.TargetCode == i.TargetCode);
-            if (row is null)
-                db.FunctionVisibilities.Add(new FunctionVisibility
-                {
-                    TargetType = i.TargetType, TargetCode = i.TargetCode,
-                    IsVisible = i.IsVisible, UpdatedAt = DateTime.Now,
-                });
-            else
+            if (i.TargetType == "Group")
             {
-                row.IsVisible = i.IsVisible;
-                row.UpdatedAt = DateTime.Now;
+                var g = groups.FirstOrDefault(x => x.LargeCode == i.TargetCode);
+                if (g is null || g.IsVisible == i.IsVisible) continue;
+                g.IsVisible = i.IsVisible;
+                g.UpdatedAt = now;
+                continue;
             }
+            var f = functions.FirstOrDefault(x => x.FunctionCode == i.TargetCode);
+            if (f is null || f.IsVisible == i.IsVisible) continue;
+            f.IsVisible = i.IsVisible;
+            f.UpdatedAt = now;
+            f.UpdatedBy = user.FindFirstValue(ClaimTypes.NameIdentifier);
         }
         await db.SaveChangesAsync(ct);
         return await GetVisibilityAsync(user, ct);

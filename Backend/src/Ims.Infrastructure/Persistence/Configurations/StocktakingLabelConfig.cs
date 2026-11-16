@@ -9,7 +9,7 @@ public class StocktakingLabelConfig : IEntityTypeConfiguration<StocktakingLabel>
     public void Configure(EntityTypeBuilder<StocktakingLabel> b)
     {
         b.ToTable("stocktaking_label");
-        b.HasKey(x => x.SerialNo);
+        b.HasKey(x => new { x.StocktakingSessionNo, x.SerialNo });
         b.Property(x => x.SerialNo).HasColumnName("serial_no").Code(30);
 
         b.Property(x => x.StocktakingSessionNo).HasColumnName("stocktaking_session_no");
@@ -18,6 +18,8 @@ public class StocktakingLabelConfig : IEntityTypeConfiguration<StocktakingLabel>
         b.Property(x => x.LotNo).HasColumnName("lot_no").CodeN(20);
         b.Property(x => x.ExpiryDate).HasColumnName("expiry_date");
         b.Property(x => x.IsScanned).HasColumnName("is_scanned").HasDefaultValue(false);
+        b.Property(x => x.PlannedQty).HasColumnName("planned_qty").HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        b.Property(x => x.MovedAfterStart).HasColumnName("moved_after_start").HasDefaultValue(false);
         b.Property(x => x.Status).HasColumnName("status").HasDefaultValue(0);
         b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 

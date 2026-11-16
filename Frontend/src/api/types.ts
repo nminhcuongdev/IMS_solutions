@@ -21,6 +21,8 @@ export interface ApiErrorBody {
   httpStatus: number;
   severity: string;
   message: string;
+  args?: string[] | null;
+  messageKey?: string | null;
 }
 
 export interface ApiError {
@@ -31,9 +33,13 @@ export interface ApiError {
 export class ApiCallError extends Error {
   code: string;
   httpStatus: number;
+  args: string[];
+  messageKey: string | null;
   constructor(body: ApiErrorBody) {
     super(body.message);
     this.code = body.code;
     this.httpStatus = body.httpStatus;
+    this.args = body.args ?? [];
+    this.messageKey = body.messageKey ?? null;
   }
 }

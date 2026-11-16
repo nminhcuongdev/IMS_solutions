@@ -112,7 +112,7 @@ fun LoginScreen(
                         IconButton(onClick = { showPassword = !showPassword }) {
                             Icon(
                                 if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (showPassword) "Ẩn mật khẩu" else "Hiện mật khẩu",
+                                contentDescription = if (showPassword) "Hide password" else "Show password",
                             )
                         }
                     },

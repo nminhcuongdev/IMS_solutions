@@ -94,16 +94,16 @@ fun statusColor(status: String): Color = when (status) {
 fun statusLabel(status: String): String = t(status, statusFallback(status))
 
 private fun statusFallback(status: String): String = when (status) {
-    "statusArrived" -> "Đã đến"
-    "statusPartial" -> "Một phần"
-    "statusReturned" -> "Đã trả"
-    "statusPartialReturn" -> "Trả một phần"
-    "statusCancelled" -> "Đã huỷ"
-    "statusPendingReturn" -> "Chờ xử lý"
-    "statusShipped" -> "Đã xuất"
-    "statusPartialShip" -> "Một phần"
-    "statusNotShipped" -> "Chưa xuất"
-    "statusPicked" -> "Đã lấy hàng"
-    "statusNotPicked" -> "Chưa lấy hàng"
-    else -> "Chưa đến"
+    "statusArrived" -> "Arrived"
+    "statusPartial" -> "Partial"
+    "statusReturned" -> "Returned"
+    "statusPartialReturn" -> "Partially returned"
+    "statusCancelled" -> "Cancelled"
+    "statusPendingReturn" -> "Pending"
+    "statusShipped" -> "Shipped"
+    "statusPartialShip" -> "Partial"
+    "statusNotShipped" -> "Not shipped"
+    "statusPicked" -> "Picked"
+    "statusNotPicked" -> "Not picked"
+    else -> "Not arrived"
 }

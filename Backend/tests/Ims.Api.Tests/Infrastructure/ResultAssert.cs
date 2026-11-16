@@ -42,5 +42,5 @@ internal static class ResultAssert
     public static void NotFound(ServiceResult r) => Error(r, 404, "SYS-404");
     public static void Conflict(ServiceResult r) => Error(r, 409, "DUP-001");
     public static void InUse(ServiceResult r) => Error(r, 409, "DEL-001");
-    public static void Forbidden(ServiceResult r) => Error(r, 403, "AUTH-005");
+    public static void Forbidden(ServiceResult r) => Error(r, 403, "AUTH-006");
 }

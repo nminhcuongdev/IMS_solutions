@@ -9,4 +9,5 @@ public class AppFunction : SoftDeletableEntity
     public string? LargeCode { get; set; }
     public int? DisplayOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsVisible { get; set; } = true;
 }

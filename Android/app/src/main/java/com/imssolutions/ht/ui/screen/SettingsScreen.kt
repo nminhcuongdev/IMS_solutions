@@ -1,6 +1,8 @@
 package com.imssolutions.ht.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,7 +15,9 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -21,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.imssolutions.ht.ui.*
+import com.imssolutions.ht.data.ServerAddress
 import com.imssolutions.ht.ui.vm.SettingsViewModel
 
 @Composable
@@ -36,7 +41,7 @@ fun SettingsScreen(
 ) {
     val vm: SettingsViewModel = viewModel()
     val state by vm.state.collectAsState()
-    BusyOverlay(state.downloading)
+    BusyOverlay(state.downloading || state.probing)
     val snackbar = remember { SnackbarHostState() }
     var confirmDownload by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
@@ -60,11 +65,46 @@ fun SettingsScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp),
                     placeholder = { Text("192.168.1.100", fontSize = 12.sp) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    isError = state.serverIp.isNotBlank() && state.serverUrl == null,
-                    supportingText = state.serverUrl?.let { u -> { Text(u, fontSize = 11.sp) } },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    isError = state.serverIp.isNotBlank() && state.serverCandidates.isEmpty(),
+                    supportingText = serverHint(state.serverCandidates)?.let { h -> { Text(h, fontSize = 11.sp) } },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (state.savedServers.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    TfLabel(t("htSavedServers", "Saved servers"))
+                    val current = state.chosenServer ?: state.serverUrl
+                    state.savedServers.forEach { url ->
+                        val active = current != null && ServerAddress.sameServer(url, current)
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) Color(0xFFEBF4FB) else Color(0xFFF7FAFC))
+                                .border(1.dp, if (active) Color(0xFF007AC9) else Color(0xFFCBD5E0), RoundedCornerShape(8.dp))
+                                .clickable { vm.pickServer(url) }
+                                .padding(start = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                (if (active) "● " else "") + ServerAddress.toDisplay(url).let { d -> if (':' in d) d else "$d:${ServerAddress.DEFAULT_PORT}" },
+                                color = if (active) Color(0xFF007AC9) else MaterialTheme.colorScheme.onSurface,
+                                fontSize = 13.sp,
+                                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f).padding(vertical = 10.dp),
+                            )
+                            if (!active) {
+                                Text(
+                                    "✕",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.clickable { vm.forgetServer(url) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                                )
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 TfLabel(t("htPrinter", "Printer"))
                 PickerField(
@@ -87,8 +127,8 @@ fun SettingsScreen(
                     value = state.zones.firstOrNull { it.first == state.zoneCode }?.second
                         ?: state.zoneCode,
                     options = state.zones.map { it.second },
-                    placeholder = t("htZone", "Chọn zone"),
-                    emptyText = t("htNoPrinterDrivers", "(không lấy được danh sách)"),
+                    placeholder = t("htZone", "Select a zone"),
+                    emptyText = t("htNoPrinterDrivers", "(the list could not be loaded)"),
                     onPick = { label ->
                         state.zones.firstOrNull { it.second == label }?.let { vm.setZone(it.first) }
                     },
@@ -101,8 +141,8 @@ fun SettingsScreen(
                 Text(t("htLangDataSection", "Language Data"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007AC9))
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    state.langDataAt?.let { t("htLastUpdated", "Cập nhật lần cuối") + ": " + it }
-                        ?: t("htLangDataMissingMsg", "Chưa tải dữ liệu ngôn ngữ"),
+                    state.langDataAt?.let { t("htLastUpdated", "Last updated") + ": " + it }
+                        ?: t("htLangDataMissingMsg", "Language data has not been downloaded"),
                     fontSize = 11.sp,
                     color = if (state.langDataAt == null) Color(0xFFDC3545)
                             else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -148,11 +188,11 @@ fun SettingsScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(8.dp),
                     placeholder = { Text("HT-001", fontSize = 12.sp) },
-                    supportingText = { Text(t("htDeviceCodeHint", "Mã thiết bị trong Device Master"), fontSize = 11.sp) },
+                    supportingText = { Text(t("htDeviceCodeHint", "Device code in the Device Master"), fontSize = 11.sp) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    t("htUpdCurrent", "Phiên bản hiện tại: {0}", installedVersion),
+                    t("htUpdCurrent", "Current version: {0}", installedVersion),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -202,7 +242,7 @@ fun SettingsScreen(
     if (confirmDownload) {
         ConfirmDialog(
             title = t("htDataDownload", "Language Data Download"),
-            message = "Tải dữ liệu ngôn ngữ từ máy chủ?",
+            message = "Download the language data from the server?",
             onDismiss = { confirmDownload = false },
             onOk = { confirmDownload = false; vm.downloadLanguageData(onDownloadLabels) },
         )
@@ -210,7 +250,7 @@ fun SettingsScreen(
     if (confirmClear) {
         ConfirmDialog(
             title = t("htLangDataClear", "Language Data Clear"),
-            message = "Xoá mốc dữ liệu ngôn ngữ? Nút LOGIN sẽ bị khoá lại.",
+            message = "Clear the language data? The LOGIN button will be locked again.",
             onDismiss = { confirmClear = false },
             onOk = { confirmClear = false; vm.clearLanguageData(onClearLabels) },
         )
@@ -282,5 +322,17 @@ private fun ConfirmDialog(title: String, message: String, onDismiss: () -> Unit,
         text = { Text(message) },
         confirmButton = { Button(onClick = onOk) { Text(t("thYes", "OK")) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(t("htClose", "CANCEL")) } },
+    )
+}
+
+@Composable
+private fun serverHint(candidates: List<String>): String? = when {
+    candidates.isEmpty() -> null
+    candidates.size == 1 -> candidates.first()
+    else -> t(
+        "htPortAuto",
+        "{0} — port auto-detect: {1}",
+        candidates.first().removePrefix("http://").substringBefore(':'),
+        candidates.joinToString(", ") { it.trimEnd('/').substringAfterLast(':') },
     )
 }

@@ -15,6 +15,7 @@ public class AppFunctionConfig : IEntityTypeConfiguration<AppFunction>
         b.Property(x => x.LargeCode).HasColumnName("large_code").CodeN(30);
         b.Property(x => x.DisplayOrder).HasColumnName("display_order");
         b.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        b.Property(x => x.IsVisible).HasColumnName("is_visible").HasDefaultValue(true);
         b.MapAudit();
         b.MapSoftDelete();
         b.HasOne<FunctionLarge>().WithMany().HasForeignKey(x => x.LargeCode).OnDelete(DeleteBehavior.Restrict);

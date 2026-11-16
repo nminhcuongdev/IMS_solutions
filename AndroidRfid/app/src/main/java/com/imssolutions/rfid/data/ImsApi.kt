@@ -16,4 +16,10 @@ interface ImsApi {
 
     @POST("stock-scan/read")
     suspend fun read(@Body body: StockScanReadRequest): ApiSuccess<StockScanReadResultDto>
+
+    @POST("stock-scan/register/lookup")
+    suspend fun lookupEpcs(@Body body: EpcLookupRequest): ApiSuccess<EpcLookupResultDto>
+
+    @POST("stock-scan/register")
+    suspend fun registerEpcs(@Body body: EpcRegisterRequest): ApiSuccess<EpcRegisterResultDto>
 }

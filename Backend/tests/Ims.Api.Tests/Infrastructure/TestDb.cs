@@ -84,7 +84,7 @@ internal sealed class TestDb : IDisposable
             Category = ItemGroupCategory.RawMaterials, IsActive = true, CreatedAt = now,
         });
 
-        db.Roles.Add(new Role { RoleCode = "Admin", RoleName = "Admin", IsActive = true, CreatedAt = now });
+        db.Roles.Add(new Role { RoleCode = "ADMIN", RoleName = "Admin", IsBuiltin = true, IsActive = true, CreatedAt = now });
         foreach (var code in new[] { 0, 1, 2, 3 })
             db.Statuses.Add(new StatusMaster { StatusCode = code, StatusNameLang1 = $"Status {code}",
                 StatusNameLang2 = $"Status {code}", StatusNameLang3 = $"Status {code}", CreatedAt = now });

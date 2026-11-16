@@ -22,7 +22,7 @@ public class LoginLanguageTests
     {
         var u = new AppUser
         {
-            UserCode = code, UserName = "Tester", RoleCode = "Admin",
+            UserCode = code, UserName = "Tester", RoleCode = "ADMIN",
             DefaultLanguage = lang, IsActive = true, CreatedAt = DateTime.UtcNow,
             PasswordHash = "",
         };

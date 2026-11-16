@@ -21,7 +21,7 @@ public class UserServiceTests
     }
 
     private static UserWriteDto Valid(
-        string code = "U-NEW", string name = "New user", string role = "Admin",
+        string code = "U-NEW", string name = "New user", string role = "ADMIN",
         string? password = "secret123", string? factory = null, string? language = null) =>
         new(code, name, role, password, factory, language);
 
@@ -29,7 +29,7 @@ public class UserServiceTests
     {
         var u = new AppUser
         {
-            UserCode = code, UserName = "Existing", RoleCode = "Admin",
+            UserCode = code, UserName = "Existing", RoleCode = "ADMIN",
             PasswordHash = "ORIGINAL", IsActive = true, CreatedAt = DateTime.UtcNow,
         };
         t.Db.AppUsers.Add(u);
@@ -79,7 +79,7 @@ public class UserServiceTests
 
         var res = await new UserService(t.Db, hasher.Object).CreateAsync(body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
         hasher.Verify(h => h.HashPassword(It.IsAny<AppUser>(), It.IsAny<string>()), Times.Never);
     }
 
@@ -96,7 +96,7 @@ public class UserServiceTests
         var padded = await new UserService(t.Db, hasher).CreateAsync(Valid(code: "  U001  "), default);
 
         ResultAssert.BadRequest(blankCode, "VAL-001");
-        ResultAssert.BadRequest(blankName, "VAL-002");
+        ResultAssert.BadRequest(blankName, "VAL-001");
 
         ResultAssert.Conflict(duplicate);
 
@@ -112,7 +112,7 @@ public class UserServiceTests
 
         var res = await new UserService(t.Db, hasher).CreateAsync(body, default);
 
-        ResultAssert.NotFound(res);
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public class UserServiceTests
         var unknownRole = await new UserService(t.Db, hasher).UpdateAsync("U001", Valid(role: "Ghost"), default);
 
         ResultAssert.NotFound(unknownRow);
-        ResultAssert.NotFound(unknownRole);
+        ResultAssert.BadRequest(unknownRole, "VAL-001");
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public class UserServiceTests
 
         var res = await new UserService(t.Db, hasher).UpdateAsync("U001", body, default);
 
-        ResultAssert.BadRequest(res, "VAL-002");
+        ResultAssert.BadRequest(res, "VAL-001");
     }
 
 
@@ -231,7 +231,7 @@ public class UserServiceTests
         await SeedUserAsync(t);
         t.Db.AppUsers.Add(new AppUser
         {
-            UserCode = "U002", UserName = "Gone", RoleCode = "Admin",
+            UserCode = "U002", UserName = "Gone", RoleCode = "ADMIN",
             PasswordHash = "x", IsActive = true, IsDeleted = true, CreatedAt = DateTime.UtcNow,
         });
         await t.Db.SaveChangesAsync();

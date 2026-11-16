@@ -1,3 +1,4 @@
+using Ims.Api.Features.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using Ims.Api.Http;
 
@@ -7,7 +8,7 @@ public static class MenuEndpoints
 {
     public static IEndpointRouteBuilder MapMenuEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/menu", GetMenuAsync).RequireAuthorization().WithTags("Menu");
+        app.MapGet("/menu", GetMenuAsync).RequireAuthorization().WithTags("Menu").AuthenticatedOnly();
         return app;
     }
 

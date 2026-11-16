@@ -1,3 +1,4 @@
+import { usePermissions } from "@/auth/PermissionContext";
 import { useCallback, useMemo, useState } from "react";
 import {
   createDevice, deleteDevice, DEVICE_TYPES, exportDevicesCsv, listDevices, updateDevice,
@@ -35,7 +36,7 @@ const UPDATE_FILTERS: [string, string, string][] = [
 ];
 const HANDHELD = "Handheld";
 
-export function DevicePage() {
+export function DevicePage() { const perms = usePermissions();
   const t = useT();
   const toast = useToast();
   const ask = useConfirm();
@@ -81,7 +82,7 @@ export function DevicePage() {
 
   return (
     <div className="pg on">
-      <CommonToolbar
+      <CommonToolbar fn="m_device"
         searchDraft={qDraft} onSearchDraftChange={setQDraft}
         onSearch={() => { setPage(1); dist.refresh(); }}
         extra={
@@ -90,7 +91,7 @@ export function DevicePage() {
             {UPDATE_FILTERS.map(([v, k, f]) => <option key={v} value={v}>{t(k, f)}</option>)}
           </select>
         }
-        labelButton={
+        labelButton={perms.canOpen("dist_status") &&
           <button className="btn btn-special" onClick={openWizard}>
             <img className="icn-img" src="/Images/Icon/upload_50_FFFFFF.svg" alt="" /> <span>{t("dstBtnDistribute", "Data Distribution")}</span>
           </button>
